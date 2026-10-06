@@ -970,3 +970,18 @@ li.is-void { opacity: .6; }
 .cookie-bar.custom .ck-save { display: inline-flex; }
 .cookie-bar.custom .ck-cust-btn { display: none; }
 .cookie-bar .btn-row { flex-wrap: wrap; gap: 8px; }
+
+/* ---------- squadre: rosa con numero di maglia ---------- */
+.roster-edit { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.roster-head, .roster-row { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) minmax(0, 1fr) 4.4em 2.2em; gap: 6px; align-items: center; }
+.roster-head { font-size: .75rem; color: var(--muted); font-weight: 600; }
+.roster-rows { display: grid; gap: 6px; }
+.roster-row input, .roster-row select { width: 100%; min-width: 0; }
+@media (max-width: 520px) {
+  .roster-head { display: none; }
+  .roster-row { grid-template-columns: 3.6em minmax(0, 1fr) 4em 2.2em; }
+  .roster-row [name=first] { grid-column: 2; grid-row: 2; }
+}
+.roster-table td, .roster-table th { padding-top: 4px; padding-bottom: 4px; }
+.team-card.mine { border-color: var(--primary); }
+.ch-grid > .team-card.editing { grid-column: 1 / -1; }

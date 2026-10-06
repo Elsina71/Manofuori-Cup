@@ -69,10 +69,10 @@ onSnapshot(doc(db, 'data', 'settings'), snap => {
   markLoaded('settings');
 }, onError);
 
-// Tornei: categorie e tabelle punti, premi (badge) e destinatari EOPE in un documento separato (data/tour),
+// Tornei: categorie e tabelle punti, premi (badge), destinatari EOPE e livelli delle squadre in un documento separato (data/tour),
 // l'unico che l'admin tornei può scrivere oltre ai giocatori e ai tornei. Prima erano in data/settings:
 // finché data/tour non esiste valgono quelli; il primo admin che entra lo crea.
-const tourJson = st => JSON.stringify({ categories: st.categories || [], rewards: st.rewards || null, eopeRecipients: st.eopeRecipients || [] });
+const tourJson = st => JSON.stringify({ categories: st.categories || [], rewards: st.rewards || null, eopeRecipients: st.eopeRecipients || [], levels: st.levels || null });
 let tourExists = null;
 onSnapshot(doc(db, 'data', 'tour'), snap => {
   tourExists = snap.exists();
@@ -228,6 +228,7 @@ onAuthStateChanged(auth, async u => {
   listenAccount();
   listenVerified();
   listenFreeplay();
+  listenRosters();
   listenTraining();
   listenAttendance();
   listenOccFree();
@@ -327,6 +328,7 @@ async function register(data) {
   listenAccount();
   listenVerified();
   listenFreeplay();
+  listenRosters();
   refresh();
   return { mailErr };
 }
@@ -867,6 +869,42 @@ function deleteUser(uid, groups, planIds, packIds) {
 }
 function setCoach(uid, data) { return data ? setDoc(doc(db, 'coaches', uid), data) : deleteDoc(doc(db, 'coaches', uid)); }
 
+// ---------- squadre ----------
+// teams/{id}: pubblico (nome, livello, tipo X/M/F, capitano, stato pending/ok). Lo crea il capitano (utente
+//   registrato) in attesa; l'ammissione al livello (stato ok) la decide l'admin tornei.
+// rosters/{id}: rosa della squadra (cognome, nome, sesso, numero di maglia): la leggono solo il capitano e l'admin.
+onSnapshot(collection(db, 'teams'), snap => {
+  Store.applyRemote('teams', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
+  refresh();
+}, onError);
+let rosterUnsub = null;
+function listenRosters() {
+  if (rosterUnsub) { rosterUnsub(); rosterUnsub = null; }
+  Store.applyRemote('rosters', []);
+  if (!user || !(canTour() || member)) return;
+  const src = canTour() ? collection(db, 'rosters') : query(collection(db, 'rosters'), where('captainUid', '==', user.uid));
+  rosterUnsub = onSnapshot(src, snap => {
+    Store.applyRemote('rosters', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
+    refresh();
+  }, onError);
+}
+// Crea (id = null) o modifica una squadra: dati pubblici e rosa nello stesso invio.
+function saveTeam(id, team, players) {
+  const ref = id ? doc(db, 'teams', id) : doc(collection(db, 'teams'));
+  const batch = writeBatch(db), now = Date.now();
+  if (id) batch.update(ref, Object.assign({}, team, { updated: now }));
+  else batch.set(ref, Object.assign({ status: 'pending', created: now }, team, { updated: now }));
+  batch.set(doc(db, 'rosters', ref.id), { captainUid: team.captainUid, players, updated: now });
+  return batch.commit().then(() => ref.id);
+}
+function setTeamStatus(id, status) { return updateDoc(doc(db, 'teams', id), { status, updated: Date.now() }); }
+function deleteTeam(id) {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'rosters', id));
+  batch.delete(doc(db, 'teams', id));
+  return batch.commit();
+}
+
 // ---------- gioco libero ----------
 // freeplay/{id}: sessione dell'admin (pubblica: nome, data, orari, livelli, contatori m/f dei partecipanti).
 // fpreg/{id_uid}: partecipazione dell'utente (nome, sesso, livello, stato in/out, orari): la leggono solo
@@ -1170,6 +1208,9 @@ window.Cloud = {
   deleteMessage,
   markRead,
   setBan,
+  saveTeam,
+  setTeamStatus,
+  deleteTeam,
   saveFreeplay,
   deleteFreeplay,
   setFreeplay,

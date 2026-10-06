@@ -160,6 +160,43 @@ service cloud.firestore {
       allow update: if isTourAdmin();
     }
 
+    // ---------- squadre ----------
+    // teams/{id}: pubblico. Il capitano (utente registrato, email confermata, non in lista nera) la crea in attesa
+    //   (status "pending"); può cambiare nome e tipo sempre, il livello solo finché è in attesa; può ritirarla solo
+    //   in attesa. L'ammissione (status "ok") e tutto il resto li decide l'admin tornei.
+    // rosters/{id}: rosa (players: cognome, nome, sesso, numero di maglia): la leggono e scrivono il capitano e l'admin.
+    function teamDoc(id) { return /databases/$(database)/documents/teams/$(id); }
+    function teamFields(d) {
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 60
+        && d.level is string && d.level.size() > 0 && d.level.size() <= 40
+        && d.kind in ['X', 'M', 'F'];
+    }
+    match /teams/{id} {
+      allow read: if true;
+      allow write: if isTourAdmin();
+      allow create: if isMember() && verified() && !banned(request.auth.uid, 'tour')
+        && request.resource.data.keys().hasOnly(['name', 'level', 'kind', 'captainUid', 'captainName', 'status', 'created', 'updated'])
+        && request.resource.data.captainUid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && teamFields(request.resource.data)
+        && request.resource.data.captainName is string && request.resource.data.captainName.size() <= 130;
+      allow update: if isMember() && resource.data.captainUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'level', 'kind', 'updated'])
+        && (resource.data.status == 'pending' || request.resource.data.level == resource.data.level)
+        && teamFields(request.resource.data);
+      allow delete: if isMember() && resource.data.captainUid == request.auth.uid && resource.data.status == 'pending';
+    }
+    match /rosters/{id} {
+      allow read: if isTourAdmin() || (request.auth != null && resource.data.captainUid == request.auth.uid);
+      allow write: if isTourAdmin();
+      allow create, update: if isMember()
+        && request.resource.data.keys().hasOnly(['captainUid', 'players', 'updated'])
+        && request.resource.data.captainUid == request.auth.uid
+        && getAfter(teamDoc(id)).data.captainUid == request.auth.uid
+        && request.resource.data.players is list && request.resource.data.players.size() <= 40;
+      allow delete: if isMember() && resource.data.captainUid == request.auth.uid && !existsAfter(teamDoc(id));
+    }
+
     // Messaggi dell'admin: li legge solo chi è tra i destinatari (o tutti gli utenti registrati se "all").
     match /messages/{id} {
       allow read: if isAdmin()

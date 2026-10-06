@@ -75,6 +75,22 @@ la foto si carica dal telefono o dal computer e viene ridimensionata automaticam
 - Database: `members/{uid}`, `accounts/{uid}` (email), `registrations/{id}`, `messages/{id}`, `inbox/{uid}`; alias in
   `data/settings`.
 
+## Squadre
+
+- Voce **Squadre** nel menu (`#/teams`). Il **capitano** (utente registrato con email confermata, non in
+  lista nera) iscrive la squadra: nome, **livello** (quello comunicato dall'organizzatore), **tipo** (mista, maschile,
+  femminile) e **rosa** con cognome, nome, sesso e **numero di maglia**. Nessun numero massimo di giocatori (12
+  consigliati); la rosa si cambia in qualsiasi momento. Avviso se due giocatori hanno lo stesso numero.
+- La squadra resta **in attesa** finché l'organizzatore (admin tornei) non **conferma l'ammissione** al livello. In attesa
+  il capitano può cambiare il livello e ritirare l'iscrizione; dopo l'ammissione il livello lo cambia solo l'organizzatore.
+- Tutti vedono le squadre ammesse divise per livello (nome, tipo, capitano); la **rosa** la vedono solo il capitano e
+  l'admin. L'admin vede anche le squadre in attesa, può crearne (scegliendo il capitano tra gli utenti), modificarle
+  ed eliminarle.
+- **Livelli**: DINOS, MASTER, SUPER MASTER, SUPER 10 (dal meno al più forte), modificabili dall'admin tornei in fondo
+  alla pagina Squadre (salvati in `data/tour`).
+- Database: `teams/{id}` (pubblico) e `rosters/{id}` (rosa: capitano e admin). Test delle regole:
+  `tests/teams.rules.test.mjs` (istruzioni in cima al file).
+
 ## Gioco libero
 
 - Voce **Gioco libero** nel menu (`#/free`) e le prossime sessioni anche in prima pagina. L'admin crea una sessione con

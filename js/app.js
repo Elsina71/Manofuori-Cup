@@ -195,6 +195,7 @@
     else if (r[0] === 't' && tourById(r[1])) { html = viewTournament(tourById(r[1]), r[2]); }
     else if (r[0] === 'tournaments') { html = viewHome(); }
     else if (r[0] === 'me') { nav = 'me'; html = viewProfile(); }
+    else if (r[0] === 'teams') { nav = 'teams'; html = viewTeams(); }
     else if (r[0] === 'free') { nav = 'free'; html = viewFreeplay(); }
     else if (r[0] === 'train') { nav = 'train'; html = viewTraining(); }
     else if (r[0] === 'privacy' || r[0] === 'cookie' || r[0] === 'termini') { nav = 'settings'; html = viewLegal(r[0]); }
@@ -4002,6 +4003,184 @@
 
   // ---------- ranking ----------
 
+  // ====================================================================
+  // SQUADRE: il capitano (utente registrato) iscrive la squadra con livello, tipo (mista, maschile, femminile)
+  // e rosa con numero di maglia; può cambiare la rosa in qualsiasi momento. L'organizzatore (admin tornei)
+  // conferma l'ammissione al livello. teams/{id} è pubblico; la rosa (rosters/{id}) la vedono solo capitano e admin.
+  // ====================================================================
+  const LEVELS_DEFAULT = ['DINOS', 'MASTER', 'SUPER MASTER', 'SUPER 10'];   // dal meno al più forte
+  const teamLevels = () => (S().levels && S().levels.length ? S().levels : LEVELS_DEFAULT);
+  const TEAM_KINDS = ['X', 'M', 'F'];
+  const ROSTER_TIP = 12;   // numero di giocatori consigliato (non c'è un massimo)
+  const teamById = id => (S().teams || []).find(x => x.id === id);
+  const rosterOf = id => ((S().rosters || []).find(x => x.id === id) || {}).players || [];
+  const isCaptain = tm => !!member() && tm.captainUid === myUid();
+  const canEditTeam = tm => tourAdmin() || isCaptain(tm);
+  const byLevel = (a, b) => (teamLevels().indexOf(a.level) + 1 || 99) - (teamLevels().indexOf(b.level) + 1 || 99) || a.name.localeCompare(b.name);
+  const byShirt = (a, b) => (a.num === '' ? 999 : Number(a.num)) - (b.num === '' ? 999 : Number(b.num)) || `${a.last} ${a.first}`.localeCompare(`${b.last} ${b.first}`);
+
+  function rosterRow(pl) {
+    const v = pl || { num: '', last: '', first: '', g: 'M' };
+    return `<div class="roster-row">
+      <input name="num" type="number" min="0" max="99" inputmode="numeric" value="${esc(v.num)}" placeholder="${esc(t('tmNumShort'))}" aria-label="${esc(t('tmNum'))}">
+      <input name="last" maxlength="60" value="${esc(v.last)}" placeholder="${esc(t('lastName'))}" aria-label="${esc(t('lastName'))}">
+      <input name="first" maxlength="60" value="${esc(v.first)}" placeholder="${esc(t('firstName'))}" aria-label="${esc(t('firstName'))}">
+      <select name="g" aria-label="${esc(t('gender'))}"><option value="M" ${sel(v.g, 'M')}>M</option><option value="F" ${sel(v.g, 'F')}>F</option></select>
+      <button type="button" class="icon-btn" data-action="tm-delrow" aria-label="${esc(t('remove'))}">✕</button>
+    </div>`;
+  }
+
+  // Modulo di iscrizione (tm = null) o di modifica di una squadra.
+  function teamForm(tm) {
+    const v = tm || { name: '', level: '', kind: 'X', captainUid: '' };
+    const players = tm ? rosterOf(tm.id).slice().sort(byShirt) : [];
+    const lvLocked = !!tm && tm.status === 'ok' && !tourAdmin();
+    const levels = teamLevels().concat(v.level && !teamLevels().includes(v.level) ? [v.level] : []);
+    const members = tourAdmin() ? (S().members || []).slice().sort((a, b) => personName(a).localeCompare(personName(b))) : [];
+    return `<form class="grid-form team-form" data-form="team-save" data-id="${tm ? tm.id : ''}" autocomplete="off">
+      <label class="span-all">${esc(t('tmName'))}<input name="name" required maxlength="60" value="${esc(v.name)}"></label>
+      <label>${esc(t('tmLevel'))}<select name="level" required ${lvLocked ? 'disabled' : ''}><option value="">—</option>${levels.map(l => `<option value="${esc(l)}" ${sel(v.level, l)}>${esc(l)}</option>`).join('')}</select>
+        <small class="muted">${esc(t(lvLocked ? 'tmLevelLocked' : 'tmLevelHelp'))}</small></label>
+      <label>${esc(t('tmKind'))}<select name="kind">${TEAM_KINDS.map(k => `<option value="${k}" ${sel(v.kind, k)}>${esc(t('tmKind_' + k))}</option>`).join('')}</select></label>
+      ${tourAdmin() ? `<label class="span-all">${esc(t('tmCaptain'))}<select name="captainUid"><option value="">—</option>${members.map(m => `<option value="${m.uid}" ${sel(v.captainUid, m.uid)}>${esc(personName(m))}</option>`).join('')}</select></label>` : ''}
+      <fieldset class="span-all roster-edit"><legend>${esc(t('tmRoster'))}</legend>
+        <div class="roster-head" aria-hidden="true"><span>${esc(t('tmNumShort'))}</span><span>${esc(t('lastName'))}</span><span>${esc(t('firstName'))}</span><span>${esc(t('gender'))}</span><span></span></div>
+        <div class="roster-rows">${(players.length ? players : [null]).map(rosterRow).join('')}</div>
+        <div class="btn-row"><button type="button" class="btn small" data-action="tm-addrow"><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('tmAddPlayer'))}</button></div>
+        <small class="muted">${esc(t('tmRosterHelp', { n: ROSTER_TIP }))}</small>
+      </fieldset>
+      <div class="form-actions span-all">${tm ? `<button type="button" class="btn" data-action="tm-edit" data-id="">${esc(t('cancel'))}</button>` : ''}
+        <button class="btn primary">${esc(t(tm ? 'save' : 'tmCreate'))}</button></div>
+    </form>`;
+  }
+
+  function teamStatusBadge(tm) {
+    return tm.status === 'ok' ? `<span class="badge st-done">${esc(t('tmStatus_ok'))}</span>` : `<span class="badge warn-b">${esc(t('tmStatus_pending'))}</span>`;
+  }
+
+  function teamCard(tm) {
+    if (ui.tmEdit === tm.id && canEditTeam(tm)) return `<div class="card team-card editing" id="tm-${tm.id}"><h3>${esc(tm.name)}</h3>${teamForm(tm)}</div>`;
+    const seeRoster = canEditTeam(tm);
+    const players = seeRoster ? rosterOf(tm.id).slice().sort(byShirt) : [];
+    const nM = players.filter(x => x.g === 'M').length, nF = players.length - nM;
+    const dupNums = [...new Set(players.map(x => x.num).filter((n, i, a) => n !== '' && a.indexOf(n) !== i))];
+    return `<div class="card team-card ${isCaptain(tm) ? 'mine' : ''}" id="tm-${tm.id}">
+      <div class="ch-head"><span class="badge">${esc(tm.level)}</span> <span class="badge">${esc(t('tmKind_' + tm.kind))}</span> ${teamStatusBadge(tm)}</div>
+      <h3>${esc(tm.name)}</h3>
+      <p class="muted small">${esc(t('tmCaptain'))}: ${esc(tm.captainName || '—')}</p>
+      ${seeRoster ? `<details class="sub-form" data-keep="tmr-${tm.id}" ${keepOpen('tmr-' + tm.id)}>
+        <summary><i class="ti ti-users" aria-hidden="true"></i> ${esc(t('tmRosterCount', { n: players.length, m: nM, f: nF }))}</summary>
+        ${players.length ? `<table class="table roster-table"><thead><tr><th class="num">${esc(t('tmNumShort'))}</th><th>${esc(t('player'))}</th><th>${esc(t('gender'))}</th></tr></thead>
+          <tbody>${players.map(x => `<tr><td class="num"><strong>${esc(x.num)}</strong></td><td>${esc(x.last)} ${esc(x.first)}</td><td>${esc(x.g)}</td></tr>`).join('')}</tbody></table>`
+          : `<p class="muted small">${esc(t('tmNoPlayers'))}</p>`}
+        ${dupNums.length ? `<p class="note warn">${esc(t('tmDupNums', { n: dupNums.join(', ') }))}</p>` : ''}
+        ${players.length && players.length < ROSTER_TIP ? `<p class="muted small">${esc(t('tmTip', { n: ROSTER_TIP }))}</p>` : ''}
+      </details>` : ''}
+      ${canEditTeam(tm) ? `<div class="btn-row">
+        <button class="btn small" data-action="tm-edit" data-id="${tm.id}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t('tmEdit'))}</button>
+        ${tourAdmin() ? (tm.status === 'ok'
+          ? `<button class="btn small" data-action="tm-status" data-id="${tm.id}" data-v="pending">${esc(t('tmUnconfirm'))}</button>`
+          : `<button class="btn small primary" data-action="tm-status" data-id="${tm.id}" data-v="ok"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('tmConfirm'))}</button>`) : ''}
+        ${tourAdmin() || tm.status !== 'ok' ? `<button class="btn small danger" data-action="tm-delete" data-id="${tm.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t(tourAdmin() ? 'delete' : 'tmWithdraw'))}</button>` : ''}
+      </div>` : ''}
+    </div>`;
+  }
+
+  function viewTeams() {
+    const m = member(), all = (S().teams || []).slice().sort(byLevel);
+    const mine = m ? all.filter(isCaptain) : [];
+    let create = '';
+    if (m) {
+      if (needsVerify()) create = `<p class="note warn">${esc(t('verifyFirst'))}</p>`;
+      else if (banOf(m.uid).tour) create = banNotice('tour');
+      else create = `<details class="card sub-form" data-keep="tm-new" ${keepOpen('tm-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('tmNew'))}</summary>${teamForm(null)}</details>`;
+    } else if (tourAdmin()) create = `<details class="card sub-form" data-keep="tm-new" ${keepOpen('tm-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('tmNewAdmin'))}</summary>${teamForm(null)}</details>`;
+    else if (!scorer()) create = `<div class="card"><p class="muted">${esc(t('tmLoginFirst'))}</p><a class="btn" href="#/settings">${esc(t('loginOrRegister'))}</a></div>`;
+    // elenco per livello: tutti vedono le squadre ammesse; l'admin anche quelle in attesa
+    const shown = all.filter(x => tourAdmin() || x.status === 'ok');
+    const pending = tourAdmin() ? all.filter(x => x.status !== 'ok').length : 0;
+    const groups = teamLevels().concat([...new Set(shown.map(x => x.level))].filter(l => !teamLevels().includes(l)))
+      .map(l => ({ l, list: shown.filter(x => x.level === l) })).filter(g => g.list.length);
+    return `${verifyNotice()}
+      <div class="page-head"><h1><i class="ti ti-shirt-sport" aria-hidden="true"></i> ${esc(t('navTeams'))}</h1><p class="muted">${esc(t('tmIntro'))}</p></div>
+      ${mine.length ? `<section class="feat-block"><h2>${esc(t('tmMine'))}</h2><div class="ch-grid">${mine.map(teamCard).join('')}</div></section>` : ''}
+      ${create}
+      ${pending ? `<p class="note warn"><i class="ti ti-clock" aria-hidden="true"></i> ${esc(t('tmPendingAdmin', { n: pending }))}</p>` : ''}
+      ${groups.length ? groups.map(g => `<section class="feat-block"><h2>${esc(g.l)} <small class="muted">(${g.list.length})</small></h2>
+        <div class="ch-grid">${g.list.map(teamCard).join('')}</div></section>`).join('')
+        : `<div class="empty"><i class="ti ti-shirt-sport" aria-hidden="true"></i> ${esc(t('tmNone'))}</div>`}
+      ${tourAdmin() ? levelsCard() : ''}`;
+  }
+
+  // Livelli (admin tornei): uno per riga, dal meno al più forte.
+  function levelsCard() {
+    return `<form class="card" data-form="levels-save" id="levels">
+      <h2><i class="ti ti-stairs-up" aria-hidden="true"></i> ${esc(t('tmLevelsTitle'))}</h2>
+      <p class="muted small">${esc(t('tmLevelsHelp'))}</p>
+      <textarea name="levels" rows="5">${esc(teamLevels().join('\n'))}</textarea>
+      <div class="form-actions"><button class="btn primary">${esc(t('save'))}</button></div>
+    </form>`;
+  }
+
+  function teamSave(f) {
+    const old = f.dataset.id ? teamById(f.dataset.id) : null;
+    const me = member();
+    const players = [...f.querySelectorAll('.roster-row')].map(r => ({
+      num: r.querySelector('[name=num]').value.trim(), last: r.querySelector('[name=last]').value.trim(),
+      first: r.querySelector('[name=first]').value.trim(), g: r.querySelector('[name=g]').value
+    })).filter(x => x.last || x.first || x.num);
+    if (players.some(x => !x.last || !x.first)) return warn('tmPlayerIncomplete');
+    if (players.some(x => x.num !== '' && !(Number(x.num) >= 0 && Number(x.num) <= 99))) return warn('tmNumErr');
+    const team = { name: f.name.value.trim(), level: old && f.level.disabled ? old.level : f.level.value, kind: f.kind.value };
+    if (!team.name || !team.level) return warn('errRegFields');
+    if (tourAdmin()) {
+      const cu = f.captainUid ? f.captainUid.value : (old ? old.captainUid : '');
+      const cm = cu ? memberByUid(cu) : null;
+      Object.assign(team, { captainUid: cu || '', captainName: cm ? personName(cm) : '' });
+    } else if (old) team.captainUid = old.captainUid;
+    else Object.assign(team, { captainUid: me.uid, captainName: personName(me) });
+    const roster = players.map(x => ({ num: x.num === '' ? '' : Number(x.num), last: x.last, first: x.first, g: x.g === 'F' ? 'F' : 'M' }));
+    const send = old && !tourAdmin() ? { name: team.name, level: team.level, kind: team.kind, captainUid: old.captainUid } : team;
+    window.Cloud.saveTeam(old ? old.id : null, send, roster).then(() => {
+      if (old) ui.tmEdit = null; else (ui.keep || {})['tm-new'] = false;
+      ui.flash = { text: t(old ? 'tmSaved' : 'tmCreated') };
+      render();
+    }).catch(e => warn('regError', { code: e.code || e.message }));
+  }
+
+  const teamActions = {
+    'tm-addrow': el => {
+      const rows = el.closest('form').querySelector('.roster-rows');
+      rows.insertAdjacentHTML('beforeend', rosterRow(null));
+      rows.lastElementChild.querySelector('[name=num]').focus();
+    },
+    'tm-delrow': el => {
+      const rows = el.closest('.roster-rows');
+      el.closest('.roster-row').remove();
+      if (!rows.children.length) rows.insertAdjacentHTML('beforeend', rosterRow(null));
+    },
+    'tm-edit': el => { ui.tmEdit = el.dataset.id || null; render(); },
+    'tm-status': el => {
+      if (!tourAdmin()) return;
+      window.Cloud.setTeamStatus(el.dataset.id, el.dataset.v).then(() => { ui.flash = { text: t(el.dataset.v === 'ok' ? 'tmConfirmed' : 'saved') }; render(); })
+        .catch(e => warn('regError', { code: e.code || e.message }));
+    },
+    'tm-delete': el => {
+      const tm = teamById(el.dataset.id);
+      if (!tm || !confirmed(tourAdmin() ? 'tmDeleteConfirm' : 'tmWithdrawConfirm', { n: tm.name })) return;
+      window.Cloud.deleteTeam(tm.id).then(() => { ui.flash = { text: t('tmDeleted') }; render(); }).catch(e => warn('regError', { code: e.code || e.message }));
+    }
+  };
+  const teamForms = {
+    'team-save': f => teamSave(f),
+    'levels-save': f => {
+      const list = [...new Set(f.levels.value.split('\n').map(x => x.trim()).filter(Boolean))];
+      if (!list.length) return warn('errRegFields');
+      S().levels = list;
+      commit(t('saved'));
+    }
+  };
+
   // ---------- stili grafici (salvati solo su questo dispositivo) ----------
   // [id, colore principale, sfondo, colore accento]
   // Tavolozze di colori: [id, primario, sfondo, accento]. Per ora solo il tema neutro (colori in :root di css/style.css).
@@ -4956,7 +5135,7 @@
     [list[i], list[j]] = [list[j], list[i]];
   }
 
-  const actions = Object.assign({}, trActions, occActions, payActions, privacyActions, reportActions, cassaActions, {
+  const actions = Object.assign({}, teamActions, trActions, occActions, payActions, privacyActions, reportActions, cassaActions, {
     'fp-leave': el => {
       const fp = fpById(el.dataset.id), m = member();
       if (!fp || !m) return;
@@ -5296,7 +5475,7 @@
     }
   });
 
-  const forms = Object.assign({}, trForms, occForms, payForms, cassaForms, {
+  const forms = Object.assign({}, teamForms, trForms, occForms, payForms, cassaForms, {
     'fp-save': f => fpSave(f),
     'fp-join': f => {
       const fp = fpById(f.dataset.id), m = member();
@@ -5517,15 +5696,15 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'cal-view', 'toggle-past', 'logout', 'reset-password', 'close-dialog']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['eope-download', 'eope-send', 'eope-add', 'eope-remove', 'toggle-visible', 'vis-group', 'vis-all', 'gs-nums-reset', 'notice-edit', 'notice-cancel', 'notice-clear', 'reg-import', 'reg-reopen', 'reg-state', 'reg-confirm', 'reg-open-start', 'reg-unconfirm', 'reg-remove', 'reg-wait-add', 'entry-edit-open', 'entry-edit-cancel', 'import-entries', 'template-entries', 'sort-entries', 'entry-move', 'set-wc', 'remove-entry', 'lock-entries', 'unlock-entries', 'gen-qual', 'skip-qual', 'reset-qual', 'close-qual', 'reopen-qual', 'main-move', 'sort-main', 'lock-main', 'unlock-main', 'start-main', 'gen-bracket', 'auto-fill-bracket', 'clear-bracket-slots', 'reset-main', 'close-tournament', 'reopen-tournament', 'delete-tournament', 'edit-match', 'escore-open', 'escore-reset', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'scorer-remove', 'escore-approve', 'escore-reopen', 'match-clear', 'match-reopen', 'import-ranking', 'template-ranking', 'merge-pair', 'edit-player', 'cancel-edit-player', 'delete-player', 'new-category', 'delete-category', 'add-row', 'del-row', 'gs-add-row']);
-  const TOUR_FORMS = new Set(['tour-create', 'tour-reg-edit', 'reg-open-legacy', 'tournament-new', 'tournament-edit', 'entry-edit', 'entry-add', 'wc-add', 'player-save', 'merge-players', 'category-save', 'scorer-add', 'rewards-save', 'notice-save']);
+  const TOUR_ACTIONS = new Set(['eope-download', 'eope-send', 'eope-add', 'eope-remove', 'toggle-visible', 'vis-group', 'vis-all', 'gs-nums-reset', 'notice-edit', 'notice-cancel', 'notice-clear', 'reg-import', 'reg-reopen', 'reg-state', 'reg-confirm', 'reg-open-start', 'reg-unconfirm', 'reg-remove', 'reg-wait-add', 'entry-edit-open', 'entry-edit-cancel', 'import-entries', 'template-entries', 'sort-entries', 'entry-move', 'set-wc', 'remove-entry', 'lock-entries', 'unlock-entries', 'gen-qual', 'skip-qual', 'reset-qual', 'close-qual', 'reopen-qual', 'main-move', 'sort-main', 'lock-main', 'unlock-main', 'start-main', 'gen-bracket', 'auto-fill-bracket', 'clear-bracket-slots', 'reset-main', 'close-tournament', 'reopen-tournament', 'delete-tournament', 'edit-match', 'escore-open', 'escore-reset', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'scorer-remove', 'escore-approve', 'escore-reopen', 'match-clear', 'match-reopen', 'import-ranking', 'template-ranking', 'merge-pair', 'edit-player', 'cancel-edit-player', 'delete-player', 'new-category', 'delete-category', 'add-row', 'del-row', 'gs-add-row', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status']);
+  const TOUR_FORMS = new Set(['tour-create', 'tour-reg-edit', 'reg-open-legacy', 'tournament-new', 'tournament-edit', 'entry-edit', 'entry-add', 'wc-add', 'player-save', 'merge-players', 'category-save', 'scorer-add', 'rewards-save', 'notice-save', 'team-save', 'levels-save']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
   const SCORER_ACTIONS = new Set(['escore-open', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip']);
   const PUBLIC_FORMS = new Set(['login', 'register']);
-  const MEMBER_ACTIONS = new Set(['reg-cancel', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request']);
-  const MEMBER_FORMS = new Set(['reg-signup', 'profile-save', 'fp-join', 'fp-blocks']);
+  const MEMBER_ACTIONS = new Set(['reg-cancel', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
+  const MEMBER_FORMS = new Set(['reg-signup', 'profile-save', 'fp-join', 'fp-blocks', 'team-save']);
   let submitMode = 'save';
 
   // reminder delle prenotazioni: la prima pagina si aggiorna ogni minuto (compaiono e spariscono da soli)
