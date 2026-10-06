@@ -3473,8 +3473,8 @@
   };
 
   // ---------- pagamenti e ricevute ----------
-  // Intestazione delle ricevute. DA_COMPILARE con i dati dell'organizzatore (come in js/legal.js).
-  const ASSOC = ['DA_COMPILARE (nome dell\'organizzatore)', 'DA_COMPILARE (indirizzo)', 'DA_COMPILARE (comune)', 'CF DA_COMPILARE', 'PI DA_COMPILARE'];
+  // Intestazione delle ricevute (stessi dati di js/legal.js).
+  const ASSOC = ['ASD Manofuori Volley Project', 'via Mandrolisai 68A', "Quartu Sant'Elena (CA)", 'CF 92212890922', 'PI 03512620927'];
   const PAY_METHODS = ['cash', 'card', 'transfer'];
   const PAY_IT = { cash: 'contanti', card: 'bancomat', transfer: 'bonifico' };
   const MONTHS_IT = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];

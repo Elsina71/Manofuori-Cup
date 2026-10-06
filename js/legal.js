@@ -1,18 +1,17 @@
 // Testi legali (in italiano, lingua di riferimento): informativa privacy, cookie policy, termini e condizioni.
-// Titolare: DA_COMPILARE (dati dell'organizzatore di Manofuori Cup in ORG qui sotto). Aggiornare la data e la versione quando si cambia un testo.
+// Titolare: ASD Manofuori Volley Project. Aggiornare la data e la versione quando si cambia un testo.
 const Legal = (() => {
   const VERSION = '2026-10-05';
   const ORG = {
-    // DA_COMPILARE: dati dell'organizzatore (titolare del trattamento) prima di pubblicare l'app
-    name: 'DA_COMPILARE (nome dell\'organizzatore)',
+    name: 'ASD Manofuori Volley Project',
     kind: 'Associazione Sportiva Dilettantistica',
-    address: 'DA_COMPILARE (indirizzo)',
-    cf: 'DA_COMPILARE',
-    vat: 'DA_COMPILARE',
-    rep: 'DA_COMPILARE',
+    address: "via Mandrolisai 68A, 09045 Quartu Sant'Elena (CA)",
+    cf: '92212890922',
+    vat: '03512620927',
+    rep: 'Marianna Stara',
     repRole: 'Presidente e legale rappresentante',
     email: 'DA_COMPILARE@example.com',
-    site: 'https://DA_COMPILARE'
+    site: 'https://manofuori-774b2.web.app'
   };
   const mail = `<a href="mailto:${ORG.email}">${ORG.email}</a>`;
   const owner = `<p><strong>${ORG.name}</strong> (${ORG.kind})<br>${ORG.address}<br>Codice fiscale ${ORG.cf} · Partita IVA ${ORG.vat}<br>
