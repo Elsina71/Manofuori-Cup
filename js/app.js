@@ -221,7 +221,6 @@
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
     document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
     document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === nav));
-    document.querySelectorAll('.langs [data-lang]').forEach(b => b.setAttribute('aria-pressed', b.dataset.lang === I18n.lang));
     document.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !admin(); });
     document.querySelectorAll('[data-tour-only]').forEach(el => { el.hidden = !tourAdmin(); });
     document.querySelectorAll('[data-cash-only]').forEach(el => { el.hidden = !cashier(); });
@@ -247,7 +246,7 @@
     const before = Consent.prefs();
     Consent.set(prefs);
     // con il consenso si salvano le scelte già fatte in questa visita
-    if (prefs) { Consent.write('pcm-lang', I18n.lang); if (ui.theme) Consent.write(THEME_KEY, ui.theme); if (ui.design) Consent.write(DESIGN_KEY, ui.design); }
+    if (prefs) { if (ui.theme) Consent.write(THEME_KEY, ui.theme); if (ui.design) Consent.write(DESIGN_KEY, ui.design); }
     ui.cookieOpen = false; bar.classList.remove('custom'); bar.hidden = true;
     ui.flash = { text: t(prefs ? 'ckSavedYes' : 'ckSavedNo') + (prefs !== before ? ' ' + t('ckNextOpen') : '') };
     render();
@@ -5395,12 +5394,6 @@
           <button class="btn" data-action="import-backup"><i class="ti ti-upload" aria-hidden="true"></i> ${esc(t('importData'))}</button>
         </div>
       </div>` : ''}
-      <div class="card">
-        <h2>${esc(t('language'))}</h2>
-        <div class="segmented wrap" role="group">
-          ${[['it', 'Italiano'], ['sc', 'Sardu'], ['el', 'Ελληνικά'], ['en', 'English']].map(([c, n]) => `<button data-action="set-lang" data-lang="${c}" aria-pressed="${I18n.lang === c}">${n}</button>`).join('')}
-        </div>
-      </div>
       ${designCard()}
       ${themeCard()}
       ${isOwner() ? `<div class="card danger-zone">
@@ -6109,7 +6102,6 @@
       // senza ridisegnare la pagina (gli orari copiati vanno ancora salvati)
       if (!f.querySelector('.flash')) { const fl = document.createElement('div'); fl.className = 'flash ok'; fl.textContent = t('courtCopied'); f.prepend(fl); }
     },
-    'set-lang': el => { I18n.set(el.dataset.lang); render(); },
     'set-theme': el => setTheme(el.dataset.themeId),
     'set-design': el => setDesign(el.dataset.designId),
     'cal-view': el => { ui.calView = el.dataset.view; render(); },
@@ -6675,7 +6667,7 @@
   });
 
   // Azioni consentite a tutti; le altre solo agli amministratori.
-  const PUBLIC_ACTIONS = new Set(['set-lang', 'set-theme', 'set-design', 'cal-view', 'toggle-past', 'rank-gender', 'logout', 'reset-password', 'close-dialog', 'bk-day', 'bk-band', 'bk-slot', 'bk-clear', 'bk-shorter', 'bk-longer']);
+  const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'cal-view', 'toggle-past', 'rank-gender', 'logout', 'reset-password', 'close-dialog', 'bk-day', 'bk-band', 'bk-slot', 'bk-clear', 'bk-shorter', 'bk-longer']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
   const TOUR_ACTIONS = new Set(['eope-download', 'eope-send', 'eope-add', 'eope-remove', 'toggle-visible', 'vis-group', 'vis-all', 'gs-nums-reset', 'notice-edit', 'notice-cancel', 'notice-clear', 'reg-import', 'reg-reopen', 'reg-state', 'reg-confirm', 'reg-open-start', 'reg-unconfirm', 'reg-remove', 'reg-wait-add', 'entry-edit-open', 'entry-edit-cancel', 'import-entries', 'template-entries', 'sort-entries', 'entry-move', 'set-wc', 'remove-entry', 'lock-entries', 'unlock-entries', 'gen-qual', 'skip-qual', 'reset-qual', 'close-qual', 'reopen-qual', 'main-move', 'sort-main', 'lock-main', 'unlock-main', 'start-main', 'gen-bracket', 'auto-fill-bracket', 'clear-bracket-slots', 'reset-main', 'close-tournament', 'reopen-tournament', 'delete-tournament', 'edit-match', 'escore-open', 'escore-reset', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'scorer-remove', 'escore-approve', 'escore-reopen', 'match-clear', 'match-reopen', 'import-ranking', 'template-ranking', 'merge-pair', 'edit-player', 'cancel-edit-player', 'delete-player', 'new-category', 'delete-category', 'add-row', 'del-row', 'gs-add-row']);
   const TOUR_FORMS = new Set(['tour-create', 'tour-reg-edit', 'reg-open-legacy', 'tournament-new', 'tournament-edit', 'entry-edit', 'entry-add', 'wc-add', 'player-save', 'merge-players', 'category-save', 'scorer-add', 'rewards-save', 'notice-save']);

@@ -142,9 +142,6 @@
     document.title = t('appName');
     document.getElementById('brandName').textContent = t('appName');
     document.getElementById('homeBtn').setAttribute('aria-label', t('homeAria'));
-    const langs = document.getElementById('langs');
-    langs.setAttribute('aria-label', t('language'));
-    langs.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === I18n.lang));
   }
 
   function render() {
@@ -1149,12 +1146,6 @@
 
   // ---------- avvio ----------
   document.getElementById('homeBtn').onclick = () => go('home', null);
-  document.getElementById('langs').onclick = e => {
-    const b = e.target.closest('[data-lang]');
-    if (!b) return;
-    I18n.set(b.dataset.lang);
-    render();
-  };
   window.addEventListener('beforeunload', save);
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

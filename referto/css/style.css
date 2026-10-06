@@ -46,9 +46,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .brand { display: flex; align-items: center; gap: .5rem; background: none; border: 0; color: #fff; font-weight: 700; cursor: pointer; padding: 0; }
 .brand img { width: 28px; height: 28px; }
 .topbar-info { display: flex; gap: .8rem; font-size: .9rem; opacity: .95; margin-left: auto; }
-.langs { display: flex; border: 1px solid rgba(255, 255, 255, .5); border-radius: 8px; overflow: hidden; flex: none; }
-.langs button { background: none; border: 0; color: #fff; font-weight: 700; font-size: .8rem; padding: .35rem .55rem; min-height: 32px; cursor: pointer; }
-.langs button.on { background: #fff; color: var(--primary); }
 main { max-width: 1100px; margin: 0 auto; padding: .8rem; }
 
 /* card e layout */
