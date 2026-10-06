@@ -16,7 +16,6 @@ Cerca `DA_COMPILARE` nei file: sono i dati che mancano.
 - `firestore.rules`: UID dell'admin principale (`UID_ADMIN_DA_COMPILARE`) ed email degli admin generali.
 - `js/legal.js` (privacy, cookie, termini), `index.html` (piè di pagina) e `ASSOC` in `js/app.js` (intestazione delle
   ricevute): nome, indirizzo, codice fiscale, partita IVA, email e sito dell'organizzatore.
-- `img/logo.svg`, `img/favicon.svg`, `img/icon-180.png`: logo provvisorio, da sostituire con quello ufficiale.
 
 ## Configurazione (una volta sola)
 

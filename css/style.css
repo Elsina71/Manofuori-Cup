@@ -695,8 +695,8 @@ button.cal-btn:hover { border-color: var(--primary); }
 .gs-preview-pool .seed-no { min-width: 1.8em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .pos-input { width: 3.6em; text-align: center; padding: 4px; }
 
-/* Manofuori Cup: logo orizzontale */
-.brand-logos img.brand-wordmark { width: auto; height: 40px; border-radius: 8px; }
+/* Manofuori Cup: logo orizzontale su fondo bianco (leggibile anche con il tema scuro) */
+.brand-logos img.brand-wordmark { width: auto; height: 40px; background: #fff; border-radius: 8px; padding: 3px 6px; box-sizing: content-box; }
 @media (max-width: 720px) { .brand-logos img.brand-wordmark { width: auto; height: 30px; } }
 
 /* =====================================================================
