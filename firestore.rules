@@ -5,13 +5,15 @@ rules_version = '2';
 // La raccolta "admins" si gestisce solo dalla console Firebase.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ADMIN GENERALE: accesso e scrittura su tutto. Sono gli account con queste email (confermate),
+    // ADMIN GENERALE: accesso e scrittura su tutto. Sono gli account con queste email (confermate col link
+    // oppure a mano da un admin in "Utenti registrati"),
     // l'account principale e gli eventuali altri inseriti nella raccolta "admins".
     function isAdmin() {
       return request.auth != null
         && (request.auth.uid in ['Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2']
-            || (request.auth.token.email is string && request.auth.token.email_verified == true
-                && request.auth.token.email.lower() in ['pierpaolomurgioni@gmail.com'])
+            || (request.auth.token.email is string && request.auth.token.email.lower() in ['pierpaolomurgioni@gmail.com']
+                && (request.auth.token.email_verified == true
+                    || exists(/databases/$(database)/documents/verified/$(request.auth.uid))))
             || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
     // Ruoli assegnati dagli admin generali: roles/{uid} = { tour: admin tornei, cash: cassa, captain: capitano }.

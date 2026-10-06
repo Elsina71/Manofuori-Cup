@@ -21,6 +21,13 @@ const team = { name: 'Fenicotteri', level: 'MASTER', kind: 'X', captainUid: 'cap
 let ok = 0, ko = 0;
 const t = async (name, p) => { try { await p; ok++; console.log('✔', name); } catch (e) { ko++; console.log('✘', name, e.message.slice(0, 120)); } };
 const batchSave = (db, id, tm, players, upd) => { const b = writeBatch(db); upd ? b.update(doc(db, 'teams', id), tm) : b.set(doc(db, 'teams', id), tm); b.set(doc(db, 'rosters', id), { captainUid: 'cap', players, updated: 2 }); return b.commit(); };
+// admin generale per email: serve l'email confermata (col link o a mano: verified/{uid})
+const pp = env.authenticatedContext('pp', { email: 'PierpaoloMurgioni@gmail.com', email_verified: false }).firestore();
+await t('email admin non confermata: non è admin', assertFails(getDoc(doc(pp, 'admins', 'probe'))));
+await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'verified', 'pp'), { by: 'admin', at: 1 }));
+await t('email admin confermata a mano: è admin', assertSucceeds(getDoc(doc(pp, 'admins', 'probe'))));
+const fake = env.authenticatedContext('fake', { email: 'altro@x.it', email_verified: true }).firestore();
+await t('altra email confermata: non è admin', assertFails(getDoc(doc(fake, 'admins', 'probe'))));
 await t('capitano crea squadra in attesa con rosa', assertSucceeds(batchSave(cap, 't1', team, [{ num: 7, last: 'R', first: 'M', g: 'M' }])));
 await t('utente registrato non abilitato come capitano: niente iscrizione', assertFails(setDoc(doc(other, 'teams', 't6'), { ...team, captainUid: 'other' })));
 await t('capitano non crea squadra già ammessa', assertFails(setDoc(doc(cap, 'teams', 't2'), { ...team, status: 'ok' })));
