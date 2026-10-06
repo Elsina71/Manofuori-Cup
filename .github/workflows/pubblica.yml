@@ -3,7 +3,7 @@
 # si può anche lanciare a mano da GitHub: scheda Actions → "Pubblica l'app" → Run workflow.
 # Serve il secret del repository (Settings → Secrets and variables → Actions):
 #   FIREBASE_SA_MANOFUORI  chiave JSON dell'account di servizio del progetto Firebase di Manofuori Cup
-# L'ID del progetto si legge da .firebaserc: finché è DA_COMPILARE la pubblicazione viene saltata.
+# L'ID del progetto si legge da .firebaserc: finché .firebaserc o js/firebase-config.js contengono DA_COMPILARE la pubblicazione viene saltata.
 name: Pubblica l'app
 
 on:
@@ -35,7 +35,7 @@ jobs:
           CHIAVE: ${{ secrets.FIREBASE_SA_MANOFUORI }}
         run: |
           PROGETTO=$(node -p "require('./.firebaserc').projects.default")
-          if [ "$PROGETTO" = "DA_COMPILARE" ]; then echo "::warning::Progetto Firebase non ancora configurato (.firebaserc): pubblicazione saltata"; exit 0; fi
+          if [ "$PROGETTO" = "DA_COMPILARE" ] || grep -q "DA_COMPILARE" js/firebase-config.js; then echo "::warning::Progetto Firebase non ancora configurato (.firebaserc o js/firebase-config.js): pubblicazione saltata"; exit 0; fi
           if [ -z "$CHIAVE" ]; then echo "::error::Manca il secret FIREBASE_SA_MANOFUORI (vedi istruzioni in cima a questo file)"; exit 1; fi
           printf '%s' "$CHIAVE" > "$RUNNER_TEMP/chiave.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/chiave.json"
