@@ -226,7 +226,6 @@ onAuthStateChanged(auth, async u => {
   listenTournaments(canTour());
   listenRoles();
   listenAccount();
-  listenPartner();
   listenVerified();
   listenFreeplay();
   listenTraining();
@@ -326,7 +325,6 @@ async function register(data) {
   let mailErr = '';
   try { await sendVerifyMail(cred.user); } catch (e) { console.error(e); mailErr = e.code || e.message || 'error'; }
   listenAccount();
-  listenPartner();
   listenVerified();
   listenFreeplay();
   refresh();
@@ -869,78 +867,6 @@ function deleteUser(uid, groups, planIds, packIds) {
 }
 function setCoach(uid, data) { return data ? setDoc(doc(db, 'coaches', uid), data) : deleteDoc(doc(db, 'coaches', uid)); }
 
-// ---------- cerco compagno/a (tornei con iscrizioni aperte) ----------
-// psearch/{tid_uid}: chi cerca (pubblico: nome, livello e ruolo cercati; "act" = candidature attive, cioè in attesa
-//   o accettata; "n" = numero progressivo dell'ultima candidatura).
-// papps/{sid_k}: candidature (k = numero progressivo); le vede solo chi cerca, l'admin e il candidato registrato.
-let psUnsubs = [];
-onSnapshot(collection(db, 'psearch'), snap => {
-  Store.applyRemote('psearch', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
-  refresh();
-}, onError);
-function listenPartner() {
-  psUnsubs.forEach(f => f()); psUnsubs = [];
-  Store.applyRemote('papps', []);
-  if (!user) return;
-  const parts = {};
-  const merge = () => { const all = {}; Object.values(parts).forEach(l => l.forEach(a => { all[a.id] = a; })); Store.applyRemote('papps', Object.values(all)); refresh(); };
-  const srcs = isAdmin ? { all: collection(db, 'papps') }
-    : member ? { own: query(collection(db, 'papps'), where('owner', '==', user.uid)), me: query(collection(db, 'papps'), where('uid', '==', user.uid)) } : {};
-  Object.entries(srcs).forEach(([k, q]) => psUnsubs.push(onSnapshot(q, snap => { parts[k] = snap.docs.map(d => Object.assign({ id: d.id }, d.data())); merge(); }, onError)));
-}
-
-function openSearch(s) {
-  return setDoc(doc(db, 'psearch', `${s.tid}_${user.uid}`), Object.assign({}, s, { by: user.uid, status: 'open', n: 0, act: 0, acc: null, created: Date.now() }));
-}
-function updateSearch(id, patch) { return updateDoc(doc(db, 'psearch', id), patch); }
-function closeSearch(id, apps) {
-  const batch = writeBatch(db);
-  apps.forEach(a => batch.delete(doc(db, 'papps', a.id)));
-  batch.delete(doc(db, 'psearch', id));
-  return batch.commit();
-}
-// Candidatura (anche senza account): numero progressivo e contatore pubblico aggiornati insieme.
-function applyPartner(sid, data) {
-  return runTransaction(db, async tr => {
-    const ref = doc(db, 'psearch', sid);
-    const snap = await tr.get(ref);
-    if (!snap.exists() || snap.data().status !== 'open') throw Object.assign(new Error('closed'), { code: 'closed' });
-    const k = (snap.data().n || 0) + 1;
-    tr.update(ref, { n: k, act: (snap.data().act || 0) + 1 });
-    tr.set(doc(db, 'papps', `${sid}_${k}`), Object.assign({}, data, { sid, k, owner: snap.data().by, tid: snap.data().tid, uid: user ? user.uid : null, status: 'pending', at: Date.now() }));
-  });
-}
-// Chi cerca accetta una candidatura: le altre si chiudono come "Non confermata".
-function acceptPartner(search, app, others) {
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'papps', app.id), { status: 'accepted' });
-  others.filter(a => a.status === 'pending' || a.status === 'accepted').forEach(a => batch.update(doc(db, 'papps', a.id), { status: 'declined' }));
-  batch.update(doc(db, 'psearch', search.id), { status: 'matched', acc: app.id, act: 1 });
-  return batch.commit();
-}
-// Chi cerca rifiuta: la candidatura non è più attiva.
-function declinePartner(app, search, act) {
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'papps', app.id), { status: 'declined' });
-  batch.update(doc(db, 'psearch', search.id), Object.assign({ act }, search.acc === app.id ? { status: 'open', acc: null } : {}));
-  return batch.commit();
-}
-// Il candidato ritira la candidatura; se era stata accettata la ricerca si riapre.
-function revokePartner(app, search) {
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'papps', app.id), { status: 'revoked' });
-  // il contatore pubblico scende di uno (e se era la candidatura accettata la ricerca si riapre)
-  if (search && search.status !== 'done') batch.update(doc(db, 'psearch', search.id), Object.assign({ act: Math.max(0, (search.act || 0) - 1), lastRev: app.id }, search.acc === app.id ? { status: 'open', acc: null } : {}));
-  return batch.commit();
-}
-// Iscrizione della squadra trovata: iscrizione normale + ricerca conclusa.
-function registerFromSearch(search, reg) {
-  const batch = writeBatch(db);
-  batch.set(doc(collection(db, 'registrations')), Object.assign({}, reg, { created: Date.now() }));
-  batch.update(doc(db, 'psearch', search.id), { status: 'done' });
-  return batch.commit();
-}
-
 // ---------- gioco libero ----------
 // freeplay/{id}: sessione dell'admin (pubblica: nome, data, orari, livelli, contatori m/f dei partecipanti).
 // fpreg/{id_uid}: partecipazione dell'utente (nome, sesso, livello, stato in/out, orari): la leggono solo
@@ -1248,14 +1174,6 @@ window.Cloud = {
   deleteFreeplay,
   setFreeplay,
   setFreeplayBlocks,
-  openSearch,
-  updateSearch,
-  closeSearch,
-  applyPartner,
-  acceptPartner,
-  declinePartner,
-  revokePartner,
-  registerFromSearch,
   notify,
   dismissNotice,
   resendVerification,

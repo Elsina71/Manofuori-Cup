@@ -27,7 +27,7 @@ const Legal = (() => {
     <ul>
       <li><strong>Account</strong>: nome, cognome, sesso, email e password. La password è gestita dal servizio di autenticazione di Google Firebase e non è mai visibile all'associazione.</li>
       <li><strong>Tornei</strong>: iscrizioni, compagni di squadra, risultati e punteggi.</li>
-      <li><strong>Gioco libero e "cerco compagno/a"</strong>: le partecipazioni e le candidature che invii (il nome è visibile agli utenti coinvolti, come descritto in ogni sezione; nel gioco libero gli altri vedono solo quanti uomini e donne partecipano).</li>
+      <li><strong>Gioco libero</strong>: le partecipazioni (gli altri vedono solo quanti uomini e donne partecipano; i nomi li vede l'associazione).</li>
       <li><strong>Allenamenti</strong>: gruppi, presenze, assenze, posti spot e recuperi. Il coach vede solo nomi e presenze dei propri allenamenti.</li>
       <li><strong>Scheda del corsista</strong> (solo per chi si allena con l'associazione): luogo e data di nascita, comune e indirizzo di residenza, codice fiscale, tesseramento della stagione e <em>data di scadenza</em> del certificato medico. Non conserviamo il certificato né informazioni sul tuo stato di salute.</li>
       <li><strong>Pagamenti</strong>: importo, data, modalità (contanti, bancomat, bonifico) e ricevute emesse. Nell'app non si inseriscono dati di carte o conti bancari.</li>
@@ -117,7 +117,7 @@ const Legal = (() => {
     <h2>3. Tornei e gioco libero</h2>
     <ul>
       <li>L'iscrizione a un torneo è confermata secondo le regole del torneo; si applicano il regolamento del torneo e le norme sportive. I risultati sono pubblici.</li>
-      <li>Gioco libero e "cerco compagno/a" sono strumenti per organizzarsi: ognuno è responsabile dei messaggi e delle candidature che invia, nel rispetto degli altri utenti.</li>
+      <li>Il gioco libero è uno strumento per organizzarsi: ognuno è responsabile delle proprie partecipazioni, nel rispetto degli altri utenti.</li>
     </ul>
 
     <h2>4. Allenamenti</h2>

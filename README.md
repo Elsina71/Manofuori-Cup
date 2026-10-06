@@ -7,7 +7,7 @@ Interfaccia **solo in italiano** (anche nel referto elettronico).
 con altre app. Nasce come copia di Beach+ Arena Event Manager (repository `Elsina71/Repository-principale`,
 cartella `beach-plus-arena`); per ora ha un solo **tema neutro** (vedi *Temi grafici e colori*).
 
-**Differenze da Beach+ Arena**: niente prenotazione dei campi, niente sfide e niente ranking (le classifiche saranno
+**Differenze da Beach+ Arena**: niente prenotazione dei campi, niente sfide, niente "cerco compagno/a" (ai tornei ci si iscrive come squadra) e niente ranking (le classifiche saranno
 rifatte per le squadre di pallavolo). Gioco libero e allenamenti non occupano campi: hanno un **luogo** scritto a mano.
 Categorie, tabelle punti e anagrafica giocatori restano per ora, finché i tornei non vengono rifatti per le squadre.
 
@@ -74,23 +74,6 @@ la foto si carica dal telefono o dal computer e viene ridimensionata automaticam
   squadre già inserite dall'admin restano in lista e occupano i primi posti.
 - Database: `members/{uid}`, `accounts/{uid}` (email), `registrations/{id}`, `messages/{id}`, `inbox/{uid}`; alias in
   `data/settings`.
-
-## Cerco compagno/a (tornei)
-
-- Nella pagina del torneo (scheda Info), finché le **iscrizioni online** sono aperte, c'è sempre il riquadro
-  **Non hai compagno/a? Indica qui chi cerchi**: un utente registrato
-  (email confermata, non ancora iscritto) pubblica la ricerca con il **livello** (anche "Non importa il livello") e il **ruolo** cercati (Difesa, Muro,
-  Qualsiasi ruolo). Il genere del compagno lo decide il torneo (nel misto quello opposto).
-- Tutti vedono chi cerca, livello e ruolo cercati e solo il numero di **candidature ricevute** ancora attive (in attesa
-  o accettata: quelle ritirate o non confermate non contano).
-- Si candida chiunque, anche **senza account** (nome, cognome, livello oppure "-" per non indicarlo, ruolo e, facoltativo, telefono o email). Le
-  candidature complete le vede solo chi cerca: in prima pagina e nella pagina del torneo, con **Accetta** / **Rifiuta**.
-  Accettandone una le altre si chiudono come "Non confermata".
-- Dopo l'accettazione compare **Iscrivi la squadra al torneo**: iscrizione normale (termine, massimo squadre, lista
-  d'attesa) e ricerca conclusa; può farlo anche l'admin. Se chi cerca risulta iscritto al torneo in qualsiasi modo
-  (anche dall'admin) la ricerca si chiude da sola. Il candidato registrato vede lo stato (Da confermare / Confermato / Non confermata),
-  riceve un avviso in prima pagina se scelto e può ritirarsi finché la squadra non è iscritta (la ricerca si riapre).
-- Database: `psearch/{torneo_utente}` (pubblico) e `papps/{ricerca_n}` (candidature, solo chi cerca, admin e candidato).
 
 ## Gioco libero
 

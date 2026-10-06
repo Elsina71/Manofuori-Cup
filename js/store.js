@@ -5,7 +5,7 @@ const Store = (() => {
   }
 
   function empty() {
-    return { version: 3, players: [], categories: [], tournaments: [], notice: '', editorial: [null, null], registrations: [], members: [], messages: [], inbox: [], rewards: null, nicks: {}, accounts: {}, psearch: [], papps: [], manualVerified: {}, emailVerified: {}, freeplay: [], fpreg: [], fpanon: [], trainings: [], coaches: [], athletes: [], groups: [], plans: [], packs: [], occ: [], att: [], spots: [], receipts: [], roles: {}, incassi: [], tesserati: [], occfree: {}, prices: null, bans: {}, notices: [], live: {}, referti: {}, refPdf: {}, refLoaded: false };
+    return { version: 3, players: [], categories: [], tournaments: [], notice: '', editorial: [null, null], registrations: [], members: [], messages: [], inbox: [], rewards: null, nicks: {}, accounts: {}, manualVerified: {}, emailVerified: {}, freeplay: [], fpreg: [], fpanon: [], trainings: [], coaches: [], athletes: [], groups: [], plans: [], packs: [], occ: [], att: [], spots: [], receipts: [], roles: {}, incassi: [], tesserati: [], occfree: {}, prices: null, bans: {}, notices: [], live: {}, referti: {}, refPdf: {}, refLoaded: false };
   }
 
   function isValid(s) {
@@ -46,8 +46,6 @@ const Store = (() => {
     else if (kind === 'incassi') state.incassi = value;
     else if (kind === 'tesserati') state.tesserati = value;
     else if (kind === 'occfree') state.occfree = value;
-    else if (kind === 'psearch') state.psearch = value;
-    else if (kind === 'papps') state.papps = value;
     else if (kind === 'manualVerified') state.manualVerified = value;
     else if (kind === 'emailVerified') state.emailVerified = value;
     else if (kind === 'freeplay') state.freeplay = value;
@@ -106,7 +104,7 @@ const Store = (() => {
     empty,
     applyRemote,
     replace(s) {
-      state = { live: state.live || {}, referti: state.referti || {}, refPdf: state.refPdf || {}, refLoaded: state.refLoaded, editorial: state.editorial || [null, null], registrations: state.registrations || [], members: state.members || [], messages: state.messages || [], inbox: state.inbox || [], rewards: s.rewards || state.rewards || null, nicks: s.nicks || state.nicks || {}, psearch: state.psearch || [], papps: state.papps || [], manualVerified: state.manualVerified || {}, emailVerified: state.emailVerified || {}, freeplay: state.freeplay || [], fpreg: state.fpreg || [], fpanon: state.fpanon || [], trainings: state.trainings || [], coaches: state.coaches || [], athletes: state.athletes || [], groups: state.groups || [], plans: state.plans || [], packs: state.packs || [], occ: state.occ || [], att: state.att || [], spots: state.spots || [], receipts: state.receipts || [], roles: state.roles || {}, incassi: state.incassi || [], tesserati: state.tesserati || [], occfree: state.occfree || {}, prices: s.prices || state.prices || null, bans: state.bans || {}, notices: state.notices || [], accounts: state.accounts || {}, version: 3, players: s.players, categories: migrateSettings(s), tournaments: s.tournaments.map(Logic.normalize), notice: s.notice || '', noticeUntil: s.noticeUntil || '', eopeRecipients: s.eopeRecipients || [] };
+      state = { live: state.live || {}, referti: state.referti || {}, refPdf: state.refPdf || {}, refLoaded: state.refLoaded, editorial: state.editorial || [null, null], registrations: state.registrations || [], members: state.members || [], messages: state.messages || [], inbox: state.inbox || [], rewards: s.rewards || state.rewards || null, nicks: s.nicks || state.nicks || {}, manualVerified: state.manualVerified || {}, emailVerified: state.emailVerified || {}, freeplay: state.freeplay || [], fpreg: state.fpreg || [], fpanon: state.fpanon || [], trainings: state.trainings || [], coaches: state.coaches || [], athletes: state.athletes || [], groups: state.groups || [], plans: state.plans || [], packs: state.packs || [], occ: state.occ || [], att: state.att || [], spots: state.spots || [], receipts: state.receipts || [], roles: state.roles || {}, incassi: state.incassi || [], tesserati: state.tesserati || [], occfree: state.occfree || {}, prices: s.prices || state.prices || null, bans: state.bans || {}, notices: state.notices || [], accounts: state.accounts || {}, version: 3, players: s.players, categories: migrateSettings(s), tournaments: s.tournaments.map(Logic.normalize), notice: s.notice || '', noticeUntil: s.noticeUntil || '', eopeRecipients: s.eopeRecipients || [] };
       save();
     }
   };

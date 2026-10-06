@@ -429,7 +429,6 @@
       ${trainingAlerts()}
       ${certAlerts()}
       ${noticeAlerts()}
-      ${partnerAlerts()}
       ${verifyNotice()}
       ${noticeBox('home', S().notice, S().noticeUntil)}
       ${tourNoticesHome()}
@@ -880,11 +879,11 @@
 
   function tabInfo(tour) {
     const ph = regPhase(tour);
-    if (ph && ph !== 'formula' && tour.reg.formulaSet) return regBox(tour) + partnerBox(tour) + tabInfoFull(tour);
+    if (ph && ph !== 'formula' && tour.reg.formulaSet) return regBox(tour) + tabInfoFull(tour);
     if (ph && ph !== 'formula') {
       const r = tour.reg;
       const row = (k, v) => v ? `<div class="kv"><span>${esc(t(k))}</span><strong>${v}</strong></div>` : '';
-      return regBox(tour) + partnerBox(tour) + `<div class="card">
+      return regBox(tour) + `<div class="card">
         <h2>${esc(t('details'))}</h2>
         ${row('startDateTime', esc(fmtDateTime(r.startAt)))}
         ${row('gender', esc(genderLabel(tour.gender)))}
@@ -1954,195 +1953,14 @@
     return `<p class="note warn"><i class="ti ti-ban" aria-hidden="true"></i> ${esc(t('banTourMsg'))}</p>`;
   }
 
-
   // per conto di chi è la prenotazione: utente registrato o nome scritto dall'admin (giocatore non registrato)
-
-
-
-
 
   // Conferma (nuova prenotazione o modifica) con tutti i controlli; avvisi a titolare e amministratori.
 
-
-
-
-
-
-
-
-  // ====================================================================
-  // SFIDE: un utente cerca giocatori (uomini / donne), gli altri si candidano, il proponente accetta o declina;
-  // a sfida completa "Fai partire la sfida" prenota un campo libero (o propone l'orario libero più vicino).
-  // ====================================================================
+  // Livelli degli allenamenti (ordine nel report presenze).
   const LEVELS = ['start', 'inter', 'high', 'pro'];
-  // livello cercato (sfide, cerco compagno/a): anche "Non importa il livello"
-  const SEEK_LEVELS = LEVELS.concat('any');
-  // nome del proponente: salvato nella sfida (l'admin compare come "Manofuori Cup")
-  // partecipanti registrati: proponente + candidati accettati (gli ospiti non registrati li conferma il proponente)
-
-
-
-
-
-
-
-
-
-
-  // ====================================================================
-  // CERCO COMPAGNO/A (tornei con iscrizioni aperte)
-  // Chi cerca è un utente registrato; si candida chiunque (anche senza account). Le candidature complete le vede
-  // solo chi cerca (prima pagina e pagina del torneo); gli altri vedono solo "x candidature ricevute".
-  // ====================================================================
-  const ROLES = ['def', 'block', 'any'];
   // Moduli a scomparsa che restano aperti anche se la pagina si ridisegna (aggiornamenti dal database).
   const keepOpen = key => ((ui.keep || {})[key] ? 'open' : '');
-  // La ricerca si chiude anche quando chi cerca risulta già iscritto (per esempio iscritto dall'admin).
-  const searcherInTour = (tour, sr) => regsOf(tour).some(r => (r.uids || []).includes(sr.by))
-    || tour.entries.some(e => [e.p1, e.p2].some(id => { const p = player(id); return p && p.uid === sr.by; }));
-  const psOfTour = tour => (S().psearch || []).filter(x => x.tid === tour.id && x.status !== 'done' && !searcherInTour(tour, x));
-  const psActive = sr => (sr.act != null ? sr.act : sr.n) || 0;
-  // Chi cerca (o l'admin) segna come conclusa la ricerca di chi risulta già iscritto.
-  function psHousekeeping(tour) {
-    if (!(admin() || member())) return;
-    ui.psFix = ui.psFix || {};
-    (S().psearch || []).filter(x => x.tid === tour.id && x.status !== 'done' && (x.by === myUid() || admin())).forEach(sr => {
-      const patch = searcherInTour(tour, sr) ? { status: 'done' } : null;
-      const key = sr.id + JSON.stringify(patch);
-      if (!patch || ui.psFix[key]) return;
-      ui.psFix[key] = true;
-      window.Cloud.updateSearch(sr.id, patch).catch(() => {});
-    });
-  }
-  const psApps = sid => (S().papps || []).filter(a => a.sid === sid).sort((a, b) => a.k - b.k);
-  const psMine = tour => (S().psearch || []).find(x => x.tid === tour.id && x.by === myUid());
-  const psPartnerGender = (tour, g) => (tour.gender === 'X' ? (g === 'M' ? 'F' : 'M') : tour.gender);
-  // livello "-" (none): il candidato non indica il livello, si mostra solo il ruolo
-  const lvlRole = (l, r) => (l === 'none' ? t('psRole_' + r) : `${t('chLevel_' + l)} · ${t('psRole_' + r)}`);
-  const memberInTour = (tour, m) => !!(personInRegs(tour, { uid: m.uid, first: m.first, last: m.last, gender: m.gender })
-    || tour.entries.some(e => [e.p1, e.p2].some(id => { const p = player(id); return p && p.uid === m.uid; })));
-
-  function psAppCard(sr, a, tour) {
-    const st = { pending: 'chToConfirm', accepted: 'chConfirmed', declined: 'chDeclined', revoked: 'chRevoked' }[a.status];
-    return `<li class="ps-app ${a.status}"><span class="reg-names"><strong>${esc(a.last)} ${esc(a.first)}</strong> <span class="badge g-${a.gender}">${esc(a.gender)}</span>
-        ${a.uid ? '' : `<span class="badge">${esc(t('psNoAccount'))}</span>`}<br>
-        <small>${esc(lvlRole(a.level, a.role))}${a.contact ? ` · <i class="ti ti-phone" aria-hidden="true"></i> ${esc(a.contact)}` : ''}</small>
-        ${a.status !== 'pending' ? `<br><span class="badge ${a.status === 'accepted' ? 'st-done' : ''}">${esc(t(st))}</span>` : ''}</span>
-      ${a.status === 'pending' && sr.status === 'open' ? `<span class="btn-row"><button class="btn small primary" data-action="ps-accept" data-id="${a.id}">${esc(t('chAccept'))}</button>
-        <button class="btn small" data-action="ps-decline" data-id="${a.id}">${esc(t('chDecline'))}</button></span>` : ''}</li>`;
-  }
-
-  // Riquadro di chi cerca: candidature complete, accetta/rifiuta, poi "Iscrivi la squadra al torneo".
-  function psOwnerBlock(sr, tour) {
-    const apps = psApps(sr.id).filter(a => a.status !== 'revoked');
-    const acc = sr.acc && apps.find(a => a.id === sr.acc);
-    return `<div class="ps-owner">
-      ${acc ? `<p class="note ok"><i class="ti ti-heart-handshake" aria-hidden="true"></i> ${esc(t('psMatched', { n: `${acc.last} ${acc.first}` }))}</p>
-        ${sr.by !== myUid() && !admin() ? '' : `<div class="btn-row"><button class="btn primary" data-action="ps-register" data-id="${sr.id}"><i class="ti ti-pencil-plus" aria-hidden="true"></i> ${esc(t('psRegister'))}</button></div>`}` : ''}
-      ${apps.length ? `<ul class="reg-list">${apps.map(a => psAppCard(sr, a, tour)).join('')}</ul>` : `<p class="muted small">${esc(t('psNoApps'))}</p>`}
-      <div class="btn-row"><button class="btn small danger" data-action="ps-close" data-id="${sr.id}">${esc(t('psClose'))}</button></div>
-    </div>`;
-  }
-
-  function psApplyForm(sr) {
-    const m = member(), mine = (S().papps || []).find(a => a.sid === sr.id && a.uid && a.uid === myUid() && a.status !== 'revoked');
-    if (mine) {
-      const st = { pending: 'chToConfirm', accepted: 'chConfirmed', declined: 'chDeclined' }[mine.status];
-      return `<p class="ch-me"><span class="badge ${mine.status === 'accepted' ? 'st-done' : mine.status === 'pending' ? 'warn-b' : ''}">${esc(t(st))}</span>
-        ${['pending', 'accepted'].includes(mine.status) ? `<button class="btn small danger" data-action="ps-revoke" data-id="${mine.id}">${esc(t('chRevoke'))}</button>` : ''}</p>`;
-    }
-    if (sr.status !== 'open' || sr.by === myUid() || admin() || scorer()) return '';
-    if (m && m.gender !== sr.pg) return '';
-    if (m && banOf(m.uid).tour) return '';
-    const g = sr.pg, opts = (list, pre) => list.map(x => `<option value="${x}">${esc(t(pre + x))}</option>`).join('');
-    return `<details class="sub-form" data-keep="psa-${sr.id}" ${keepOpen('psa-' + sr.id)}><summary><i class="ti ti-hand-finger" aria-hidden="true"></i> ${esc(t('psApply'))}</summary>
-      <form class="grid-form" data-form="ps-apply" data-id="${sr.id}">
-        ${m ? `<p class="span-all"><strong>${esc(personLabel(m))}</strong></p>`
-          : `<label>${esc(t('lastName'))}<input name="last" required maxlength="60"></label>
-             <label>${esc(t('firstName'))}<input name="first" required maxlength="60"></label>
-             <p class="muted small span-all">${esc(t('psGenderFixed', { g: t(g === 'F' ? 'female' : 'male').toLowerCase() }))}</p>`}
-        <label>${esc(t('psMyLevel'))}<select name="level">${opts(['none'].concat(LEVELS), 'chLevel_')}</select></label>
-        <label>${esc(t('psMyRole'))}<select name="role">${opts(ROLES, 'psRole_')}</select></label>
-        ${m ? '' : `<label class="span-all">${esc(t('psContact'))}<input name="contact" maxlength="80" placeholder="${esc(t('psContactPh'))}"></label>`}
-        <div class="form-actions span-all"><button class="btn primary">${esc(t('psSend'))}</button></div>
-      </form></details>`;
-  }
-
-  function partnerBox(tour) {
-    if (regPhase(tour) !== 'open') return '';
-    psHousekeeping(tour);
-    const m = member(), list = psOfTour(tour), mine = psMine(tour);
-    // Il riquadro c'è sempre finché le iscrizioni sono aperte; sotto, cosa può fare chi guarda.
-    let create = '';
-    if (admin()) create = `<p class="muted small">${esc(t('psAdminHint'))}</p>`;
-    else if (!m) create = scorer() ? '' : `<p class="muted small">${esc(t(list.length ? 'psGuestHint' : 'psLoginHint'))}</p>${list.length ? '' : `<a class="btn small" href="#/settings">${esc(t('loginOrRegister'))}</a>`}`;
-    else if (mine) create = '';
-    else if (memberInTour(tour, m)) create = `<p class="muted small">${esc(t('psAlreadyIn'))}</p>`;
-    else if (banOf(m.uid).tour) create = banNotice('tour');
-    else if (tour.gender !== 'X' && m.gender !== tour.gender) create = `<p class="muted small">${esc(t('regWrongGender'))}</p>`;
-    else {
-      create = needsVerify() ? `<p class="note warn">${esc(t('verifyFirst'))}</p>` :
-        `<details class="sub-form" data-keep="pso-${tour.id}" ${keepOpen('pso-' + tour.id)}><summary><i class="ti ti-search" aria-hidden="true"></i> ${esc(t('psStart'))}</summary>
-        <form class="grid-form" data-form="ps-open" data-tid="${tour.id}">
-          <p class="span-all"><strong>${esc(personLabel(m))}</strong> · ${esc(t('psSeeking', { g: t(psPartnerGender(tour, m.gender) === 'F' ? 'psFemale' : 'psMale') }))}</p>
-          <label>${esc(t('psLevel'))}<select name="level">${SEEK_LEVELS.map(l => `<option value="${l}">${esc(t('chLevel_' + l))}</option>`).join('')}</select></label>
-          <label>${esc(t('psRole'))}<select name="role">${ROLES.map(r => `<option value="${r}">${esc(t('psRole_' + r))}</option>`).join('')}</select></label>
-          <div class="form-actions span-all"><button class="btn primary">${esc(t('psPublish'))}</button></div>
-        </form></details>`;
-    }
-    return `<div class="card ps-box" id="partner">
-      <h2><i class="ti ti-users-plus" aria-hidden="true"></i> ${esc(t('psTitle'))}</h2>
-      <p class="muted small">${esc(t('psIntro'))}</p>
-      ${list.length ? '' : `<p class="muted">${esc(t('psNone'))}</p>`}
-      ${list.length ? `<ul class="ps-list">${list.map(sr => `<li class="${sr.by === myUid() ? 'mine' : ''}">
-        <div class="ps-head"><strong>${esc(sr.name)}</strong> <span class="badge g-${sr.gender}">${esc(sr.gender)}</span>
-          <span class="muted small">${esc(t('psLooksFor', { g: t(sr.pg === 'F' ? 'psFemale' : 'psMale'), lr: lvlRole(sr.level, sr.role) }))}</span>
-          ${sr.status === 'matched' ? `<span class="badge st-done">${esc(t('psFound'))}</span>` : ''}
-          ${sr.by !== myUid() && !admin() ? `<span class="badge">${esc(t('psReceived', { n: psActive(sr) }))}</span>` : ''}</div>
-        ${sr.by === myUid() || admin() ? psOwnerBlock(sr, tour) : psApplyForm(sr)}
-      </li>`).join('')}</ul>` : ''}
-      ${create}
-    </div>`;
-  }
-
-  // Prima pagina: a chi cerca le candidature complete; al candidato registrato l'esito positivo.
-  function partnerAlerts() {
-    const uid = myUid();
-    if (!uid || !member()) return '';
-    const out = [];
-    (S().psearch || []).filter(sr => sr.by === uid && sr.status !== 'done').forEach(sr => {
-      const tour = tourById(sr.tid);
-      if (!tour || regPhase(tour) !== 'open') return;
-      psHousekeeping(tour);
-      if (searcherInTour(tour, sr)) return;
-      const pend = psApps(sr.id).filter(a => a.status === 'pending');
-      if (!pend.length && sr.status !== 'matched') return;
-      out.push(`<div class="msg-alert" role="alert"><div class="msg-head"><strong><i class="ti ti-users-plus" aria-hidden="true"></i> ${esc(t('psAlertTitle', { t: tour.name }))}</strong></div>
-        ${psOwnerBlock(sr, tour)}<a class="btn small" href="#/t/${tour.id}">${esc(t('psGoTour'))} →</a></div>`);
-    });
-    (S().papps || []).filter(a => a.uid === uid && a.status === 'accepted').forEach(a => {
-      const sr = (S().psearch || []).find(x => x.id === a.sid), tour = tourById(a.tid);
-      if (!sr || sr.status !== 'matched' || !tour) return;
-      out.push(`<div class="msg-alert" role="alert"><div class="msg-head"><strong><i class="ti ti-heart-handshake" aria-hidden="true"></i> ${esc(t('psYouAccepted', { n: sr.name, t: tour.name }))}</strong></div>
-        <div class="msg-text">${esc(t('psYouAcceptedText'))}</div><a class="btn small" href="#/t/${tour.id}">${esc(t('psGoTour'))} →</a></div>`);
-    });
-    return out.join('');
-  }
-
-  const psById = id => (S().psearch || []).find(x => x.id === id);
-  const pappById = id => (S().papps || []).find(x => x.id === id);
-  const psErr = e => warn(e && (e.code === 'permission-denied' || e.code === 'closed') ? 'psDenied' : 'regError', { code: (e && (e.code || e.message)) || '' });
-  function psRegister(sr) {
-    // l'admin può iscrivere la squadra al posto di chi cerca
-    const tour = tourById(sr.tid), m = admin() ? memberByUid(sr.by) : member(), a = pappById(sr.acc);
-    if (!tour || !m || !a || regPhase(tour) !== 'open') return warn('regClosedMsg');
-    const p1 = { uid: m.uid, first: m.first, last: m.last, gender: m.gender };
-    const p2 = { uid: a.uid || null, first: a.first, last: a.last, gender: a.gender };
-    if (personInRegs(tour, p1) || memberInTour(tour, m)) return warn('regAlready');
-    if (personInRegs(tour, p2)) return warn('regPartnerAlready');
-    window.Cloud.registerFromSearch(sr, { tid: tour.id, by: admin() ? myUid() : m.uid, uids: a.uid ? [m.uid, a.uid] : [m.uid], p1, p2 })
-      .then(() => { ui.flash = { text: t('regSaved') }; location.hash = `#/t/${tour.id}`; render(); }).catch(psErr);
-  }
 
   // ====================================================================
   // PRIVACY E TERMINI: pagine legali, presa visione, dati personali (diritti GDPR artt. 15-22).
@@ -3774,8 +3592,6 @@
     return `<details class="card sub-form" data-keep="fp-new" ${keepOpen('fp-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('fpNew'))}</summary>${form}</details>`;
   }
 
-
-
   function fpSave(f) {
     const old = f.dataset.id ? fpById(f.dataset.id) : null;
     const levels = [...f.querySelectorAll('[name=lv]:checked')].map(x => x.value);
@@ -5178,30 +4994,6 @@
       if (!confirmed(on ? 'verConfirmAsk' : 'verUndoAsk', { n: m ? personName(m) : '' })) return;
       window.Cloud.setManualVerified(el.dataset.uid, on).then(() => { ui.flash = { text: t('saved') }; render(); }).catch(e => warn('regError', { code: e.code || e.message }));
     },
-    'ps-accept': el => {
-      const a = pappById(el.dataset.id), sr = a && psById(a.sid);
-      if (!a || !sr) return;
-      const others = psApps(sr.id).filter(x => x.id !== a.id);
-      if (others.some(x => x.status === 'pending') && !confirmed('psAcceptConfirm', { n: `${a.last} ${a.first}` })) return;
-      window.Cloud.acceptPartner(sr, a, others).then(() => { ui.flash = { text: t('psAcceptedOk') }; render(); }).catch(psErr);
-    },
-    'ps-decline': el => {
-      const a = pappById(el.dataset.id), sr = a && psById(a.sid);
-      if (!a || !sr) return;
-      const act = psApps(sr.id).filter(x => x.id !== a.id && (x.status === 'pending' || x.status === 'accepted')).length;
-      window.Cloud.declinePartner(a, sr, act).then(() => render()).catch(psErr);
-    },
-    'ps-revoke': el => {
-      const a = pappById(el.dataset.id);
-      if (!a || !confirmed('psRevokeConfirm')) return;
-      window.Cloud.revokePartner(a, psById(a.sid)).then(() => { ui.flash = { text: t('chRevokedOk') }; render(); }).catch(psErr);
-    },
-    'ps-close': el => {
-      const sr = psById(el.dataset.id);
-      if (!sr || !confirmed('psCloseConfirm')) return;
-      window.Cloud.closeSearch(sr.id, psApps(sr.id)).then(() => { ui.flash = { text: t('psClosed') }; render(); }).catch(psErr);
-    },
-    'ps-register': el => { const sr = psById(el.dataset.id); if (sr) psRegister(sr); },
     'verify-resend': () => {
       // al massimo un invio al minuto (Firebase blocca gli invii troppo ravvicinati)
       if (Date.now() < (ui.verifyWait || 0)) return warn('verifyWait', { s: Math.ceil((ui.verifyWait - Date.now()) / 1000) });
@@ -5530,25 +5322,6 @@
       window.Cloud.adminCreateUser(d).then(() => { (ui.keep || {})['user-create'] = false; ui.flash = { text: t('userCreated', { e: d.email }) }; render(); })
         .catch(e => { btn.disabled = false; warn(e.code === 'auth/email-already-in-use' ? 'userCreateExists' : e.code === 'auth/weak-password' ? 'registerWeak' : 'regError', { code: e.code || e.message }); });
     },
-    'ps-open': f => {
-      const tour = tourById(f.dataset.tid), m = member();
-      if (!tour || !m || regPhase(tour) !== 'open') return warn('regClosedMsg');
-      if (needsVerify()) return warn('verifyFirst');
-      window.Cloud.openSearch({ tid: tour.id, name: personLabel(m), gender: m.gender, pg: psPartnerGender(tour, m.gender), level: f.level.value, role: f.role.value })
-        .then(() => { ui.flash = { text: t('psOpened') }; render(); }).catch(psErr);
-    },
-    'ps-apply': f => {
-      const sr = psById(f.dataset.id), m = member();
-      if (!sr) return;
-      const d = m ? { first: m.first, last: m.last, gender: m.gender, contact: '' }
-        : { first: f.first.value.trim(), last: f.last.value.trim(), gender: sr.pg, contact: f.contact.value.trim() };
-      if (!d.first || !d.last) return warn('errRegFields');
-      if (m && needsVerify()) return warn('verifyFirst');
-      Object.assign(d, { level: f.level.value, role: f.role.value });
-      const btn = f.querySelector('button.primary'); btn.disabled = true;
-      window.Cloud.applyPartner(sr.id, d).then(() => { (ui.keep || {})['psa-' + sr.id] = false; ui.flash = { text: t(m ? 'psAppliedMember' : 'psAppliedGuest') }; render(); })
-        .catch(e => { btn.disabled = false; psErr(e); });
-    },
     'tour-create': f => {
       const d = readRegForm(f);
       if (d.err) return warn(d.err);
@@ -5750,9 +5523,9 @@
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
   const SCORER_ACTIONS = new Set(['escore-open', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip']);
-  const PUBLIC_FORMS = new Set(['login', 'register', 'ps-apply']);
-  const MEMBER_ACTIONS = new Set(['reg-cancel', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'ps-accept', 'ps-decline', 'ps-revoke', 'ps-close', 'ps-register', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request']);
-  const MEMBER_FORMS = new Set(['reg-signup', 'profile-save', 'ps-open', 'fp-join', 'fp-blocks']);
+  const PUBLIC_FORMS = new Set(['login', 'register']);
+  const MEMBER_ACTIONS = new Set(['reg-cancel', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request']);
+  const MEMBER_FORMS = new Set(['reg-signup', 'profile-save', 'fp-join', 'fp-blocks']);
   let submitMode = 'save';
 
   // reminder delle prenotazioni: la prima pagina si aggiorna ogni minuto (compaiono e spariscono da soli)
