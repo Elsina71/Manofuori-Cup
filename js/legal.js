@@ -10,7 +10,7 @@ const Legal = (() => {
     vat: '03512620927',
     rep: 'Marianna Stara',
     repRole: 'Presidente e legale rappresentante',
-    email: 'DA_COMPILARE@example.com',
+    email: 'manofuori@tiscali.it',
     site: 'https://manofuori-774b2.web.app'
   };
   const mail = `<a href="mailto:${ORG.email}">${ORG.email}</a>`;
