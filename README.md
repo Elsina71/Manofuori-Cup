@@ -104,8 +104,19 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   5) si sceglie a parte, anche diversa da quella della finale (si crea insieme alla finale). In cima al tabellone il podio con le prime quattro.
 - Database: `vtours/{id}` (torneo, pubblico) e `vmatches/{torneo_gara}` (gare, pubbliche; lo scorer scrive solo set e
   stato). Test delle regole: `tests/vtour.rules.test.mjs`.
-- I vecchi tornei beach (coppie, categorie, giocatori) non sono più nel menu; il loro codice verrà tolto più avanti.
-  Il referto elettronico per la pallavolo arriverà da un progetto separato: per ora i risultati si inseriscono a mano.
+- **Referto elettronico** (`referto-indoor/`, 6 contro 6 con rotazioni, libero, minimo 2 donne in campo): pulsante
+  **E-scoresheet** sulla gara (admin generale e scorer del torneo). La prima volta crea `referti/{torneo}_{gara}` con
+  torneo, fase, data, ora, palestra, squadre (A = casa) con le rose e la formula (gironi: 3 set fissi a 25; playoff:
+  come il turno). Il punteggio va in diretta nel calendario (`live/{id}`, pubblico); a referto chiuso compare
+  **Riporta il risultato del referto**, che lo porta in classifica. Il referto è facoltativo: i set si possono sempre
+  inserire a mano. Gli scorer leggono le rose (servono al referto); per tutti gli altri restano private.
+- **Le mie gare** (menu e profilo): calendario e risultati delle squadre di cui si è capitano o giocatore. Il capitano
+  collega i giocatori della rosa al loro account dell'app (colonna *Account app*; l'app propone l'utente con lo stesso
+  nome e cognome); `teams.memberUids` contiene solo gli id degli account, la rosa resta privata.
+- **Avvisi**: se l'admin cambia data, ora o palestra di una gara che li aveva già (gara per gara o per tutta la
+  giornata), capitani e giocatori collegati delle due squadre ricevono un avviso in prima pagina.
+- **Chiusura a fine stagione** (*Impostazioni del torneo → Chiudi il torneo*): il torneo passa tra i *Tornei conclusi*
+  e lo scorer non inserisce più risultati; si può riaprire.
 
 ## Squadre
 

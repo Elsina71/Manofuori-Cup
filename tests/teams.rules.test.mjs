@@ -2,7 +2,7 @@
 // Uso (dalla cartella principale): npm i --no-save @firebase/rules-unit-testing@4 firebase@11, poi
 //   npx firebase-tools emulators:exec --only firestore --project demo-teams "node tests/teams.rules.test.mjs"
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, query, collection, where, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, deleteDoc, getDoc, getDocs, addDoc, query, collection, where, writeBatch } from 'firebase/firestore';
 import fs from 'fs';
 const env = await initializeTestEnvironment({ projectId: 'demo-teams', firestore: { rules: fs.readFileSync(process.argv[2] || 'firestore.rules', 'utf8'), host: '127.0.0.1', port: 8089 } });
 await env.withSecurityRulesDisabled(async c => {
@@ -10,11 +10,13 @@ await env.withSecurityRulesDisabled(async c => {
   for (const u of ['cap', 'other']) await setDoc(doc(db, 'members', u), { first: 'A', last: 'B', gender: 'M' });
   await setDoc(doc(db, 'roles', 'org'), { tour: true });
   await setDoc(doc(db, 'roles', 'cap'), { captain: true });
+  await setDoc(doc(db, 'scorers', 'campo1@x.it'), { court: '1', tid: '' });
 });
 const cap = env.authenticatedContext('cap', { email_verified: true }).firestore();
 const other = env.authenticatedContext('other', { email_verified: true }).firestore();
 const org = env.authenticatedContext('org', { email_verified: true }).firestore();
 const anon = env.unauthenticatedContext().firestore();
+const sc = env.authenticatedContext('s1', { email: 'campo1@x.it' }).firestore();
 const team = { name: 'Fenicotteri', level: 'MASTER', kind: 'X', captainUid: 'cap', captainName: 'B A', status: 'pending', created: 1, updated: 1 };
 let ok = 0, ko = 0;
 const t = async (name, p) => { try { await p; ok++; console.log('✔', name); } catch (e) { ko++; console.log('✘', name, e.message.slice(0, 120)); } };
@@ -28,6 +30,10 @@ await t('tutti leggono le squadre', assertSucceeds(getDoc(doc(anon, 'teams', 't1
 await t('altri non leggono la rosa', assertFails(getDoc(doc(other, 'rosters', 't1'))));
 await t('anonimo non legge la rosa', assertFails(getDoc(doc(anon, 'rosters', 't1'))));
 await t('capitano legge le sue rose (query)', assertSucceeds(getDocs(query(collection(cap, 'rosters'), where('captainUid', '==', 'cap')))));
+await t('scorer legge la rosa (referto)', assertSucceeds(getDoc(doc(sc, 'rosters', 't1'))));
+await t('capitano collega i giocatori agli account (memberUids)', assertSucceeds(updateDoc(doc(cap, 'teams', 't1'), { memberUids: ['other'], updated: 2 })));
+await t('admin tornei manda un avviso a un giocatore', assertSucceeds(addDoc(collection(org, 'notices'), { to: 'other', text: 'Gara spostata', at: 1, by: 'org' })));
+await t('utente non manda avvisi ad altri utenti', assertFails(addDoc(collection(other, 'notices'), { to: 'cap', text: 'x', at: 1, by: 'other' })));
 await t('capitano cambia livello in attesa', assertSucceeds(updateDoc(doc(cap, 'teams', 't1'), { level: 'DINOS', updated: 3 })));
 await t('capitano non si auto-ammette', assertFails(updateDoc(doc(cap, 'teams', 't1'), { status: 'ok' })));
 await t('altri non modificano la rosa', assertFails(setDoc(doc(other, 'rosters', 't1'), { captainUid: 'other', players: [], updated: 3 })));

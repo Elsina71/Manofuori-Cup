@@ -1054,7 +1054,29 @@ const I18n = (() => {
       roleHelp_captain: "Iscrive la propria squadra (nome, livello, rosa con numeri di maglia) e la tiene aggiornata. Lo abilita l’admin generale.",
       userCreateCaptain: "Abilita come capitano (può iscrivere una squadra)",
       userCreatedCaptain: "Account creato e abilitato come capitano: {e}",
-      tmNotCaptain: "Per iscrivere una squadra l’organizzatore deve abilitarti come capitano. Contatta l’organizzatore indicando l’email del tuo account."
+      tmNotCaptain: "Per iscrivere una squadra l’organizzatore deve abilitarti come capitano. Contatta l’organizzatore indicando l’email del tuo account.",
+      vmLive: "In diretta",
+      vmRefDone: "Referto chiuso",
+      vmFromRef: "Riporta il risultato del referto",
+      vmFromRefDone: "Risultato del referto riportato in classifica.",
+      vmRefBad: "Il risultato del referto non va bene per questa gara: {e} Correggilo a mano con «Risultato».",
+      vmLeg: "gara {n}",
+      tmAccount: "Account app",
+      tmNoAccount: "— non nell’app —",
+      navMyMatches: "Le mie gare",
+      mgIntro: "Calendario e risultati delle squadre di cui sei capitano o giocatore (il capitano collega i giocatori della rosa al loro account).",
+      mgNoTeam: "Non risulti in nessuna squadra: chiedi al tuo capitano di collegarti al tuo account nella rosa.",
+      mgNone: "Nessuna gara in calendario.",
+      mgNoneNext: "Nessuna gara in programma.",
+      mgAll: "Tutte le gare",
+      vmChanged: "{h} – {a}: {w}, {p}",
+      vmNotified: "Avviso inviato a {n} persone delle due squadre.",
+      vtClose: "Chiudi il torneo (fine stagione)",
+      vtCloseConfirm: "Chiudere il torneo {n}? Passa tra i tornei conclusi e lo scorer non inserisce più risultati (si può riaprire).",
+      vtClosed: "Torneo chiuso.",
+      vtReopen: "Riapri il torneo",
+      vtReopened: "Torneo riaperto.",
+      vtClosedList: "Tornei conclusi"
     }
   };
 

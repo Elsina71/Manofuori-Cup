@@ -916,8 +916,9 @@ let rosterUnsub = null;
 function listenRosters() {
   if (rosterUnsub) { rosterUnsub(); rosterUnsub = null; }
   Store.applyRemote('rosters', []);
-  if (!user || !(canTour() || member)) return;
-  const src = canTour() ? collection(db, 'rosters') : query(collection(db, 'rosters'), where('captainUid', '==', user.uid));
+  if (!user || !(canTour() || member || scorer)) return;
+  // admin tornei e scorer (per il referto) leggono tutte le rose; il capitano solo le sue
+  const src = canTour() || scorer ? collection(db, 'rosters') : query(collection(db, 'rosters'), where('captainUid', '==', user.uid));
   rosterUnsub = onSnapshot(src, snap => {
     Store.applyRemote('rosters', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
     refresh();

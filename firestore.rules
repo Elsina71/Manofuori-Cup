@@ -183,10 +183,12 @@ service cloud.firestore {
     //   non in lista nera) la crea in attesa
     //   (status "pending"); può cambiare nome e tipo sempre, il livello solo finché è in attesa; può ritirarla solo
     //   in attesa. L'ammissione (status "ok") e tutto il resto li decide l'admin tornei.
-    // rosters/{id}: rosa (players: cognome, nome, sesso, numero di maglia): la leggono e scrivono il capitano e l'admin.
+    // rosters/{id}: rosa (players: cognome, nome, sesso, numero di maglia, account app): la scrivono il capitano e l'admin;
+    //   la leggono loro e gli scorer (per il referto). teams.memberUids: account app dei giocatori (vedono le gare della squadra).
     function teamDoc(id) { return /databases/$(database)/documents/teams/$(id); }
     function teamFields(d) {
-      return d.name is string && d.name.size() > 0 && d.name.size() <= 60
+      return (!('memberUids' in d) || (d.memberUids is list && d.memberUids.size() <= 60))
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 60
         && d.level is string && d.level.size() > 0 && d.level.size() <= 40
         && d.kind in ['X', 'M', 'F'];
     }
@@ -194,19 +196,19 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isTourAdmin();
       allow create: if isMember() && verified() && hasRole('captain') && !banned(request.auth.uid, 'tour')
-        && request.resource.data.keys().hasOnly(['name', 'level', 'kind', 'captainUid', 'captainName', 'status', 'created', 'updated'])
+        && request.resource.data.keys().hasOnly(['name', 'level', 'kind', 'captainUid', 'captainName', 'memberUids', 'status', 'created', 'updated'])
         && request.resource.data.captainUid == request.auth.uid
         && request.resource.data.status == 'pending'
         && teamFields(request.resource.data)
         && request.resource.data.captainName is string && request.resource.data.captainName.size() <= 130;
       allow update: if isMember() && resource.data.captainUid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'level', 'kind', 'updated'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'level', 'kind', 'memberUids', 'updated'])
         && (resource.data.status == 'pending' || request.resource.data.level == resource.data.level)
         && teamFields(request.resource.data);
       allow delete: if isMember() && resource.data.captainUid == request.auth.uid && resource.data.status == 'pending';
     }
     match /rosters/{id} {
-      allow read: if isTourAdmin() || (request.auth != null && resource.data.captainUid == request.auth.uid);
+      allow read: if isTourAdmin() || isScorer() || (request.auth != null && resource.data.captainUid == request.auth.uid);
       allow write: if isTourAdmin();
       allow create, update: if isMember()
         && request.resource.data.keys().hasOnly(['captainUid', 'players', 'updated'])
@@ -459,14 +461,14 @@ service cloud.firestore {
       allow read, write: if isCash();
     }
 
-    // Avvisi per un utente (li scrive l'admin) o per gli amministratori ("admins"), es. richiesta di cancellazione.
+    // Avvisi per un utente (li scrive l'admin o l'admin tornei, es. gara spostata) o per gli amministratori ("admins").
     match /notices/{id} {
       allow read: if request.auth != null && (resource.data.to == request.auth.uid || (resource.data.to == 'admins' && isAdmin()));
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['to', 'text', 'at', 'by'])
         && request.resource.data.by == request.auth.uid
         && request.resource.data.text is string && request.resource.data.text.size() <= 400
-        && request.resource.data.to is string && (isAdmin() || request.resource.data.to == 'admins');
+        && request.resource.data.to is string && (isTourAdmin() || request.resource.data.to == 'admins');
       allow delete: if request.auth != null && (resource.data.to == request.auth.uid || (resource.data.to == 'admins' && isAdmin()));
     }
 

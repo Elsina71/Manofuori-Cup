@@ -973,14 +973,15 @@ li.is-void { opacity: .6; }
 
 /* ---------- squadre: rosa con numero di maglia ---------- */
 .roster-edit { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
-.roster-head, .roster-row { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) minmax(0, 1fr) 4.4em 2.2em; gap: 6px; align-items: center; }
+.roster-head, .roster-row { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) minmax(0, 1fr) 4.4em minmax(0, 1fr) 2.2em; gap: 6px; align-items: center; }
 .roster-head { font-size: .75rem; color: var(--muted); font-weight: 600; }
 .roster-rows { display: grid; gap: 6px; }
 .roster-row input, .roster-row select { width: 100%; min-width: 0; }
 @media (max-width: 520px) {
   .roster-head { display: none; }
-  .roster-row { grid-template-columns: 3.6em minmax(0, 1fr) 4em 2.2em; }
+  .roster-row { grid-template-columns: 3.6em minmax(0, 1fr) 4em 2.2em; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
   .roster-row [name=first] { grid-column: 2; grid-row: 2; }
+  .roster-row [name=uid] { grid-column: 2 / 4; grid-row: 3; }
 }
 .roster-table td, .roster-table th { padding-top: 4px; padding-bottom: 4px; }
 .team-card.mine { border-color: var(--primary); }
@@ -1016,3 +1017,7 @@ li.is-void { opacity: .6; }
 .vt-tie.bye { color: var(--muted); }
 .vt-tie-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 600; margin-bottom: 6px; }
 .vt-seeds li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 0; }
+
+.badge.live-b { background: var(--danger); color: #fff; border-color: var(--danger); }
+.vm-actions { grid-column: 1 / -1; justify-content: flex-end; }
+.vm-row > .vm-actions { grid-row: auto; }
