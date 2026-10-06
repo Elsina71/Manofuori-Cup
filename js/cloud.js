@@ -30,8 +30,8 @@ try {
 } catch (e) { /* ignore */ }
 
 // Ultimo contenuto noto di ogni documento, per scrivere solo ciò che cambia.
-const last = { players: null, settings: null, tour: null, tours: {} };
-const loaded = { players: false, settings: false, tours: false };
+const last = { settings: null, tour: null };
+const loaded = { settings: false, tour: false };
 let user = null, isAdmin = false, scorer = null, member = null, coach = null, adminMember = null;
 let roles = {};   // ruoli dati dagli admin generali: { tour: admin tornei, cash: cassa }
 const canTour = () => isAdmin || !!roles.tour;
@@ -40,7 +40,7 @@ const refresh = () => window.App && window.App.refresh();
 
 function markLoaded(part) {
   loaded[part] = true;
-  if (loaded.players && loaded.settings && loaded.tours) Store.setReady();
+  if (loaded.settings && loaded.tour) Store.setReady();
   refresh();
 }
 
@@ -48,15 +48,6 @@ function onError(err) {
   console.error(err);
   if (window.App) window.App.error(err.code || err.message);
 }
-
-onSnapshot(doc(db, 'data', 'players'), snap => {
-  const json = snap.exists() ? snap.data().json : '[]';
-  if (json !== last.players) {
-    last.players = json;
-    Store.applyRemote('players', JSON.parse(json));
-  }
-  markLoaded('players');
-}, onError);
 
 onSnapshot(doc(db, 'data', 'settings'), snap => {
   if (snap.exists()) {
@@ -69,27 +60,15 @@ onSnapshot(doc(db, 'data', 'settings'), snap => {
   markLoaded('settings');
 }, onError);
 
-// Tornei: categorie e tabelle punti, premi (badge), destinatari EOPE e livelli delle squadre in un documento separato (data/tour),
-// l'unico che l'admin tornei può scrivere oltre ai giocatori e ai tornei. Prima erano in data/settings:
-// finché data/tour non esiste valgono quelli; il primo admin che entra lo crea.
-const tourJson = st => JSON.stringify({ categories: st.categories || [], rewards: st.rewards || null, eopeRecipients: st.eopeRecipients || [], levels: st.levels || null });
-let tourExists = null;
+// Livelli delle squadre in un documento a parte (data/tour), che scrive l'admin tornei.
+const tourJson = st => JSON.stringify({ levels: st.levels || null });
 onSnapshot(doc(db, 'data', 'tour'), snap => {
-  tourExists = snap.exists();
-  if (tourExists) {
+  if (snap.exists()) {
     const json = snap.data().json;
     if (json !== last.tour) { last.tour = json; Store.applyRemote('tour', JSON.parse(json)); }
   }
-  migrateTour();
-  refresh();
+  markLoaded('tour');
 }, onError);
-function migrateTour() {
-  if (tourExists !== false || !isAdmin || !loaded.settings) return;
-  tourExists = true;
-  const json = tourJson(Store.state);
-  last.tour = json;
-  setDoc(doc(db, 'data', 'tour'), { json, updated: Date.now() }).catch(e => { tourExists = false; onError(e); });
-}
 
 // Spazi editoriali della prima pagina: data/editorial1 e data/editorial2 (foto, titolo, testo).
 ['editorial1', 'editorial2'].forEach((id, i) => onSnapshot(doc(db, 'data', id), snap => {
@@ -101,70 +80,6 @@ function saveEditorial(i, data) {
   const ref = doc(db, 'data', 'editorial' + (i + 1));
   return data ? setDoc(ref, Object.assign({}, data, { updated: Date.now() })) : deleteDoc(ref);
 }
-
-// ---------- tornei ----------
-// I visitatori ricevono in tempo reale solo i tornei in corso e futuri; quelli passati si caricano
-// una volta sola quando servono (elenco dei passati, ranking, schede giocatori). L'admin riceve tutto.
-
-const todayKey = () => new Date().toLocaleDateString('sv');   // AAAA-MM-GG, ora locale
-const endKey = t => ((t.end || t.start || '9999-12-31') + '').slice(0, 10);
-
-function applyTourDoc(d) {
-  const json = d.data().json;
-  if (json === last.tours[d.id]) return;
-  last.tours[d.id] = json;
-  Store.applyRemote('tournament', JSON.parse(json));
-}
-
-let tourUnsub = null, allMode = null, pastLoaded = false, pastLoading = null;
-
-function listenTournaments(all) {
-  if (allMode === all) return;
-  allMode = all;
-  if (tourUnsub) tourUnsub();
-  const src = all ? collection(db, 'tournaments') : query(collection(db, 'tournaments'), where('endKey', '>=', todayKey()));
-  tourUnsub = onSnapshot(src, snap => {
-    snap.docChanges().forEach(ch => {
-      if (ch.type === 'removed') {
-        // Con la sola lista "in corso e futuri" un torneo può uscire dall'elenco senza essere stato eliminato.
-        if (!all) return;
-        delete last.tours[ch.doc.id];
-        Store.applyRemote('tournament-removed', ch.doc.id);
-        return;
-      }
-      applyTourDoc(ch.doc);
-    });
-    // L'admin aggiunge la data di fine ai tornei salvati con la versione precedente (serve al filtro).
-    if (all && isAdmin) {
-      const fix = snap.docs.filter(d => !d.data().endKey);
-      if (fix.length) {
-        const b = writeBatch(db);
-        fix.forEach(d => b.update(d.ref, { endKey: endKey(JSON.parse(d.data().json)) }));
-        b.commit().catch(onError);
-      }
-    }
-    if (all) pastLoaded = true;
-    markLoaded('tours');
-  }, onError);
-}
-
-// Carica una sola volta tutti i tornei (anche passati): ascolto che si chiude appena arrivano i dati dal server.
-function loadPast() {
-  if (pastLoaded) return Promise.resolve();
-  if (!pastLoading) {
-    pastLoading = new Promise(resolve => {
-      const unsub = onSnapshot(collection(db, 'tournaments'), { includeMetadataChanges: true }, snap => {
-        snap.docs.forEach(applyTourDoc);
-        // Mostra subito ciò che il telefono ha già in memoria; si chiude quando risponde il server.
-        if (!pastLoaded && (snap.size || !snap.metadata.fromCache)) { pastLoaded = true; refresh(); resolve(); }
-        if (!snap.metadata.fromCache) { unsub(); refresh(); }
-      }, err => { pastLoading = null; onError(err); resolve(); });
-    });
-  }
-  return pastLoading;
-}
-
-listenTournaments(false);
 
 // Ruoli (admin generale): elenco di chi è admin tornei o cassa; assegnazione e revoca.
 let rolesUnsub = null;
@@ -201,7 +116,6 @@ onAuthStateChanged(auth, async u => {
     try { if (u.emailVerified && !(await u.getIdTokenResult()).claims.email_verified) await u.getIdToken(true); } catch (e) { /* offline */ }
     isAdmin = await adminCheck();
     if (!isAdmin) { try { const r = await getDoc(doc(db, 'roles', u.uid)); roles = r.exists() ? r.data() : {}; } catch (e) { roles = {}; } }
-    migrateTour();
     // Admin che è anche giocatore (corsista o coach): la sua scheda utente, se esiste.
     if (isAdmin) {
       try { const m = await getDoc(doc(db, 'members', u.uid)); adminMember = m.exists() ? Object.assign({ uid: u.uid, email: u.email || '' }, m.data()) : null; } catch (e) { adminMember = null; }
@@ -226,7 +140,6 @@ onAuthStateChanged(auth, async u => {
       } catch (e) { member = null; }
     }
   }
-  listenTournaments(canTour());
   listenRoles();
   listenAccount();
   listenVerified();
@@ -239,17 +152,12 @@ onAuthStateChanged(auth, async u => {
   refresh();
 });
 
-// ---------- utenti registrati, iscrizioni ai tornei, messaggi ----------
-// members/{uid}: nome, cognome, sesso (leggibile dagli utenti collegati, per trovare il compagno).
-// registrations/{id}: iscrizione di una squadra a un torneo (pubbliche: compaiono negli iscritti).
+// ---------- utenti registrati, messaggi ----------
+// members/{uid}: nome, cognome, sesso (leggibile dagli utenti collegati: capitani e rose).
 // messages/{id}: messaggi dell'admin; ognuno legge solo quelli a lui destinati (regole del database).
 // inbox/{uid}: messaggi già letti dall'utente.
-let regUnsub = null, memUnsub = null, accUnsub = null, msgUnsubs = [], inboxUnsub = null, banUnsub = null, noteUnsubs = [];
+let memUnsub = null, accUnsub = null, msgUnsubs = [], inboxUnsub = null, banUnsub = null, noteUnsubs = [];
 const msgParts = {};
-regUnsub = onSnapshot(collection(db, 'registrations'), snap => {
-  Store.applyRemote('registrations', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
-  refresh();
-}, onError);
 
 function listenAccount() {
   if (memUnsub) { memUnsub(); memUnsub = null; }
@@ -419,12 +327,6 @@ async function requestDeletion(text) {
   await addDoc(collection(db, 'notices'), { to: 'admins', text: String(text).slice(0, 400), at: Date.now(), by: user.uid });
   refresh();
 }
-
-function addRegistration(reg) {
-  return addDoc(collection(db, 'registrations'), Object.assign({}, reg, { created: Date.now() }));
-}
-function removeRegistration(id) { return deleteDoc(doc(db, 'registrations', id)); }
-function saveRegistration(id, data) { return setDoc(doc(db, 'registrations', id), data); }
 
 function sendMessage(msg) {
   if (!isAdmin) return Promise.reject(Object.assign(new Error('permission-denied'), { code: 'permission-denied' }));
@@ -1023,46 +925,21 @@ function notify(to, text) {
 }
 function dismissNotice(id) { return deleteDoc(doc(db, 'notices', id)).catch(onError); }
 
-// Campi letti dalle regole del database per le iscrizioni online.
-function regFields(t) {
-  const r = t.reg;
-  if (!r) return { regOpen: false, regClose: 0, startMs: 0 };
-  return { regOpen: !r.closed && (r.status || 'open') === 'open', regClose: Date.parse(r.deadline) || 0, startMs: Date.parse(r.startAt) || 0 };
-}
-
-// Scrive nel database solo i documenti modificati.
+// Salva ciò che è cambiato: livelli delle squadre (admin tornei) e impostazioni (solo admin generale).
 function push(state) {
   if (!canTour()) return;
   const batch = writeBatch(db);
   let n = 0;
-  const players = JSON.stringify(state.players);
-  if (players !== last.players) {
-    batch.set(doc(db, 'data', 'players'), { json: players, updated: Date.now() });
-    last.players = players; n++;
-  }
   const tj = tourJson(state);
   if (tj !== last.tour) {
     batch.set(doc(db, 'data', 'tour'), { json: tj, updated: Date.now() });
     last.tour = tj; n++;
   }
-  // il resto delle impostazioni (avviso, campi, prenotazioni, prezzi…) lo scrive solo l'admin generale
-  const settings = !isAdmin ? last.settings : JSON.stringify({ categories: state.categories, notice: state.notice || '', noticeUntil: state.noticeUntil || '', eopeRecipients: state.eopeRecipients || [], rewards: state.rewards || null, nicks: state.nicks || {}, prices: state.prices || null });
+  const settings = !isAdmin ? last.settings : JSON.stringify({ notice: state.notice || '', noticeUntil: state.noticeUntil || '', nicks: state.nicks || {}, prices: state.prices || null });
   if (settings !== last.settings) {
     batch.set(doc(db, 'data', 'settings'), { json: settings, updated: Date.now() });
     last.settings = settings; n++;
   }
-  const ids = new Set();
-  state.tournaments.forEach(t => {
-    ids.add(t.id);
-    const json = JSON.stringify(t);
-    if (json !== last.tours[t.id]) {
-      batch.set(doc(db, 'tournaments', t.id), Object.assign({ json, endKey: endKey(t), updated: Date.now() }, regFields(t)));
-      last.tours[t.id] = json; n++;
-    }
-  });
-  Object.keys(last.tours).forEach(id => {
-    if (!ids.has(id)) { batch.delete(doc(db, 'tournaments', id)); delete last.tours[id]; n++; }
-  });
   if (n) batch.commit().catch(onError);
 }
 
@@ -1113,13 +990,6 @@ async function openReferto(tid, key, a, b, court, info) {
   return id;
 }
 
-// Chiavi delle gare di un torneo con punteggio in diretta o referto (solo admin).
-async function matchDocKeys(tid) {
-  if (!isAdmin) return new Set();
-  const [a, b] = await Promise.all([getDocs(query(collection(db, 'live'), where('tid', '==', tid))), getDocs(query(collection(db, 'referti'), where('tid', '==', tid)))]);
-  return new Set(a.docs.concat(b.docs).map(d => d.data().key));
-}
-
 // Solo admin: cancella referto, punteggio pubblico e PDF archiviati di una gara.
 async function resetReferto(id) {
   if (!isAdmin) return;
@@ -1129,52 +999,6 @@ async function resetReferto(id) {
   batch.delete(doc(db, 'live', id));
   pdfs.docs.forEach(d => batch.delete(d.ref));
   await batch.commit();
-}
-
-// Omologa / riapertura decise dall'admin: stato uguale nel referto e nel punteggio pubblico.
-function setLiveStatus(id, status) {
-  if (!isAdmin) return Promise.resolve();
-  const data = { status, approvedAt: status === 'approved' ? Date.now() : null, updated: Date.now() };
-  const batch = writeBatch(db);
-  batch.set(doc(db, 'live', id), data, { merge: true });
-  batch.set(doc(db, 'referti', id), status === 'live' ? Object.assign({ closedAt: null }, data) : data, { merge: true });
-  return batch.commit().catch(onError);
-}
-
-// ---------- cartella referti di un torneo (solo admin e account dei campi) ----------
-// referti: un documento per gara; refertiPdf (part 0): i file PDF archiviati, senza contenuto.
-let refUnsub = [], refTid = null;
-function watchReferti(tid) {
-  if (!(isAdmin || scorer)) tid = null;
-  if (tid === refTid) return;
-  refUnsub.forEach(u => u()); refUnsub = [];
-  refTid = tid;
-  Store.applyRemote('ref-reset');
-  if (!tid) return;
-  refUnsub.push(onSnapshot(query(collection(db, 'referti'), where('tid', '==', tid)), snap => {
-    snap.docChanges().forEach(ch => Store.applyRemote(ch.type === 'removed' ? 'ref-removed' : 'ref', { id: ch.doc.id, data: ch.doc.data() }));
-    Store.applyRemote('ref-loaded');
-    refresh();
-  }, onError));
-  refUnsub.push(onSnapshot(query(collection(db, 'refertiPdf'), where('tid', '==', tid), where('part', '==', 0)), snap => {
-    snap.docChanges().forEach(ch => Store.applyRemote(ch.type === 'removed' ? 'pdf-removed' : 'pdf', { id: ch.doc.id, data: ch.doc.data() }));
-    Store.applyRemote('pdf-loaded');
-    refresh();
-  }, onError));
-}
-
-// Contenuto di un PDF archiviato (base64), ricomposto dalle sue parti.
-async function loadPdf(id) {
-  const first = await getDoc(doc(db, 'refertiPdf', id));
-  if (!first.exists()) return null;
-  const f = first.data();
-  let data = '';
-  for (let i = 1; i <= f.parts; i++) {
-    const p = await getDoc(doc(db, 'refertiPdf', `${id}_${i}`));
-    if (!p.exists() || p.data().version !== f.version) return null;
-    data += p.data().data;
-  }
-  return { name: f.name, version: f.version, data };
 }
 
 // ---------- account dei campi (solo admin) ----------
@@ -1224,22 +1048,14 @@ function removeScorer(email) {
 
 window.Cloud = {
   watchLive,
-  watchReferti,
-  loadPdf,
   openReferto,
-  resetReferto,
-  setLiveStatus,
   listScorers,
   addScorer,
   setScorerTournament,
   removeScorer,
   saveEditorial,
-  matchDocKeys,
   register,
   updateProfile,
-  addRegistration,
-  removeRegistration,
-  saveRegistration,
   sendMessage,
   deleteMessage,
   markRead,
@@ -1300,8 +1116,6 @@ window.Cloud = {
   get tourAdmin() { return canTour(); },
   get cashier() { return isAdmin || !!roles.cash; },
   setRole,
-  get pastLoaded() { return pastLoaded; },
-  loadPast,
   push,
   login: (email, password) => signInWithEmailAndPassword(auth, email, password),
   logout: () => { member = null; return signOut(auth); },

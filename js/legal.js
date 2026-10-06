@@ -1,7 +1,7 @@
 // Testi legali (in italiano, lingua di riferimento): informativa privacy, cookie policy, termini e condizioni.
 // Titolare: ASD Manofuori Volley Project. Aggiornare la data e la versione quando si cambia un testo.
 const Legal = (() => {
-  const VERSION = '2026-10-06';
+  const VERSION = '2026-10-07';
   const ORG = {
     name: 'ASD Manofuori Volley Project',
     kind: 'Associazione Sportiva Dilettantistica',
@@ -26,7 +26,7 @@ const Legal = (() => {
     <h2>2. Quali dati trattiamo</h2>
     <ul>
       <li><strong>Account</strong>: nome, cognome, sesso, email e password. La password è gestita dal servizio di autenticazione di Google Firebase e non è mai visibile all'associazione.</li>
-      <li><strong>Tornei</strong>: iscrizioni, compagni di squadra, risultati e punteggi.</li>
+      <li><strong>Squadre e tornei</strong>: per il capitano la squadra iscritta; per chi è in rosa cognome, nome, sesso, numero di maglia ed eventuale collegamento al proprio account; calendari, risultati e referti delle gare.</li>
       <li><strong>Gioco libero</strong>: le partecipazioni (gli altri vedono solo quanti uomini e donne partecipano; i nomi li vede l'associazione).</li>
       <li><strong>Allenamenti</strong>: gruppi, presenze, assenze, posti spot e recuperi. Il coach vede solo nomi e presenze dei propri allenamenti.</li>
       <li><strong>Scheda del corsista</strong> (solo per chi si allena con l'associazione): luogo e data di nascita, comune e indirizzo di residenza, codice fiscale, tesseramento della stagione e <em>data di scadenza</em> del certificato medico. Non conserviamo il certificato né informazioni sul tuo stato di salute.</li>
@@ -37,12 +37,12 @@ const Legal = (() => {
     <h2>3. Perché li trattiamo (finalità e basi giuridiche)</h2>
     <ul>
       <li><strong>Creare e gestire il tuo account e i servizi dell'app</strong> (tornei, gioco libero, allenamenti, avvisi di servizio) — esecuzione del rapporto con te, art. 6.1.b GDPR.</li>
-      <li><strong>Pubblicare l'elenco degli iscritti, i risultati e le classifiche dei tornei</strong> (nome, cognome, categoria maschile/femminile e punteggi) — esecuzione del rapporto associativo e sportivo, art. 6.1.b, e legittimo interesse dell'associazione a dare evidenza all'attività sportiva, art. 6.1.f.</li>
+      <li><strong>Pubblicare squadre, calendari, risultati e classifiche dei tornei</strong> (nome della squadra, livello, nome del capitano, punteggi; le rose non sono pubbliche) — esecuzione del rapporto associativo e sportivo, art. 6.1.b, e legittimo interesse dell'associazione a dare evidenza all'attività sportiva, art. 6.1.f.</li>
       <li><strong>Tesseramento, verifica dell'idoneità sportiva (scadenza del certificato) e gestione degli allenamenti</strong> — obblighi di legge e dei regolamenti sportivi, art. 6.1.c, ed esecuzione del rapporto, art. 6.1.b.</li>
       <li><strong>Registrazione dei pagamenti ed emissione delle ricevute</strong>, con codice fiscale e residenza — obblighi fiscali e contabili, art. 6.1.c.</li>
       <li><strong>Sicurezza dell'app e prevenzione degli abusi</strong> — legittimo interesse, art. 6.1.f.</li>
     </ul>
-    <p>Non usiamo i tuoi dati per pubblicità, marketing o profilazione e non li vendiamo a nessuno. La classifica e i reward sono calcoli sull'attività sportiva, non profilazione a fini commerciali.</p>
+    <p>Non usiamo i tuoi dati per pubblicità, marketing o profilazione e non li vendiamo a nessuno. Le classifiche sono calcoli sui risultati sportivi, non profilazione a fini commerciali.</p>
 
     <h2>4. Obbligatorietà</h2>
     <p>I dati dell'account sono necessari per usare i servizi riservati agli utenti registrati. I dati della scheda del corsista e dei pagamenti sono necessari per il tesseramento, per partecipare agli allenamenti e per emettere le ricevute: senza di essi non possiamo fornire questi servizi.</p>
@@ -53,7 +53,7 @@ const Legal = (() => {
       <li><strong>Google Ireland Ltd / Google LLC</strong> (Firebase: hosting, database, autenticazione, invio delle email di conferma), che agisce come responsabile del trattamento secondo i termini sulla protezione dei dati di Google Cloud.</li>
       <li><strong>Federazioni ed enti di promozione sportiva</strong> per il tesseramento, <strong>consulenti fiscali</strong> per gli adempimenti contabili e <strong>autorità pubbliche</strong> quando previsto dalla legge.</li>
     </ul>
-    <p>I dati pubblici dell'app (calendari, elenco degli iscritti ai tornei con nome, cognome e categoria maschile/femminile, risultati e classifiche con nome e punteggi) sono visibili a chiunque visiti il sito. Email, telefono e gli altri dati del profilo non sono mai pubblici.</p>
+    <p>I dati pubblici dell'app (squadre con nome, livello e capitano, calendari, risultati e classifiche) sono visibili a chiunque visiti il sito. Le rose delle squadre le vedono solo il capitano, gli amministratori e gli addetti al referto (scorer) per compilare i referti di gara. Email, telefono e gli altri dati del profilo non sono mai pubblici.</p>
 
     <h2>6. Dove sono conservati i dati e trasferimenti fuori dall'Unione europea</h2>
     <p>Il database dell'app è conservato <strong>nell'Unione europea, a Milano (Italia)</strong>, nella regione europe-west8 di Google Cloud.</p>
@@ -63,7 +63,7 @@ const Legal = (() => {
     <ul>
       <li><strong>Account e profilo</strong>: finché l'account è attivo; dopo la richiesta di cancellazione vengono eliminati, salvo quanto indicato sotto.</li>
       <li><strong>Presenze, iscrizioni e gioco libero</strong>: 24 mesi.</li>
-      <li><strong>Risultati e classifiche dei tornei</strong>: conservati come archivio storico dell'attività sportiva; puoi chiedere che il tuo nome sia sostituito da un'abbreviazione.</li>
+      <li><strong>Risultati, classifiche e referti dei tornei</strong>: conservati come archivio storico dell'attività sportiva; puoi chiedere che il tuo nome sia sostituito da un'abbreviazione.</li>
       <li><strong>Scheda del corsista</strong>: 2 anni dopo la fine dell'ultima stagione di allenamenti.</li>
       <li><strong>Ricevute e dati fiscali</strong>: 10 anni, come previsto dalla legge (art. 2220 c.c.).</li>
     </ul>
