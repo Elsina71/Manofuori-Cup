@@ -34,7 +34,7 @@ jobs:
         env:
           CHIAVE: ${{ secrets.FIREBASE_SA_MANOFUORI }}
         run: |
-          PROGETTO=$(node -p "require('./.firebaserc').projects.default")
+          PROGETTO=$(node -p "JSON.parse(require('fs').readFileSync('.firebaserc', 'utf8')).projects.default")
           if [ "$PROGETTO" = "DA_COMPILARE" ] || grep -q "DA_COMPILARE" js/firebase-config.js; then echo "::warning::Progetto Firebase non ancora configurato (.firebaserc o js/firebase-config.js): pubblicazione saltata"; exit 0; fi
           if [ -z "$CHIAVE" ]; then echo "::error::Manca il secret FIREBASE_SA_MANOFUORI (vedi istruzioni in cima a questo file)"; exit 1; fi
           printf '%s' "$CHIAVE" > "$RUNNER_TEMP/chiave.json"
