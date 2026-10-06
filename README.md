@@ -87,7 +87,7 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 - Database: `vtours/{id}` (torneo, pubblico) e `vmatches/{torneo_gara}` (gare, pubbliche; lo scorer scrive solo set e
   stato). Test delle regole: `tests/vtour.rules.test.mjs`.
 - **Referto elettronico** (`referto-indoor/`, 6 contro 6 con rotazioni, libero, minimo 2 donne in campo): pulsante
-  **E-scoresheet** sulla gara (admin generale e scorer del torneo). La prima volta crea `referti/{torneo}_{gara}` con
+  **E-scoresheet** sulla gara (admin generale, admin tornei e scorer del torneo). La prima volta crea `referti/{torneo}_{gara}` con
   torneo, fase, data, ora, palestra, squadre (A = casa) con le rose e la formula (gironi: 3 set fissi a 25; playoff:
   come il turno). Il punteggio va in diretta nel calendario (`live/{id}`, pubblico); a referto chiuso compare
   **Riporta il risultato del referto**, che lo porta in classifica. Il referto è facoltativo: i set si possono sempre

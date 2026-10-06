@@ -2378,7 +2378,7 @@
   // ---------- calendario e risultati ----------
   // Referto elettronico (referto-indoor/): stesso id della gara, punteggio pubblico in live/{id}.
   const vLive = m => (S().live || {})[m.id] || null;
-  const vCanEscore = tour => (admin() || (!!scorer() && vCanScore(tour))) && tour.status !== 'done';
+  const vCanEscore = tour => (tourAdmin() || (!!scorer() && vCanScore(tour))) && tour.status !== 'done';
   function vLiveText(lv) {
     const sets = (lv.sets || []).map(([a, b]) => `${a}-${b}`);
     if (lv.cur) sets.push(`${lv.cur.a}-${lv.cur.b}`);

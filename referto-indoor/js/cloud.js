@@ -41,6 +41,11 @@ async function resolveUser(u) {
   let admin = false;
   try { await getDoc(doc(db, 'admins', 'probe')); admin = true; } catch (e) { admin = false; }
   if (admin) return { email, role: 'admin' };
+  // admin tornei (roles/{uid}.tour): per il referto ha gli stessi poteri dell'admin
+  try {
+    const r = await getDoc(doc(db, 'roles', u.uid));
+    if (r.exists() && r.data().tour === true) return { email, role: 'admin' };
+  } catch (e) { /* ignore */ }
   try {
     const sc = await getDoc(doc(db, 'scorers', email));
     if (sc.exists()) return { email, role: 'scorer', court: sc.data().court };
