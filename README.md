@@ -12,7 +12,6 @@ cartella `beach-plus-arena`), con tutte le stesse funzioni; per ora ha un solo *
 ## Da completare prima di pubblicare
 
 Cerca `DA_COMPILARE` nei file: sono i dati che mancano.
-- `js/firebase-config.js` e `.firebaserc`: dati del progetto Firebase di Manofuori Cup.
 - `firestore.rules`: email degli admin generali (l'UID dell'admin principale è già inserito).
 - `js/legal.js`: sito (ora `manofuori-774b2.web.app`) da cambiare se ci sarà un dominio proprio.
 
