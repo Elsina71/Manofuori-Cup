@@ -119,7 +119,8 @@
     const s0 = st.sets[0];
     const toss = s0 && s0.toss && s0.toss.winner ? `vince ${tn(s0.toss.winner)}` : '';
     labeled('Sorteggio set 1', toss, M + q * 3.75, y, q * 1.25, h1);
-    labeled('Donne in campo (min.)', S.minWomen ? String(S.minWomen) : '—', M + q * 5, y, q, h1);
+    const mwA = window.Rules.minWomenOf(S, 'A'), mwB = window.Rules.minWomenOf(S, 'B');
+    labeled('Donne in campo (min.)', mwA === mwB ? (mwA ? String(mwA) : '—') : `${tn('A')}: ${mwA || '—'} · ${tn('B')}: ${mwB || '—'}`, M + q * 5, y, q, h1);
     y += h1 + 2.5;
 
     // ---- squadre ----

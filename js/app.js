@@ -68,6 +68,7 @@
     const r = route();
     if (window.Cloud && window.Cloud.watchLive) {
       window.Cloud.watchLive(r[0] === 'vt' && vtById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? liveTourIds() : r[0] === 'gare' || r[0] === 'me' ? myTourIds() : null);
+      window.Cloud.watchReferti(r[0] === 'vt' && vtById(r[1]) && r[2] === 'referti' ? r[1] : null);
     }
     const adminOnly = r[0] === 'messages' || r[0] === 'users' || r[0] === 'athletes' || r[0] === 'payments';
     if (adminOnly && !admin()) { location.hash = '#/'; return; }
@@ -2313,9 +2314,9 @@
   }
 
   function viewVTour(tour, tab) {
-    const tabs = ['groups', 'calendar', 'standings'].concat(tour.playoff ? ['playoff'] : []);
+    const tabs = ['groups', 'calendar', 'standings'].concat(tour.playoff ? ['playoff'] : [], vCanReferti(tour) ? ['referti'] : []);
     if (!tabs.includes(tab)) tab = (tour.groups || []).some(g => g.teams.length) && vtMatches(tour.id).length ? 'calendar' : 'groups';
-    const body = tab === 'calendar' ? vtCalendar(tour) : tab === 'standings' ? vtStandingsTab(tour) : tab === 'playoff' ? vtPlayoff(tour) : vtGroupsTab(tour);
+    const body = tab === 'calendar' ? vtCalendar(tour) : tab === 'standings' ? vtStandingsTab(tour) : tab === 'playoff' ? vtPlayoff(tour) : tab === 'referti' ? vtRefertiTab(tour) : vtGroupsTab(tour);
     return `<div class="page-head">
         <a class="back" href="#/tornei">← ${esc(t('navTournaments'))}</a>
         <h1>${esc(tour.name)}</h1>
@@ -2324,6 +2325,116 @@
       </div>
       <nav class="tabs" aria-label="${esc(t('sections'))}">${tabs.map(k => `<a href="#/vt/${tour.id}/${k}" class="${k === tab ? 'active' : ''}">${esc(t('vtTab_' + k))}</a>`).join('')}</nav>
       <section class="tab-body">${body}</section>`;
+  }
+
+  // ---------- referti e presenze (admin tornei e account dei campi del torneo) ----------
+  // I referti (referti/{torneo}_{gara}) li leggono solo admin e account dei campi: per ogni gara stato, risultato,
+  // apertura del referto e PDF archiviato. Le presenze contano, per ogni giocatore, le gare concluse con il referto
+  // in cui è entrato davvero in campo (sestetto iniziale, sostituzione o libero); l'admin fissa il minimo di gare
+  // giocate per i playoff (vtours.minPlayed) e la tabella segnala chi non lo raggiunge.
+  const vCanReferti = tour => tourAdmin() || (!!scorer() && vCanScore(tour));
+  let refRulesPromise = null;
+  function loadRefRules() {
+    if (window.Rules) return Promise.resolve(window.Rules);
+    if (!refRulesPromise) refRulesPromise = new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      sc.src = 'referto-indoor/js/rules.js';
+      sc.onload = () => resolve(window.Rules); sc.onerror = () => { refRulesPromise = null; reject(new Error('rules')); };
+      document.head.appendChild(sc);
+    });
+    return refRulesPromise;
+  }
+  const vRefKey = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  // { teamId: { matches, players: { key: { no, name, n } } } } dalle gare concluse con il referto
+  function vPresence(tour, refs) {
+    const R = window.Rules, out = {};
+    const teamOf = id => (out[id] = out[id] || { matches: 0, players: {} });
+    refs.forEach(r => {
+      if (!r.json) return;
+      let m, st;
+      try { m = JSON.parse(r.json); st = R.replay(m); } catch (e) { return; }
+      if (st.phase !== 'matchEnd') return;
+      [['A', r.a], ['B', r.b]].forEach(([side, id]) => {
+        const T = teamOf(id), seen = new Set();
+        T.matches++;
+        st.sets.forEach(s => {
+          if (!s.lineup) return;
+          s.lineup[side].forEach(n => seen.add(+n));
+          s.subs[side].forEach(x => seen.add(+x.in));
+          (s.liberoLog ? s.liberoLog[side] : []).filter(x => x.type !== 'out').forEach(x => seen.add(+x.no));
+        });
+        const roster = (m.teams && m.teams[side] && m.teams[side].players) || [];
+        seen.forEach(no => {
+          const p = roster.find(x => +x.no === no) || {};
+          const key = p.name ? vRefKey(p.name) : '#' + no;
+          const row = T.players[key] = T.players[key] || { no, name: p.name || '', n: 0 };
+          row.n++; row.no = no;
+        });
+      });
+    });
+    return out;
+  }
+  function vtRefertiTab(tour) {
+    if (!S().refLoaded || !S().pdfLoaded) return `<div class="card"><p class="muted"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</p></div>`;
+    const refs = Object.entries(S().referti || {}).map(([id, r]) => Object.assign({ id }, r)).filter(r => r.tid === tour.id);
+    const ms = vtMatches(tour.id).slice().sort((a, b) => (a.stage === 'p') - (b.stage === 'p') || (a.day || 0) - (b.day || 0) || byWhen(a, b));
+    const refOf = m => refs.find(r => r.id === m.id && r.a === m.home && r.b === m.away);
+    const pdfOf = id => (S().refPdf || {})[id];
+    const rows = ms.map(m => ({ m, r: refOf(m) })).filter(x => x.r);
+    const score = r => { const sw = r.setsWon || {}; const sets = (r.sets || []).map(x => `${x.a}-${x.b}`).join(', '); return `${sw.a || 0}-${sw.b || 0}${sets ? ` (${sets})` : ''}`; };
+    const b = ui.refBuild && ui.refBuild.tid === tour.id ? ui.refBuild : null;
+    const list = `<div class="card folder">
+      <div class="card-head"><h2><i class="ti ti-folder" aria-hidden="true"></i> ${esc(t('vtRefTitle'))} <span class="muted small">(${rows.length})</span></h2>
+        ${rows.some(x => pdfOf(x.r.id)) ? `<button class="btn small" data-action="pdf-zip" data-tid="${tour.id}" ${b ? 'disabled' : ''}><i class="ti ti-file-zip" aria-hidden="true"></i> ${esc(t('vtRefZip'))}</button>` : ''}</div>
+      ${b ? `<p class="muted small"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(b.text)}</p>` : ''}
+      ${rows.length ? `<ul class="vm-list">${rows.map(({ m, r }) => `<li class="vm-row ref-row">
+        <div class="vm-teams">${esc(vTeamName(tour, m.home))} <span class="muted">–</span> ${esc(vTeamName(tour, m.away))}</div>
+        <div class="vm-score">${vRefBadge(m, r)} <strong>${esc(score(r))}</strong></div>
+        <div class="vm-when muted small">${esc(vPhaseText(tour, m))}${m.date || m.time ? ` · ${esc(vWhen(m))}` : ''}${r.updatedBy ? ` · ${esc(r.updatedBy)}` : ''}</div>
+        <div class="btn-row vm-actions">
+          <a class="btn small" href="referto-indoor/?g=${encodeURIComponent(r.id)}" target="_blank" rel="noopener"><i class="ti ti-device-tablet" aria-hidden="true"></i> ${esc(t('vtRefOpen'))}</a>
+          ${pdfOf(r.id) ? `<button class="btn small" data-action="pdf-view" data-id="${r.id}"><i class="ti ti-file-type-pdf" aria-hidden="true"></i> PDF</button>` : ''}</div>
+      </li>`).join('')}</ul>` : `<p class="muted">${esc(t('vtRefNone'))}</p>`}
+    </div>`;
+    // presenze: servono le regole del referto per rileggere le gare
+    if (!window.Rules) { loadRefRules().then(() => render()).catch(() => {}); return list + `<div class="card"><p class="muted"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</p></div>`; }
+    const pres = vPresence(tour, rows.map(x => x.r));
+    const min = Number(tour.minPlayed) || 0;
+    const teamIds = [...new Set((tour.groups || []).flatMap(g => g.teams))];
+    const teamCard = id => {
+      const T = pres[id] || { matches: 0, players: {} };
+      const list = Object.values(T.players);
+      // giocatori della rosa senza presenze (rosa visibile all'admin tornei)
+      rosterOf(id).forEach(p => {
+        const name = `${p.first} ${p.last}`.trim();
+        if (!list.some(x => vRefKey(x.name) === vRefKey(name) || (!x.name && +x.no === +p.num))) list.push({ no: p.num === '' ? '' : Number(p.num), name, n: 0 });
+      });
+      list.sort((a, b) => b.n - a.n || (a.no === '' ? 999 : a.no) - (b.no === '' ? 999 : b.no));
+      const under = min ? list.filter(x => x.n < min).length : 0;
+      return `<div class="card"><h3>${esc(vTeamName(tour, id))} <span class="muted small">· ${esc(t('vtPresMatches', { n: T.matches }))}</span>
+          ${min ? (under ? `<span class="badge warn-b">${esc(t('vtPresUnder', { n: under }))}</span>` : `<span class="badge st-done">${esc(t('vtPresAllOk'))}</span>`) : ''}</h3>
+        ${list.length ? `<table class="table pres-table"><thead><tr><th class="num">${esc(t('tmNumShort'))}</th><th>${esc(t('player'))}</th><th class="num">${esc(t('vtPresPlayed'))}</th></tr></thead><tbody>
+          ${list.map(x => `<tr class="${min && x.n < min ? 'pres-under' : ''}"><td class="num">${esc(x.no)}</td><td>${esc(x.name || '—')}</td><td class="num"><strong>${x.n}</strong>${min && x.n < min ? ` <span class="muted small">/ ${min}</span>` : ''}</td></tr>`).join('')}
+        </tbody></table>` : `<p class="muted small">${esc(t('vtPresNone'))}</p>`}</div>`;
+    };
+    return list + `<div class="card"><h2><i class="ti ti-users" aria-hidden="true"></i> ${esc(t('vtPresTitle'))}</h2>
+        <p class="muted small">${esc(t('vtPresHelp'))}</p>
+        ${tourAdmin() ? `<form class="pres-min" data-form="vt-minplayed" data-id="${tour.id}">
+          <label>${esc(t('vtPresMin'))} <input type="number" name="min" min="0" max="99" inputmode="numeric" value="${min || ''}" placeholder="0"></label>
+          <button class="btn small primary">${esc(t('save'))}</button></form>` : min ? `<p><strong>${esc(t('vtPresMin'))}: ${min}</strong></p>` : ''}
+      </div>
+      <div class="cards pres-cards">${teamIds.map(teamCard).join('')}</div>`;
+  }
+  // stato del referto per i tornei a squadre (niente omologa: il risultato si riporta nella gara)
+  function vRefBadge(m, r) {
+    if (m.status === 'done') return `<span class="badge st-done">${esc(t('vtRefReported'))}</span>`;
+    if (r.status === 'live') return `<span class="live-badge"><i class="dot" aria-hidden="true"></i>${esc(t('liveBadge'))}</span>`;
+    if (r.status === 'finished' || r.status === 'approved') return `<span class="badge warn-b">${esc(t('vmRefDone'))}</span>`;
+    return `<span class="badge">${esc(t('escoreSt_ready'))}</span>`;
+  }
+  function vPhaseText(tour, m) {
+    return m.stage === 'g' ? `${t('vtGroup', { g: m.group })} · ${t('vmDay', { n: m.day })}`
+      : `${((tour.brackets || []).find(b => b.id === m.bracket) || {}).name || t('vtTab_playoff')} · ${t('vmLeg', { n: m.leg })}`;
   }
 
   // ---------- squadre e gironi ----------
@@ -2731,6 +2842,12 @@
       window.Cloud.updateVMatch(m.id, patch).then(() => (twin ? window.Cloud.updateVMatch(twin.id, { golden: null, by: patch.by || (window.Cloud.user.email || '').toLowerCase() }) : null))
         .then(() => { ui.vmEdit = null; ui.flash = { text: t('saved') + (notified ? ' ' + t('vmNotified', { n: notified }) : '') }; render(); }).catch(vErr);
     },
+    'vt-minplayed': f => {
+      const tour = vtById(f.dataset.id);
+      if (!tour || !tourAdmin()) return;
+      const n = Math.max(0, Math.min(99, parseInt(f.min.value, 10) || 0));
+      window.Cloud.saveVTour(tour.id, { minPlayed: n }).then(() => { ui.flash = { text: t('saved') }; render(); }).catch(vErr);
+    },
     'vt-golden': f => {
       const m = vmById(f.dataset.id), tour = m && vtById(m.tid);
       if (!m || !vCanScore(tour)) return;
@@ -2742,20 +2859,22 @@
 
   // Apre il referto elettronico della gara (lo crea la prima volta con squadre, rose e formula).
   // Squadra A = squadra di casa. Formula: gironi 3 set fissi a 25; playoff come scelto per il turno.
+  const vMixed = id => { const tm = teamById(id); return !tm || tm.kind === 'X'; };
   function vEscoreInfo(tour, m) {
     const team = id => ({ name: vTeamName(tour, id), players: rosterOf(id).slice().sort(byShirt)
       .map(x => ({ no: x.num === '' ? '' : Number(x.num), name: `${x.first} ${x.last}`, gender: x.g === 'F' ? 'F' : 'M', libero: false, captain: false })) });
     const phase = m.stage === 'g' ? `${t('vtGroup', { g: m.group })} · ${t('vmDay', { n: m.day })}`
       : `${((tour.brackets || []).find(b => b.id === m.bracket) || {}).name || t('vtTab_playoff')} · ${t('vmLeg', { n: m.leg })}`;
     return { competition: tour.name, phase, matchNo: m.key, date: m.date || '', time: m.time || '', venue: m.place || '', court: (scorer() && scorer().court) || '',
-      settings: m.mode === 'bo5' ? { mode: 'best', sets: 5, points: 25, lastPoints: 15, minWomen: 2 } : { mode: 'fixed', sets: 3, points: 25, lastPoints: 25, minWomen: 2 },
+      // almeno 2 donne in campo (libero compreso) solo per le squadre miste
+      settings: Object.assign(m.mode === 'bo5' ? { mode: 'best', sets: 5, points: 25, lastPoints: 15 } : { mode: 'fixed', sets: 3, points: 25, lastPoints: 25 }, { minWomen: { A: vMixed(m.home) ? 2 : 0, B: vMixed(m.away) ? 2 : 0 } }),
       A: team(m.home), B: team(m.away) };
   }
   async function vEscoreOpen(id) {
     const m = vmById(id), tour = m && vtById(m.tid);
     if (!m || !vCanEscore(tour) || !window.Cloud) return;
-    // l'admin lo apre in una nuova scheda (aperta subito, prima dell'attesa del database); lo scorer nella stessa
-    const win = admin() ? window.open('', '_blank') : null;
+    // l'admin (generale o tornei) lo apre in una nuova scheda (aperta subito, prima dell'attesa del database); lo scorer nella stessa
+    const win = tourAdmin() ? window.open('', '_blank') : null;
     ui.flash = { text: t('escoreLoading') }; render();
     try {
       const rid = await window.Cloud.openReferto(tour.id, m.key, m.home, m.away, (scorer() && scorer().court) || '', vEscoreInfo(tour, m));
@@ -3135,7 +3254,64 @@
     .replace(/[\u0370-\u03ff]/g, c => { const l = GR[c.toLowerCase()] || ''; return c === c.toLowerCase() ? l : l.charAt(0).toUpperCase() + l.slice(1); })
     .replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '');
 
+  // PDF archiviato di un referto: anteprima, download o apertura in una nuova scheda.
+  let pdfUrl = null;
+  async function viewPdf(id) {
+    const meta = (S().refPdf || {})[id];
+    if (!meta) return;
+    $dialog.innerHTML = `<div class="pdf-viewer"><div class="pv-bar"><strong>${esc(meta.name)}</strong></div><p class="muted"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</p></div>`;
+    $dialog.classList.add('wide-dialog');
+    if (!$dialog.open) $dialog.showModal();
+    const pdf = await window.Cloud.loadPdf(id).catch(() => null);
+    if (!pdf) { $dialog.querySelector('p').textContent = t('pdfMissing'); return; }
+    const bin = atob(pdf.data), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    pdfUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    $dialog.innerHTML = `<div class="pdf-viewer">
+      <div class="pv-bar"><strong>${esc(pdf.name)}</strong>
+        <div class="btn-row">
+          <a class="btn small" href="${pdfUrl}" download="${esc(pdf.name)}"><i class="ti ti-download" aria-hidden="true"></i> ${esc(t('pdfDownload'))}</a>
+          <a class="btn small" href="${pdfUrl}" target="_blank" rel="noopener"><i class="ti ti-external-link" aria-hidden="true"></i> ${esc(t('pdfNewTab'))}</a>
+          <button class="btn small primary" data-action="close-dialog">${esc(t('close'))}</button>
+        </div></div>
+      <iframe class="pv-frame" src="${pdfUrl}" title="${esc(pdf.name)}"></iframe>
+    </div>`;
+  }
+
   let zipPromise = null;
+  async function zipPdfs(tid) {
+    const tour = vtById(tid);
+    const ids = Object.keys(S().refPdf).filter(id => S().refPdf[id].tid === tid);
+    if (!ids.length) return;
+    ui.refBuild = { tid, text: t('pdfZipping', { n: 0, t: ids.length }) }; render();
+    try {
+      if (!zipPromise) zipPromise = new Promise((resolve, reject) => {
+        const sc = document.createElement('script');
+        sc.src = 'vendor/jszip/jszip.min.js'; sc.onload = () => resolve(window.JSZip); sc.onerror = () => { zipPromise = null; reject(new Error('zip')); };
+        document.head.appendChild(sc);
+      });
+      const JSZip = await zipPromise;
+      const zip = new JSZip();
+      const dir = zip.folder('referti').folder('pdf');
+      for (let i = 0; i < ids.length; i++) {
+        ui.refBuild.text = t('pdfZipping', { n: i + 1, t: ids.length }); render();
+        const pdf = await window.Cloud.loadPdf(ids[i]);
+        if (pdf) dir.file(pdf.name, pdf.data, { base64: true });
+      }
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `referti_${latinName(tour.name) || tid}.zip`;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    } catch (err) {
+      console.error(err);
+      ui.flash = { type: 'warn', text: t('escoreError', { code: err.code || err.message }) };
+    }
+    ui.refBuild = null;
+    render();
+  }
 
   // ---------- impostazioni ----------
   function viewSettings() {
@@ -3213,6 +3389,8 @@
   const confirmed =(key, p) => confirm(t(key, p));
 
   const actions = Object.assign({}, vtActions, teamActions, trActions, occActions, payActions, privacyActions, reportActions, cassaActions, {
+    'pdf-view': el => viewPdf(el.dataset.id),
+    'pdf-zip': el => zipPdfs(el.dataset.tid),
     'fp-leave': el => {
       const fp = fpById(el.dataset.id), m = member();
       if (!fp || !m) return;
@@ -3398,12 +3576,12 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen']);
-  const TOUR_FORMS = new Set(['scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden']);
+  const TOUR_ACTIONS = new Set(['notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
+  const TOUR_FORMS = new Set(['scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
-  const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref']);
+  const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'pdf-view', 'pdf-zip']);
   const PUBLIC_FORMS = new Set(['login', 'register']);
   const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
   const MEMBER_ACTIONS = new Set(['profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);

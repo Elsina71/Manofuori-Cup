@@ -20,7 +20,8 @@
     cap: 0,             // punteggio massimo: chi lo raggiunge vince il set anche con 1 punto di scarto (0 = nessuno)
     timeoutsPerSet: 2,
     subsPerSet: 6,
-    minWomen: 2         // pallavolo mista: numero minimo di donne in campo (Manofuori Cup: 2; 0 = nessun controllo)
+    minWomen: 2         // pallavolo mista: numero minimo di donne in campo (Manofuori Cup: 2; 0 = nessun controllo);
+                        // anche per squadra: { A: 2, B: 0 } (es. una squadra mista contro una maschile)
   };
 
   // point = punto (e servizio) agli avversari; le etichette sono in app.js
@@ -42,6 +43,7 @@
     S.sets = Math.max(1, S.sets | 0);
     return S;
   }
+  function minWomenOf(S, team) { const v = S.minWomen; return Math.max(0, (v && typeof v === 'object' ? v[team] : v) | 0); }
   function setsToWin(S) { return Math.floor(S.sets / 2) + 1; }
   function isDeciding(S, idx) { return S.sets > 1 && idx === S.sets - 1; }
   function targetOf(S, idx) { return isDeciding(S, idx) ? S.lastPoints : S.points; }
@@ -433,7 +435,7 @@
 
   const api = {
     DEFAULT_SETTINGS, SANCTIONS, ROMAN, replay, nextSetDefaults, servingFromChoice, subOptions,
-    other, settingsOf, setsToWin, targetOf, isDeciding, needsToss, courtOf, visibleCourt, positionOf, onCourt, BACK_ROW
+    other, settingsOf, minWomenOf, setsToWin, targetOf, isDeciding, needsToss, courtOf, visibleCourt, positionOf, onCourt, BACK_ROW
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Rules = api;
