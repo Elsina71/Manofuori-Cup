@@ -120,8 +120,9 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 - La squadra resta **in attesa** finché l'organizzatore (admin tornei) non **conferma l'ammissione** al livello. In attesa
   il capitano può cambiare il livello e ritirare l'iscrizione; dopo l'ammissione il livello lo cambia solo l'organizzatore.
 - Tutti vedono le squadre ammesse divise per livello (nome, tipo, capitano); la **rosa** la vedono solo il capitano,
-  l'admin e gli scorer (per il referto). L'admin vede anche le squadre in attesa, può crearne (scegliendo il capitano tra gli utenti), modificarle
-  ed eliminarle.
+  l'admin e gli scorer (per il referto). L'admin vede anche le squadre in attesa, le modifica e le
+  elimina; può anche **iscrivere lui le squadre** (entrano già ammesse), con il capitano scelto tra gli utenti dell'app
+  oppure solo con il nome se non ha l'account.
 - **Livelli**: DINOS, MASTER, SUPER MASTER, SUPER 10 (dal meno al più forte), modificabili dall'admin tornei in fondo
   alla pagina Squadre (salvati in `data/tour`).
 - Database: `teams/{id}` (pubblico) e `rosters/{id}` (rosa: capitano, admin e scorer). Test delle regole:

@@ -2974,14 +2974,15 @@
     const players = tm ? rosterOf(tm.id).slice().sort(byShirt) : [];
     const lvLocked = !!tm && tm.status === 'ok' && !tourAdmin();
     const levels = teamLevels().concat(v.level && !teamLevels().includes(v.level) ? [v.level] : []);
-    const caps = S().roles || {};
-    const members = tourAdmin() ? (S().members || []).filter(m => (caps[m.uid] || {}).captain || m.uid === v.captainUid || !admin()).sort((a, b) => personName(a).localeCompare(personName(b))) : [];
+    const members = tourAdmin() ? (S().members || []).slice().sort((a, b) => personName(a).localeCompare(personName(b))) : [];
     return `<form class="grid-form team-form" data-form="team-save" data-id="${tm ? tm.id : ''}" autocomplete="off">
       <label class="span-all">${esc(t('tmName'))}<input name="name" required maxlength="60" value="${esc(v.name)}"></label>
       <label>${esc(t('tmLevel'))}<select name="level" required ${lvLocked ? 'disabled' : ''}><option value="">—</option>${levels.map(l => `<option value="${esc(l)}" ${sel(v.level, l)}>${esc(l)}</option>`).join('')}</select>
         <small class="muted">${esc(t(lvLocked ? 'tmLevelLocked' : 'tmLevelHelp'))}</small></label>
       <label>${esc(t('tmKind'))}<select name="kind">${TEAM_KINDS.map(k => `<option value="${k}" ${sel(v.kind, k)}>${esc(t('tmKind_' + k))}</option>`).join('')}</select></label>
-      ${tourAdmin() ? `<label class="span-all">${esc(t('tmCaptain'))}<select name="captainUid"><option value="">—</option>${members.map(m => `<option value="${m.uid}" ${sel(v.captainUid, m.uid)}>${esc(personName(m))}</option>`).join('')}</select></label>` : ''}
+      ${tourAdmin() ? `<label>${esc(t('tmCaptain'))}<select name="captainUid"><option value="">—</option>${members.map(m => `<option value="${m.uid}" ${sel(v.captainUid, m.uid)}>${esc(personName(m))}</option>`).join('')}</select>
+        <small class="muted">${esc(t('tmCaptainHelp'))}</small></label>
+      <label>${esc(t('tmCaptainName'))}<input name="captainName" maxlength="130" value="${esc(v.captainUid ? '' : v.captainName || '')}"></label>` : ''}
       <fieldset class="span-all roster-edit"><legend>${esc(t('tmRoster'))}</legend>
         <div class="roster-head" aria-hidden="true"><span>${esc(t('tmNumShort'))}</span><span>${esc(t('lastName'))}</span><span>${esc(t('firstName'))}</span><span>${esc(t('gender'))}</span><span>${esc(t('tmAccount'))}</span><span></span></div>
         <div class="roster-rows">${(players.length ? players : [null]).map(rosterRow).join('')}</div>
@@ -3029,13 +3030,14 @@
     const m = member(), all = (S().teams || []).slice().sort(byLevel);
     const mine = m ? all.filter(isCaptain) : [];
     let create = '';
-    if (m) {
+    // l'admin (generale o tornei) iscrive le squadre anche senza essere capitano: entrano già ammesse
+    if (tourAdmin()) create = `<details class="card sub-form" data-keep="tm-new" ${keepOpen('tm-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('tmNewAdmin'))}</summary>${teamForm(null)}</details>`;
+    else if (m) {
       if (!captainRole()) create = mine.length ? '' : `<div class="card"><p class="muted"><i class="ti ti-lock" aria-hidden="true"></i> ${esc(t('tmNotCaptain'))}</p></div>`;
       else if (needsVerify()) create = `<p class="note warn">${esc(t('verifyFirst'))}</p>`;
       else if (banOf(m.uid).tour) create = banNotice('tour');
       else create = `<details class="card sub-form" data-keep="tm-new" ${keepOpen('tm-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('tmNew'))}</summary>${teamForm(null)}</details>`;
-    } else if (tourAdmin()) create = `<details class="card sub-form" data-keep="tm-new" ${keepOpen('tm-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('tmNewAdmin'))}</summary>${teamForm(null)}</details>`;
-    else if (!scorer()) create = `<div class="card"><p class="muted">${esc(t('tmLoginFirst'))}</p><a class="btn" href="#/settings">${esc(t('login'))}</a></div>`;
+    } else if (!scorer()) create = `<div class="card"><p class="muted">${esc(t('tmLoginFirst'))}</p><a class="btn" href="#/settings">${esc(t('login'))}</a></div>`;
     // elenco per livello: tutti vedono le squadre ammesse; l'admin anche quelle in attesa
     const shown = all.filter(x => tourAdmin() || x.status === 'ok');
     const pending = tourAdmin() ? all.filter(x => x.status !== 'ok').length : 0;
@@ -3076,7 +3078,8 @@
     if (tourAdmin()) {
       const cu = f.captainUid ? f.captainUid.value : (old ? old.captainUid : '');
       const cm = cu ? memberByUid(cu) : null;
-      Object.assign(team, { captainUid: cu || '', captainName: cm ? personName(cm) : '' });
+      Object.assign(team, { captainUid: cu || '', captainName: cm ? personName(cm) : (f.captainName ? f.captainName.value.trim() : (old && old.captainName) || '') });
+      if (!old) team.status = 'ok';
     } else if (old) team.captainUid = old.captainUid;
     else Object.assign(team, { captainUid: me.uid, captainName: personName(me) });
     const roster = players.map(x => ({ num: x.num === '' ? '' : Number(x.num), last: x.last, first: x.first, g: x.g === 'F' ? 'F' : 'M', uid: x.uid || '' }));

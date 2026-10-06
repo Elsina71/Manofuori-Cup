@@ -28,6 +28,7 @@ await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'verified', '
 await t('email admin confermata a mano: è admin', assertSucceeds(getDoc(doc(pp, 'admins', 'probe'))));
 const fake = env.authenticatedContext('fake', { email: 'altro@x.it', email_verified: true }).firestore();
 await t('altra email confermata: non è admin', assertFails(getDoc(doc(fake, 'admins', 'probe'))));
+await t('admin tornei iscrive una squadra già ammessa, senza capitano nell\'app', assertSucceeds((() => { const b = writeBatch(org); b.set(doc(org, 'teams', 'ta'), { ...team, captainUid: '', captainName: 'Luca Bianchi', status: 'ok' }); b.set(doc(org, 'rosters', 'ta'), { captainUid: '', players: [{ num: 5, last: 'Bianchi', first: 'Luca', g: 'M', uid: '' }], updated: 1 }); return b.commit(); })()));
 await t('capitano crea squadra in attesa con rosa', assertSucceeds(batchSave(cap, 't1', team, [{ num: 7, last: 'R', first: 'M', g: 'M' }])));
 await t('utente registrato non abilitato come capitano: niente iscrizione', assertFails(setDoc(doc(other, 'teams', 't6'), { ...team, captainUid: 'other' })));
 await t('capitano non crea squadra già ammessa', assertFails(setDoc(doc(cap, 'teams', 't2'), { ...team, status: 'ok' })));

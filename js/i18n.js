@@ -581,6 +581,8 @@ const I18n = (() => {
       tmKind_M: "Maschile",
       tmKind_F: "Femminile",
       tmCaptain: "Capitano",
+      tmCaptainHelp: "Account dell'app: potrà modificare squadra e rosa. Facoltativo.",
+      tmCaptainName: "Capitano (se non ha l'account)",
       tmRoster: "Rosa",
       tmNum: "Numero di maglia",
       tmNumShort: "N°",
