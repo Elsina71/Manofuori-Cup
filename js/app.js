@@ -4228,27 +4228,46 @@
           <button class="icon-btn" data-action="vt-seed" data-id="${tour.id}" data-b="${br.id}" data-i="${i}" data-d="1" ${i < br.seeds.length - 1 ? '' : 'disabled'} aria-label="${esc(t('vtSeedDown'))}"><i class="ti ti-arrow-down" aria-hidden="true"></i></button></span>` : ''}</li>`).join('')}</ol></details>`;
     const body = rounds.map(rd => {
       const created = rd.ties.some(tt => tt.matches.length);
-      const pending = rd.ties.filter(tt => tt.ready && tt.a && tt.b && !tt.matches.length);
+      const pending = rd.ties.concat(rd.third ? [rd.third] : []).filter(tt => tt.ready && tt.a && tt.b && !tt.matches.length);
       const last = rd.r === rounds.length - 1;
       const cfg = tourAdmin() && pending.length ? `<form class="vt-roundform" data-form="vt-round" data-id="${tour.id}" data-b="${br.id}" data-r="${rd.r}">
           <select name="mode" aria-label="${esc(t('vtRoundMode'))}"><option value="3" ${sel(rd.mode, '3')}>${esc(t('vtMode_3'))}</option><option value="bo5" ${sel(rd.mode, 'bo5')}>${esc(t('vtMode_bo5'))}</option></select>
-          ${last ? `<span class="muted small">${esc(t('vtFinalSingle'))}</span>` : `<select name="legs" aria-label="${esc(t('vtRoundLegs'))}"><option value="1" ${rd.legs === 1 ? 'selected' : ''}>${esc(t('vtLegs_1'))}</option><option value="2" ${rd.legs === 2 ? 'selected' : ''}>${esc(t('vtLegs_2'))}</option></select>`}
+          ${last ? `<span class="muted small">${esc(t(rd.third ? 'vtFinalSingle3' : 'vtFinalSingle'))}</span>` : `<select name="legs" aria-label="${esc(t('vtRoundLegs'))}"><option value="1" ${rd.legs === 1 ? 'selected' : ''}>${esc(t('vtLegs_1'))}</option><option value="2" ${rd.legs === 2 ? 'selected' : ''}>${esc(t('vtLegs_2'))}</option></select>
+          <label class="vt-golden-to">${esc(t('vtGoldenTo'))} <input type="number" name="goldenTo" min="5" max="25" value="${(br.rounds[rd.r] || {}).goldenTo || 15}" inputmode="numeric"></label>`}
           <button class="btn small primary">${esc(t('vtRoundMake', { n: pending.length }))}</button></form>` : '';
       return `<div class="vt-round"><h3>${esc(t('vtRound_' + (rd.name.startsWith('r') ? 'n' : rd.name), { n: rd.name.slice(1) }))}
           ${created || !pending.length ? `<small class="muted">· ${esc(t('vtMode_' + rd.mode))}${last ? '' : ' · ' + esc(t('vtLegs_' + rd.legs))}</small>` : ''}</h3>
         ${cfg}
-        <ul class="vt-ties">${rd.ties.filter(tt => tt.ready ? (tt.a || tt.b) : true).map(tt => {
-          const nm = id => (id ? esc(vTeamName(tour, id)) : `<span class="muted">${esc(t('vtTbd'))}</span>`);
-          if (tt.bye) return `<li class="vt-tie bye">${nm(tt.a || tt.b)} <span class="muted small">· ${esc(t('vtBye'))}</span></li>`;
-          return `<li class="vt-tie"><div class="vt-tie-head"><span class="${tt.winner && tt.winner === tt.a ? 'vm-win' : ''}">${nm(tt.a)}</span> <span class="muted">–</span> <span class="${tt.winner && tt.winner === tt.b ? 'vm-win' : ''}">${nm(tt.b)}</span>
-            ${tt.winner ? `<span class="badge st-done">${esc(t('vtPasses', { n: vTeamName(tour, tt.winner) }))}</span>` : ''}</div>
-            ${tt.matches.length ? `<ul class="vm-list">${tt.matches.map(m => vmRow(tour, vmById(m.id) || m)).join('')}</ul>` : ''}</li>`;
-        }).join('')}</ul></div>`;
+        <ul class="vt-ties">${rd.ties.filter(tt => tt.ready ? (tt.a || tt.b) : true).map(tt => vtTie(tour, tt)).join('')}</ul>
+        ${rd.third ? `<h3 class="vt-third-title">${esc(t('vtThird'))}</h3><ul class="vt-ties">${vtTie(tour, rd.third)}</ul>` : ''}</div>`;
     }).join('');
-    const champ = rounds.length && rounds[rounds.length - 1].ties[0].winner;
+    const fin = rounds.length ? rounds[rounds.length - 1] : null, ft = fin && fin.ties[0];
+    const podium = [ft && ft.winner, ft && ft.winner ? (ft.winner === ft.a ? ft.b : ft.a) : null, fin && fin.third && fin.third.winner,
+      fin && fin.third && fin.third.winner ? (fin.third.winner === fin.third.a ? fin.third.b : fin.third.a) : null];
     return `<div class="card vt-bracket"><h2><i class="ti ti-tournament" aria-hidden="true"></i> ${esc(br.name)}</h2>
-      ${champ ? `<p class="champion"><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t('vtChampion', { n: vTeamName(tour, champ) }))}</p>` : ''}
+      ${podium[0] ? `<ol class="vt-podium">${podium.map((id, i) => (id ? `<li class="p${i + 1}"><span>${['🥇', '🥈', '🥉', '4°'][i]}</span> ${esc(vTeamName(tour, id))}</li>` : '')).join('')}</ol>` : ''}
       ${seeds}${body}</div>`;
+  }
+
+  // Un confronto del tabellone: squadre, chi passa, gare e (se serve) il golden set.
+  function vtTie(tour, tt) {
+    const nm = id => (id ? esc(vTeamName(tour, id)) : `<span class="muted">${esc(t('vtTbd'))}</span>`);
+    if (tt.bye) return `<li class="vt-tie bye">${nm(tt.a || tt.b)} <span class="muted small">· ${esc(t('vtBye'))}</span></li>`;
+    const back = tt.matches.find(m => m.leg === 2);
+    const g = back && back.golden;
+    let golden = '';
+    if (tt.golden && tt.winner && g) golden = `<p class="muted small">${esc(t('vtGoldenDone', { h: vTeamName(tour, back.home), x: g.h, y: g.a, a: vTeamName(tour, back.away) }))}</p>`;
+    else if (tt.golden && back) {
+      golden = `<div class="note warn">${esc(t('vtGoldenNeed', { n: tt.goldenTo }))}
+        ${vCanScore(tour) ? `<form class="vt-goldenform" data-form="vt-golden" data-id="${back.id}" data-to="${tt.goldenTo}">
+          <label>${esc(vTeamName(tour, back.home))}<input type="number" name="h" min="0" max="99" inputmode="numeric" value="${g ? esc(g.h) : ''}"></label>
+          <label>${esc(vTeamName(tour, back.away))}<input type="number" name="a" min="0" max="99" inputmode="numeric" value="${g ? esc(g.a) : ''}"></label>
+          <button class="btn small primary">${esc(t('vtGoldenSave'))}</button></form>` : ''}</div>`;
+    }
+    return `<li class="vt-tie"><div class="vt-tie-head"><span class="${tt.winner && tt.winner === tt.a ? 'vm-win' : ''}">${nm(tt.a)}</span> <span class="muted">–</span> <span class="${tt.winner && tt.winner === tt.b ? 'vm-win' : ''}">${nm(tt.b)}</span>
+      ${tt.winner ? `<span class="badge st-done">${esc(t(tt.third ? 'vtThirdWin' : 'vtPasses', { n: vTeamName(tour, tt.winner) }))}</span>` : ''}</div>
+      ${tt.matches.length ? `<ul class="vm-list">${tt.matches.map(m => vmRow(tour, vmById(m.id) || m)).join('')}</ul>` : ''}
+      ${golden}</li>`;
   }
 
   // ---------- azioni e moduli (admin tornei; risultati anche dallo scorer) ----------
@@ -4313,7 +4332,7 @@
       const m = vmById(el.dataset.id), tour = m && vtById(m.tid);
       if (!m || !vCanScore(tour) || !confirmed('vmClearConfirm')) return;
       if (m.stage === 'p' && vtMatches(tour.id).some(x => x.stage === 'p' && x.bracket === m.bracket && x.round > m.round)) return warn('vmNextRound');
-      window.Cloud.updateVMatch(m.id, { sets: [], status: 'sched', by: (window.Cloud.user.email || '').toLowerCase() }).then(() => { ui.vmEdit = null; render(); }).catch(vErr);
+      window.Cloud.updateVMatch(m.id, Object.assign({ sets: [], status: 'sched', by: (window.Cloud.user.email || '').toLowerCase() }, m.stage === 'p' ? { golden: null } : {})).then(() => { ui.vmEdit = null; render(); }).catch(vErr);
     }
   };
   const vtForms = {
@@ -4365,7 +4384,7 @@
       const br = brs.find(b => b.id === f.dataset.b);
       if (!br) return;
       while (br.rounds.length <= r) br.rounds.push({ mode: '3', legs: 1 });
-      br.rounds[r] = { mode: f.mode.value === 'bo5' ? 'bo5' : '3', legs: f.legs && f.legs.value === '2' ? 2 : 1 };
+      br.rounds[r] = { mode: f.mode.value === 'bo5' ? 'bo5' : '3', legs: f.legs && f.legs.value === '2' ? 2 : 1, goldenTo: f.goldenTo ? Math.min(25, Math.max(5, parseInt(f.goldenTo.value, 10) || 15)) : 15 };
       const ms = vtMatches(tour.id).filter(m => m.stage === 'p').map(vEngine);
       const list = VL.roundMatches(br, VL.bracket(br, ms), r);
       const set = {};
@@ -4398,7 +4417,17 @@
         if (err) return warn(err);
         Object.assign(patch, { sets: sets.map(([h, a]) => ({ h, a })), status: 'done', by: (window.Cloud.user.email || '').toLowerCase() });
       } else if (!tourAdmin()) return warn('vNoSets');
-      window.Cloud.updateVMatch(m.id, patch).then(() => { ui.vmEdit = null; ui.flash = { text: t('saved') }; render(); }).catch(vErr);
+      if (m.stage === 'p') patch.golden = null;
+      const twin = m.stage === 'p' && m.leg === 1 ? vtMatches(tour.id).find(x => x.stage === 'p' && x.bracket === m.bracket && x.round === m.round && x.slot === m.slot && x.leg === 2 && x.golden) : null;
+      window.Cloud.updateVMatch(m.id, patch).then(() => (twin ? window.Cloud.updateVMatch(twin.id, { golden: null, by: patch.by || (window.Cloud.user.email || '').toLowerCase() }) : null))
+        .then(() => { ui.vmEdit = null; ui.flash = { text: t('saved') }; render(); }).catch(vErr);
+    },
+    'vt-golden': f => {
+      const m = vmById(f.dataset.id), tour = m && vtById(m.tid);
+      if (!m || !vCanScore(tour)) return;
+      const h = parseInt(f.h.value, 10), a = parseInt(f.a.value, 10), to = Number(f.dataset.to) || 15;
+      if (!VL.setOk(h, a, to)) return warn('vGoldenBad', { n: to });
+      window.Cloud.updateVMatch(m.id, { golden: { h, a }, by: (window.Cloud.user.email || '').toLowerCase() }).then(() => { ui.flash = { text: t('saved') }; render(); }).catch(vErr);
     }
   };
 
@@ -6086,13 +6115,13 @@
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'cal-view', 'toggle-past', 'logout', 'reset-password', 'close-dialog', 'vt-group']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
   const TOUR_ACTIONS = new Set(['eope-download', 'eope-send', 'eope-add', 'eope-remove', 'toggle-visible', 'vis-group', 'vis-all', 'gs-nums-reset', 'notice-edit', 'notice-cancel', 'notice-clear', 'reg-import', 'reg-reopen', 'reg-state', 'reg-confirm', 'reg-open-start', 'reg-unconfirm', 'reg-remove', 'reg-wait-add', 'entry-edit-open', 'entry-edit-cancel', 'import-entries', 'template-entries', 'sort-entries', 'entry-move', 'set-wc', 'remove-entry', 'lock-entries', 'unlock-entries', 'gen-qual', 'skip-qual', 'reset-qual', 'close-qual', 'reopen-qual', 'main-move', 'sort-main', 'lock-main', 'unlock-main', 'start-main', 'gen-bracket', 'auto-fill-bracket', 'clear-bracket-slots', 'reset-main', 'close-tournament', 'reopen-tournament', 'delete-tournament', 'edit-match', 'escore-open', 'escore-reset', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'scorer-remove', 'escore-approve', 'escore-reopen', 'match-clear', 'match-reopen', 'import-ranking', 'template-ranking', 'merge-pair', 'edit-player', 'cancel-edit-player', 'delete-player', 'new-category', 'delete-category', 'add-row', 'del-row', 'gs-add-row', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear']);
-  const TOUR_FORMS = new Set(['tour-create', 'tour-reg-edit', 'reg-open-legacy', 'tournament-new', 'tournament-edit', 'entry-edit', 'entry-add', 'wc-add', 'player-save', 'merge-players', 'category-save', 'scorer-add', 'rewards-save', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save']);
+  const TOUR_FORMS = new Set(['tour-create', 'tour-reg-edit', 'reg-open-legacy', 'tournament-new', 'tournament-edit', 'entry-edit', 'entry-add', 'wc-add', 'player-save', 'merge-players', 'category-save', 'scorer-add', 'rewards-save', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
   const SCORER_ACTIONS = new Set(['escore-open', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'vm-edit', 'vm-clear']);
   const PUBLIC_FORMS = new Set(['login', 'register']);
-  const SCORER_FORMS = new Set(['vm-save']);
+  const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
   const MEMBER_ACTIONS = new Set(['reg-cancel', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
   const MEMBER_FORMS = new Set(['reg-signup', 'profile-save', 'fp-join', 'fp-blocks', 'team-save']);
   let submitMode = 'save';

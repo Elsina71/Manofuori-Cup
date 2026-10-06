@@ -122,3 +122,42 @@ test('playoff: tabellone con bye, gara secca e andata/ritorno con quoziente punt
   // semifinali: s1 contro s5 (vincitore di 4-5), s2 contro s3
   assert.deepEqual(rounds[1].ties.map(t => [t.a, t.b]), [['s1', 's5'], ['s2', 's3']]);
 });
+
+test('playoff: parità perfetta in andata e ritorno → golden set ai punti decisi dall’admin', () => {
+  const br = { id: 'g', seeds: ['a', 'b', 'c', 'd'], rounds: [{ mode: '3', legs: 2, goldenTo: 15 }] };
+  let rounds = V.bracket(br, []);
+  const legs = V.roundMatches(br, rounds, 0).filter(m => [m.home, m.away].includes('a'));   // a contro d
+  const same = [[25, 20], [20, 25], [25, 20]];
+  const ms = legs.map(m => Object.assign({}, m, { status: 'done', sets: same }));   // 2-1 ciascuna, stessi punti
+  rounds = V.bracket(br, ms);
+  let tie = rounds[0].ties.find(t => t.a === 'a');
+  assert.equal(tie.winner, null);
+  assert.equal(tie.golden, true);
+  // golden set non valido (15-14) e poi valido (13-15): vince la squadra in trasferta nel ritorno (d)
+  const back = ms.find(m => m.leg === 2);
+  back.golden = { h: 15, a: 14 };
+  assert.equal(V.bracket(br, ms)[0].ties.find(t => t.a === 'a').winner, null);
+  back.golden = { h: 13, a: 15 };
+  tie = V.bracket(br, ms)[0].ties.find(t => t.a === 'a');
+  assert.equal(back.home, 'a');
+  assert.equal(tie.winner, 'd');
+});
+
+test('playoff: finale per il 3° e 4° posto tra le perdenti delle semifinali', () => {
+  const br = { id: 'g', seeds: ['a', 'b', 'c', 'd'], rounds: [{ mode: '3', legs: 1 }, { mode: 'bo5', legs: 1 }] };
+  let rounds = V.bracket(br, []);
+  assert.ok(rounds[1].third && !rounds[1].third.ready);
+  const semis = V.roundMatches(br, rounds, 0).map(m => Object.assign({}, m, { status: 'done', sets: [[25, 20], [25, 20], [25, 20]] }));   // vince chi gioca in casa (a, b)
+  rounds = V.bracket(br, semis);
+  assert.deepEqual([rounds[1].ties[0].a, rounds[1].ties[0].b], ['a', 'b']);
+  assert.deepEqual([rounds[1].third.a, rounds[1].third.b], ['c', 'd']);
+  const finals = V.roundMatches(br, rounds, 1);
+  assert.equal(finals.length, 2);   // finale e finale 3°/4°
+  assert.ok(finals.every(m => m.leg === 1 && m.mode === 'bo5'));
+  const ms = semis.concat(finals.map(m => Object.assign({}, m, { status: 'done', sets: [[20, 25], [20, 25], [20, 25]] })));
+  rounds = V.bracket(br, ms);
+  assert.equal(rounds[1].ties[0].winner, 'b');
+  assert.equal(rounds[1].third.winner, 'd');
+  // con 3 squadre (una semifinale è un bye) non c'è la finale per il 3° posto
+  assert.equal(V.bracket({ id: 'x', seeds: ['a', 'b', 'c'], rounds: [] }, [])[1].third, undefined);
+});

@@ -1035,13 +1035,20 @@ const I18n = (() => {
       vtTbd: "da definire",
       vtBye: "passa il turno",
       vtPasses: "passa {n}",
-      vtChampion: "Vince {n}",
       vNoSets: "Inserisci i punteggi dei set.",
       vThreeSets: "Servono i punteggi di tutti e 3 i set.",
       vBadSet: "Punteggio di un set non valido: si vince a 25 con due punti di scarto (oltre il 25, scarto esatto di 2).",
       vBadSet15: "Quinto set non valido: si vince a 15 con due punti di scarto.",
       vNotFinished: "Al meglio dei 5: la gara finisce quando una squadra vince 3 set.",
-      vTooManySets: "Troppi set: la gara era già finita (3 set vinti)."
+      vTooManySets: "Troppi set: la gara era già finita (3 set vinti).",
+      vtFinalSingle3: "Finale e finale 3°/4° posto: sempre gara secca",
+      vtGoldenTo: "Golden set a",
+      vtThird: "Finale 3°/4° posto",
+      vtThirdWin: "3° posto: {n}",
+      vtGoldenNeed: "Parità perfetta (stessi set e stesso quoziente punti): si gioca un golden set a {n} punti.",
+      vtGoldenSave: "Salva il golden set",
+      vtGoldenDone: "Golden set: {h} {x}-{y} {a}",
+      vGoldenBad: "Golden set non valido: si vince a {n} punti con due di scarto."
     }
   };
 
