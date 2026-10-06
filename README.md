@@ -7,9 +7,9 @@ Interfaccia **solo in italiano** (anche nel referto elettronico).
 con altre app. Nasce come copia di Beach+ Arena Event Manager (repository `Elsina71/Repository-principale`,
 cartella `beach-plus-arena`); per ora ha un solo **tema neutro** (vedi *Temi grafici e colori*).
 
-**Differenze da Beach+ Arena**: niente prenotazione dei campi, niente sfide, niente "cerco compagno/a" (ai tornei ci si iscrive come squadra) e niente ranking (le classifiche saranno
-rifatte per le squadre di pallavolo). Gioco libero e allenamenti non occupano campi: hanno un **luogo** scritto a mano.
-Categorie, tabelle punti e anagrafica giocatori restano per ora, finché i tornei non vengono rifatti per le squadre.
+**Differenze da Beach+ Arena**: niente prenotazione dei campi, niente sfide, niente "cerco compagno/a" e niente ranking. I tornei di
+beach a coppie sono sostituiti dai **tornei a squadre** di pallavolo (vedi sotto). Gioco libero e allenamenti non
+occupano campi: hanno un **luogo** scritto a mano.
 
 ## Da completare prima di pubblicare
 
@@ -45,35 +45,17 @@ L'admin compila gli spazi direttamente in pagina (*Aggiungi articolo · spazio 1
 la foto si carica dal telefono o dal computer e viene ridimensionata automaticamente. Sono salvati in
 `data/editorial1` e `data/editorial2` del database (lettura per tutti, scrittura solo admin).
 
-## Account dei giocatori, iscrizioni online, reward e messaggi
+## Account dei giocatori e messaggi
 
 - **Registrazione** (*Impostazioni → Registrati*): nome, cognome, sesso, email e password. Il profilo (`#/me`, voce
-  **Profilo**) è visibile solo all'utente: dati, tornei disputati, piazzamenti e punti (per torneo e totali), reward e
-  tornei in programma a cui è iscritto. L'iscrizione si cancella fino a 24 ore prima dell'inizio; dopo, l'app chiede di
-  contattare l'organizzatore (bloccato anche dalle regole del database).
-- **Creazione del torneo in due fasi**: (1) nome, data e ora di inizio, maschile/femminile/misto, numero massimo di
-  squadre, termine delle iscrizioni; (2) gli utenti registrati si iscrivono con il compagno o la compagna (scelto tra
-  gli utenti registrati, oppure scritto a mano se non usa l'app). Oltre il massimo si va in **lista d'attesa**.
-- **Gestione**: chiusura delle iscrizioni e importazione delle squadre, revisione (aggiungi, modifica, cancella,
-  lista d'attesa), **conferma della lista ufficiale**, poi scelta di **formula, categoria e coefficiente** (scheda
-  *Scheda*). Da lì il torneo prosegue come sempre.
-- **Reward**: livelli Stellina ⭐, Stella cometa ☄️, Terra 🌍, Pianeti 🪐, Galassia 🌌 in base ai tornei disputati
-  (giocatore nella lista ufficiale), per tutti i giocatori registrati o no. Le soglie le sceglie l'admin in
-  *Impostazioni → Reward dei giocatori*.
-- **Messaggi** (*Impostazioni → Messaggi*): l'admin scrive a utenti scelti, a tutti i registrati o agli iscritti di un
-  torneo; il messaggio compare come **ALERT** in cima alla prima pagina solo ai destinatari (le regole del database
-  impediscono agli altri di leggerlo) finché l'utente non preme *Ho letto*.
+  **Profilo**) è visibile solo all'utente: dati, gare delle sue squadre, allenamenti e ricevute.
+- **Messaggi** (*Impostazioni → Messaggi*): l'admin scrive a utenti scelti, a tutti i registrati o ai capitani e
+  giocatori collegati delle squadre di un torneo; il messaggio compare come **ALERT** in cima alla prima pagina solo ai
+  destinatari finché l'utente non preme *Ho letto*.
 - **Omonimi e alias**: gli utenti si distinguono per email. Se due utenti hanno stesso nome, cognome e sesso, l'admin
-  riceve un avviso (prima pagina e *Impostazioni → Utenti registrati*) e assegna un **alias**, modificabile, che
-  sostituisce il nome in liste, iscrizioni e classifiche. Per gli omonimi il collegamento con il giocatore in anagrafica
-  lo sceglie l'admin.
-- **Privacy**: l'email la vedono solo l'utente e l'admin. Cliccando un nome gli altri vedono solo i tornei
-  giocati, i piazzamenti e i punti. L'elenco degli iscritti è pubblico. I reward compaiono nel profilo dell'utente e,
-  per l'admin, nelle liste.
-- **Tornei già creati**: in Gestione si possono aprire le iscrizioni online (data e ora, termine, massimo squadre); le
-  squadre già inserite dall'admin restano in lista e occupano i primi posti.
-- Database: `members/{uid}`, `accounts/{uid}` (email), `registrations/{id}`, `messages/{id}`, `inbox/{uid}`; alias in
-  `data/settings`.
+  riceve un avviso e assegna un **alias**, modificabile, che sostituisce il nome nelle liste.
+- **Privacy**: l'email la vedono solo l'utente e l'admin.
+- Database: `members/{uid}`, `accounts/{uid}` (email), `messages/{id}`, `inbox/{uid}`; alias in `data/settings`.
 
 ## Tornei a squadre (Manofuori Cup)
 
@@ -105,7 +87,7 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 - Database: `vtours/{id}` (torneo, pubblico) e `vmatches/{torneo_gara}` (gare, pubbliche; lo scorer scrive solo set e
   stato). Test delle regole: `tests/vtour.rules.test.mjs`.
 - **Referto elettronico** (`referto-indoor/`, 6 contro 6 con rotazioni, libero, minimo 2 donne in campo): pulsante
-  **E-scoresheet** sulla gara (admin generale e scorer del torneo). La prima volta crea `referti/{torneo}_{gara}` con
+  **E-scoresheet** sulla gara (admin generale, admin tornei e scorer del torneo). La prima volta crea `referti/{torneo}_{gara}` con
   torneo, fase, data, ora, palestra, squadre (A = casa) con le rose e la formula (gironi: 3 set fissi a 25; playoff:
   come il turno). Il punteggio va in diretta nel calendario (`live/{id}`, pubblico); a referto chiuso compare
   **Riporta il risultato del referto**, che lo porta in classifica. Il referto è facoltativo: i set si possono sempre
@@ -136,12 +118,12 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   consigliati); la rosa si cambia in qualsiasi momento. Avviso se due giocatori hanno lo stesso numero.
 - La squadra resta **in attesa** finché l'organizzatore (admin tornei) non **conferma l'ammissione** al livello. In attesa
   il capitano può cambiare il livello e ritirare l'iscrizione; dopo l'ammissione il livello lo cambia solo l'organizzatore.
-- Tutti vedono le squadre ammesse divise per livello (nome, tipo, capitano); la **rosa** la vedono solo il capitano e
-  l'admin. L'admin vede anche le squadre in attesa, può crearne (scegliendo il capitano tra gli utenti), modificarle
+- Tutti vedono le squadre ammesse divise per livello (nome, tipo, capitano); la **rosa** la vedono solo il capitano,
+  l'admin e gli scorer (per il referto). L'admin vede anche le squadre in attesa, può crearne (scegliendo il capitano tra gli utenti), modificarle
   ed eliminarle.
 - **Livelli**: DINOS, MASTER, SUPER MASTER, SUPER 10 (dal meno al più forte), modificabili dall'admin tornei in fondo
   alla pagina Squadre (salvati in `data/tour`).
-- Database: `teams/{id}` (pubblico) e `rosters/{id}` (rosa: capitano e admin). Test delle regole:
+- Database: `teams/{id}` (pubblico) e `rosters/{id}` (rosa: capitano, admin e scorer). Test delle regole:
   `tests/teams.rules.test.mjs` (istruzioni in cima al file).
 
 ## Gioco libero
@@ -211,7 +193,7 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   "prepagati" nella scheda e risultano pagati quando si compone il gruppo. Annullando la ricevuta tornano da pagare.
 - **Pagamento spot** (presenze del giorno, spot confermati): importo dal prezzo dello spot; un recupero gratuito (0 €)
   si segna pagato senza ricevuta. Se mancano i dati per la ricevuta, si compilano nel modulo e si salvano nella scheda.
-- **Ricevuta PDF** (jsPDF già incluso in `referto/vendor`): numero progressivo che riparte ogni anno (`counters`),
+- **Ricevuta PDF** (jsPDF incluso in `vendor/jspdf`): numero progressivo che riparte ogni anno (`counters`),
   intestazione dell'associazione, dati del socio, importo in cifre e in lettere, causale
   "Quota sociale allenamenti - mese di …" o "… - allenamento del gg/mm/aaaa", modalità, spazio per timbro e firma.
 - **Amministrazione pagamenti** (`#/payments`, da Impostazioni): mese, tipo, incassi per modalità, pagamenti mancanti,
@@ -223,10 +205,11 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 - **Ruoli** (pagina Utenti → "Ruoli e accessi"):
   - *Admin generale*: tutto. Sono gli account con email confermata pierpaolomurgioni@gmail.com
     (nelle regole del database), l'account principale e la raccolta `admins`.
-  - *Admin tornei* (`roles/{uid}.tour`): tornei, categorie e tabelle punti, giocatori, iscrizioni, referti e
-    refertisti. Categorie, premi ed EOPE stanno in `data/tour` (separati da `data/settings`, che resta dell'admin generale).
+  - *Admin tornei* (`roles/{uid}.tour`): tornei, squadre (ammissione), livelli, calendari e risultati. I livelli stanno
+    in `data/tour` (separati da `data/settings`, che resta dell'admin generale).
+  - *Capitano* (`roles/{uid}.captain`): può iscrivere e gestire la propria squadra.
   - *Cassa* (`roles/{uid}.cash`): registra incassi ed emette ricevute; non vede schede atleti né il resto dell'amministrazione.
-  - *Coach* e *refertisti* come prima. I ruoli si assegnano con le caselle accanto a ogni utente (solo admin generale).
+  - *Coach* e *scorer* (account dei campi). I ruoli si assegnano con le caselle accanto a ogni utente (solo admin generale).
 - **Cassa** (`#/cassa`, admin generale e cassa): ogni incasso (`incassi`) ha una o più righe: quote sociali (corsi di
   allenamento, torneo sociale) e commerciale
   (bevande, altro). Ricevute separate: serie Q `n/Q/anno` (contatore `receipts-AAAA`, che prosegue la numerazione delle
@@ -254,13 +237,13 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 ## Profilo: le mie attività (parte 4)
 
 - Allenamenti della stagione: presenze, assenze, spot e recuperi.
-- Tornei disputati, punti, reward e risultati dei tornei conclusi restano come prima.
+- **Le mie gare**: calendario e risultati delle squadre di cui si è capitano o giocatore collegato.
 
 ## Privacy, termini e sicurezza
 
 - **Pagine legali** (`js/legal.js`, in italiano): `#/privacy` (informativa artt. 13-14 GDPR), `#/cookie` (cookie policy),
-  `#/termini` (termini e condizioni). Titolare: ASD Beach Piu' Arena, legale rappresentante il Presidente
-  Pier Paolo Murgioni, beachpiuarena@gmail.com. Link nel piè di pagina di ogni schermata. Cambiando un testo si
+  `#/termini` (termini e condizioni). Titolare: ASD Manofuori Volley Project, legale rappresentante il
+  Presidente Marianna Stara, manofuori@tiscali.it. Link nel piè di pagina di ogni schermata. Cambiando un testo si
   aggiorna `Legal.VERSION`: agli utenti viene chiesto di prenderne visione di nuovo.
 - **Avviso cookie** al primo accesso (solo informativo: l'app usa unicamente strumenti tecnici).
 - **Registrazione**: casella obbligatoria "Ho letto l'Informativa privacy e accetto i Termini"; data e versione salvate
@@ -300,66 +283,9 @@ Per aggiungere un tema:
   altri caratteri, il file `assets/fonts/id.css` con i font in `assets/fonts/files/`.
 I temi di Beach+ Arena (cartella `beach-plus-arena` del repository principale) si possono riprendere da lì.
 
-## Funzioni
-
-- **Giocatori**: anagrafica con genere e società.
-- **Tabelle punti**: componi tabelle con punti per qualsiasi posizione
-  (ogni riga vale dalla sua posizione fino alla riga successiva, es. `5 → 60` vale per 5°–8° se la riga dopo è `9`).
-- **Categorie** (es. Master, Challenger, Satellite) collegate a una tabella predefinita.
-- **Tornei**: per ciascuno scegli genere (maschile, femminile o **misto**: ogni squadra è un uomo + una donna), categoria, tabella punti, **coefficiente** (es. ×1,2) e formula:
-  - Gironi + eliminazione diretta (squadre per girone e qualificate a scelta)
-  - Gironi FIVB da 4 (1-4, 2-3, vincenti/perdenti) + eliminazione
-  - Doppia eliminazione
-  - Eliminazione diretta
-  - Girone unico
-  - **Gold & Silver**: gironi da 3, 4 o 5 squadre (anche di dimensioni diverse; per ogni girone da 4 si sceglie
-    tutti contro tutti o formula FIVB). L'admin sceglie quante squadre vanno nel **Gold** (prima tutte le 1ª, poi le 2ª,
-    poi le migliori 3ª per quoziente punti, massimo 16): tabellone da 16 con bye alle teste di serie e senza squadre
-    dello stesso girone al primo turno. Tutte le altre giocano il **Silver** (tabellone da 16). Finale 3°/4° posto
-    a scelta nel Gold e nel Silver. Punti con **due tabelle del torneo** (Gold e Silver), al posto di quella
-    della categoria. In Gestione, spostando le squadre nella lista si vede subito l'anteprima dei gironi
-    (serpentina). Teste di serie e bye nei tabelloni: prima le 1ª, poi le 2ª, ecc.; a parità di posizione
-    punti in classifica (2 vittoria, 1 sconfitta; FIVB: percorso vincenti/perdenti), poi quoziente punti; squadre dello stesso girone mai contro nei
-    primi due turni. Solo in questo formato l'admin può cambiare il numero delle gare (nella finestra della gara:
-    la gara che aveva quel numero prende il vecchio numero) e ripristinare la numerazione standard dal calendario.
-    Gli altri formati non cambiano.
-  - Partite a set unico o al meglio di 3/5, con punti del set e del tie-break liberi (21/15, 15/15, …)
-  - Finale 3°/4° opzionale
-  - **Qualificazioni** a eliminazione diretta senza limite di squadre, con N posti per il main draw
-  - **Wild card**
-- **Risultati** con esiti INJ/DSQ (ritiro/infortunio) e DSQ (forfait) calcolati secondo il regolamento.
-- **Gironi tutti contro tutti** (in ogni formula), calendario fisso: da 3 squadre 1° turno 1–3, 2° turno 2–3, 3° turno 1–2;
-  da 4 squadre 1° turno 1–4 e 2–3, 2° turno 1–3 e 2–4, 3° turno 3–4 e 1–2. Nel calendario generale le gare sono numerate
-  turno per turno su tutti i gironi (prima il 1° turno di ogni girone, poi il 2°…), così tra un turno e l'altro di un
-  girone si giocano le gare degli altri gironi.
-  Nei tornei già avviati l'app corregge da sola i gironi da 3 e da 4 al primo accesso dell'admin: ordine e turni sempre; l'ordine delle
-  squadre solo nelle gare senza risultato né referto (le gare giocate restano collegate a risultati e referti).
-- **Classifica dei gironi** con i criteri di spareggio del regolamento
-  (2 squadre: quoziente punti nel girone, poi scontro diretto; 3+: quoziente punti negli scontri tra loro,
-  poi nel girone; infine testa di serie).
-- **Classifica finale** del torneo e punti per giocatore (punti tabella × coefficiente), visibili nella scheda del giocatore.
-- **E-scoresheet** (referto elettronico collegato):
-  - **Account dei campi**: in *Impostazioni → Account dei campi* l'admin crea un account (email e password) per ogni
-    campo. Il tablet del campo accede una volta e trova **Le mie gare** (le gare del suo campo, oppure tutti i campi).
-    Questi account possono solo compilare i referti: non omologano e non modificano il torneo.
-    Con più tornei nello stesso giorno si può **legare l'account a un torneo** (menu *Torneo*, modificabile anche
-    dopo dall'elenco degli account): il tablet vede e compila solo quel torneo. Senza torneo vede tutti i tornei in corso.
-  - Il pulsante **E-scoresheet** accanto alla gara apre il referto già compilato con torneo, numero gara, squadre,
-    orario, campo e fase. Si crea così il **referto della gara** nella raccolta `referti` del database
-    (un documento per gara, firme comprese, visibile solo ad admin e campi).
-  - Mentre il refertista segna i punti, il punteggio compare in diretta (**LIVE**) nel calendario, nei gironi e nel
-    tabellone. Quando chiude la gara il risultato resta **in attesa di omologa**: visibile a tutti ma non conteggiato.
-  - Con **Omologa il risultato** l'admin lo rende ufficiale (classifiche dei gironi, passaggi di turno, punti).
-    L'admin può sempre correggere il punteggio, riaprire la gara, **riaprirla al refertista** o **azzerare il referto**.
-  - Scheda **Referti** nella pagina del torneo (admin e account dei campi): la cartella **referti** con un file per
-    ogni gara (stato, punteggio, chi l'ha compilato, *Apri referto*) e la cartella **referti / pdf** con tutti i PDF,
-    che si aprono direttamente nell'app; **Scarica tutto (ZIP)** li salva in `referti/pdf/`. I PDF mancanti o non
-    aggiornati si creano da soli all'apertura della scheda (o con *Aggiorna PDF*).
-
 ### Pubblicare le regole del database
 
-L'E-scoresheet usa nuove raccolte (`referti`, `refertiPdf`, `live`, `scorers`): alla prima pubblicazione servono
-anche le regole di sicurezza:
+Le regole di sicurezza (`firestore.rules`) si pubblicano insieme all'app dal workflow di GitHub; a mano:
 
 ```
 firebase deploy --only hosting,firestore:rules
@@ -370,10 +296,12 @@ firebase deploy --only hosting,firestore:rules
 ```
 index.html        pagina principale
 css/style.css     grafica (chiaro/scuro, mobile-first)
-js/i18n.js        traduzioni IT / EL / EN
-js/store.js       salvataggio dati nel browser
-js/logic.js       regole: formule, gironi, tabelloni, piazzamenti, punti
-js/demo.js        dati di esempio
+js/i18n.js        testi dell'interfaccia (italiano)
+js/store.js       stato dell'app (dati dal database)
+js/cloud.js       collegamento al database (Firebase)
+js/volley.js      tornei: calendari, classifiche, playoff
+js/legal.js       privacy, cookie e termini
 js/app.js         interfaccia
-referto/          referto elettronico di gara (scoresheet) → /referto/
+referto-indoor/   referto elettronico di gara (6 contro 6) → /referto-indoor/
+vendor/           Firebase, jsPDF, JSZip
 ```

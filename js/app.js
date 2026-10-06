@@ -3,12 +3,13 @@
   'use strict';
 
   const S = () => Store.state;
+  // testo senza accenti e maiuscole, per cercare e confrontare i nomi
+  const norm = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
   const t = (k, p) => I18n.t(k, p);
-  const L = Logic;
   const $app = document.getElementById('app');
   const $dialog = document.getElementById('matchDialog');
 
-  const ui = { editingPlayer: null, playerFilter: '', matchCtx: null, flash: null, openCat: null, busy: false };
+  const ui = { flash: null, busy: false };
   const admin = () => !!(window.Cloud && window.Cloud.isAdmin);
   // admin tornei (o generale): tornei, categorie e punti, giocatori, iscrizioni, referti e refertisti
   const tourAdmin = () => !!(window.Cloud && window.Cloud.tourAdmin);
@@ -16,74 +17,19 @@
   const cashier = () => !!(window.Cloud && window.Cloud.cashier);
   // capitano: utente registrato abilitato dall'admin a iscrivere squadre (roles/{uid}.captain)
   const captainRole = () => !!(window.Cloud && !window.Cloud.isAdmin && window.Cloud.member && (window.Cloud.roles || {}).captain);
-  // avviso della prima pagina: admin generale; avviso di un torneo: admin tornei
-  // zona pericolosa (cancella tutti i dati): solo il Presidente
-  const isOwner = () => admin() && !!(window.Cloud && window.Cloud.user && (window.Cloud.user.email || '').toLowerCase() === 'pierpaolomurgioni@gmail.com');
   const canNotice = scope => (scope === 'home' ? admin() : tourAdmin());
   // Account di un campo (refertista): vede "Le mie gare" e apre i referti elettronici.
   const scorer = () => (window.Cloud && !window.Cloud.isAdmin && window.Cloud.scorer) || null;
-  // L'account del campo può essere legato a un solo torneo (scorer().tid); vuoto = tutti i tornei in corso.
-  const scorerTour = tour => { const sc = scorer(); return !!sc && (!sc.tid || sc.tid === tour.id); };
-  let rankCache = {};
   let pendingRender = false;
 
   // ---------- helper ----------
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const player = id => S().players.find(p => p.id === id);
-  // Alias (nickname) assegnato dall'admin a un utente registrato (es. omonimi): sostituisce il nome ovunque.
-  const nickOf = p => (p && p.uid && (S().nicks || {})[p.uid]) || '';
-  const playerFull = p => p ? (nickOf(p) || `${p.last} ${p.first}`) : '?';
-  const shortName = p => p ? (nickOf(p) || p.last) : '?';
-  // Nome in grassetto (cognome) + nome; con l'alias, l'admin vede anche il nome vero.
-  const nameHtml = p => {
-    const n = nickOf(p);
-    if (!n) return `<strong>${esc(p.last)}</strong> ${esc(p.first)}`;
-    return `<strong>${esc(n)}</strong>${tourAdmin() ? ` <small class="muted">(${esc(p.last)} ${esc(p.first)})</small>` : ''}`;
-  };
-  const tourById = id => S().tournaments.find(x => x.id === id);
-  const entryById = (tour, id) => tour.entries.find(x => x.id === id);
-  const catById = id => S().categories.find(x => x.id === id);
   const sel = (a, b) => (String(a) === String(b) ? 'selected' : '');
-  const genderLabel = g => (g === 'F' ? t('catWomen') : g === 'X' ? t('catMixed') : t('catMen'));
-  // Genere dei due giocatori di una squadra: nei tornei misti il 1° è l'uomo e il 2° la donna.
-  const teamGenders = tour => (tour.gender === 'X' ? ['M', 'F'] : [tour.gender, tour.gender]);
-  const teamLabels = tour => (tour.gender === 'X' ? [t('male').toLowerCase(), t('female').toLowerCase()] : ['1', '2']);
-  const medal = p => `<span class="medal ${p <= 3 ? 'm' + p : ''}">${p}</span>`;
-  const fmtPts = n =>Number(n || 0).toLocaleString(I18n.locale(), { maximumFractionDigits: 2 });
-
-  function teamName(tour, id) {
-    if (id === L.BYE) return `<span class="muted">${esc(t('bye'))}</span>`;
-    if (!id) return `<span class="muted">${esc(t('tbd'))}</span>`;
-    const e = entryById(tour, id);
-    if (!e) return '?';
-    const a = player(e.p1), b = player(e.p2);
-    return esc(`${shortName(a)} / ${shortName(b)}`);
-  }
 
   function fmtDate(d) {
     if (!d) return '';
     const dt = new Date(d.slice(0, 10) + 'T12:00:00');
     return isNaN(dt) ? d : dt.toLocaleDateString(I18n.locale(), { day: 'numeric', month: 'short', year: 'numeric' });
-  }
-
-  function fmtDateTime(v) {
-    if (!v) return '';
-    const [d, tm] = v.split('T');
-    return fmtDate(d) + (tm ? ` · ${tm}` : '');
-  }
-
-  function fmtRange(a, b) {
-    if (!a) return '';
-    return b && b !== a.slice(0, 10) ? `${fmtDate(a)} – ${fmtDate(b)}` : fmtDate(a);
-  }
-
-  function rankMap(gender) {
-    if (gender === 'X') return Object.assign({}, rankMap('M'), rankMap('F'));
-    if (!rankCache[gender]) {
-      rankCache[gender] = {};
-      L.ranking(S(), gender, null).forEach(r => { rankCache[gender][r.id] = r.total; });
-    }
-    return rankCache[gender];
   }
 
   function commit(msg) {
@@ -107,66 +53,12 @@
     return `<div class="flash ${f.type || 'ok'}" role="status">${esc(f.text)}</div>`;
   }
 
-  function roundLabel(teamsInRound) {
-    if (teamsInRound === 2) return t('final');
-    if (teamsInRound === 4) return t('semifinal');
-    if (teamsInRound === 8) return t('quarterfinal');
-    return t('roundOf', { n: teamsInRound });
-  }
-
-  function formatSummary(tour) {
-    const c = tour.config;
-    const sets = c.setsToWin === 1 ? t('setsSingle', { p: c.setPoints })
-      : t('setsBestOf', { n: 2 * c.setsToWin - 1, p: c.setPoints, tb: c.tiebreakPoints });
-    if (tour.format === 'gold_silver') return `${t('fmt_gold_silver')} · ${t('gsInfo', { p: L.gsSizes(tour, c.mainSize).length, g: c.goldSpots })} · ${sets}`;
-    return `${t('fmt_' + tour.format)} · ${sets}`;
-  }
-
-  // Numero di gara (G1, G2... tabellone principale; Q1, Q2... qualifiche), fisso dalla creazione del torneo.
-  let numCache = {};
-  function nums(tour) {
-    if (!numCache[tour.id]) numCache[tour.id] = L.numbering(tour);
-    return numCache[tour.id];
-  }
-  function gNo(tour, m) { return nums(tour)[m.key] || ''; }
-  // Gold & Silver: l'admin può cambiare il numero delle gare (G…).
-  const gsNoEditable = (tour, m) => tourAdmin() && tour.format === 'gold_silver' && /^G\d+$/.test(gNo(tour, m));
-  const gCount = tour => Object.values(nums(tour)).filter(v => v[0] === 'G').length;
-
-  // Nome della squadra o, se non ancora nota, il segnaposto ("A1", "Vincente G19", "Perdente G20").
-  function slotName(tour, m, side) {
-    const id = side ? m.b : m.a;
-    if (id) return teamName(tour, id);
-    const ph = L.placeholder(tour, m, side, nums(tour));
-    if (!ph) return teamName(tour, id);
-    const txt = ph.text || t(ph.kind, { g: ph.no || '?' });
-    return `<span class="muted ph">${esc(txt)}</span>`;
-  }
-
-  // Etichetta della fase di una partita (calendario e finestra del risultato).
-  function phaseLabel(tour, m) {
-    switch (m.stage) {
-      case 'qual': return `${t('qualification')} · ${m.round === m.rounds - 1 ? t('qualDecisive') : t('qualRound', { n: m.round + 1 })}`;
-      case 'pool': { const pn = m.poolName != null ? m.poolName : tour.pools[m.pool].name; return `${pn ? t('pool') + ' ' + pn : t('singlePool')} · ${m.label ? t('fivb_' + m.label) : 'R' + m.round}`; }
-      case 'ko': return (tour.format === 'gold_silver' ? 'Gold · ' : '') + roundLabel((m.size || tour.bracket.size) / 2 ** m.round);
-      case 'third': return (tour.format === 'gold_silver' ? 'Gold · ' : '') + t('thirdPlace');
-      case 'silver': return 'Silver · ' + roundLabel((m.size || (tour.silver && tour.silver.size) || 16) / 2 ** m.round);
-      case 'silver3': return 'Silver · ' + t('thirdPlace');
-      case 'wb': return `${t('winnersBracket')} · ${m.round === m.rounds - 1 ? t('final') : t('roundN', { n: m.round + 1 })}`;
-      case 'lb': return `${t('losersBracket')} · ${m.round === m.rounds - 1 ? t('final') : t('roundN', { n: m.round + 1 })}`;
-      case 'gf': return t('grandFinal');
-      default: return '';
-    }
-  }
-
   // ---------- routing ----------
   function route() {
     return location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   }
 
   function render() {
-    rankCache = {};
-    numCache = {};
     pendingRender = false;
     if (!Store.ready) {
       $app.innerHTML = flashHtml() + `<div class="empty"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</div>`;
@@ -176,25 +68,13 @@
     const r = route();
     if (window.Cloud && window.Cloud.watchLive) {
       window.Cloud.watchLive(r[0] === 'vt' && vtById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? liveTourIds() : r[0] === 'gare' || r[0] === 'me' ? myTourIds() : null);
-      window.Cloud.watchReferti((r[0] === 't' && tourById(r[1])) || (r[0] === 'vt' && vtById(r[1])) ? (r[2] === 'referti' ? r[1] : null) : null);
+      window.Cloud.watchReferti(r[0] === 'vt' && vtById(r[1]) && r[2] === 'referti' ? r[1] : null);
     }
-    const tourOnly = r[0] === 'players' || r[0] === 'new' || (r[0] === 't' && (r[2] === 'manage' || r[2] === 'edit'));
-    if (tourOnly && !tourAdmin()) { location.hash = '#/'; return; }
     const adminOnly = r[0] === 'messages' || r[0] === 'users' || r[0] === 'athletes' || r[0] === 'payments';
     if (adminOnly && !admin()) { location.hash = '#/'; return; }
     let nav = 'tournaments', html;
-    const loadingHtml = `<div class="empty"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</div>`;
-    // Ranking, giocatori e tornei non ancora caricati richiedono anche i tornei passati.
-    const wantsPast = r[0] === 'p' || r[0] === 'me' || (r[0] === 't' && !tourById(r[1]));
-    if (wantsPast && needPast()) { $app.innerHTML = flashHtml() + loadingHtml; updateChrome(r[0] === 'p' && tourAdmin() ? 'players' : 'tournaments'); return; }
-    if (r[0] === 'players') { nav = 'players'; html = viewPlayers(); }
-    else if (r[0] === 'p' && player(r[1])) { nav = tourAdmin() ? 'players' : 'tournaments'; html = viewPlayer(player(r[1])); }
-    else if (r[0] === 'categories') { nav = 'categories'; html = viewCategories(); }
-    else if (r[0] === 'settings') { nav = 'settings'; html = viewSettings(); }
+    if (r[0] === 'settings') { nav = 'settings'; html = viewSettings(); }
     else if (r[0] === 'mine') { nav = 'mine'; html = viewMineVolley(); }
-    else if (r[0] === 'new') { html = viewNewTournament(); }
-    else if (r[0] === 't' && tourById(r[1])) { html = viewTournament(tourById(r[1]), r[2]); }
-    else if (r[0] === 'tournaments') { html = viewHome(); }
     else if (r[0] === 'me') { nav = 'me'; html = viewProfile(); }
     else if (r[0] === 'teams') { nav = 'teams'; html = viewTeams(); }
     else if (r[0] === 'gare') { nav = 'gare'; html = viewMyMatches(); }
@@ -212,7 +92,6 @@
     else if (r[0] === 'a' && (r[1] === '1' || r[1] === '2')) { nav = 'home'; html = viewArticle(+r[1] - 1); }
     else { nav = 'home'; html = viewFeatured(); }
     $app.innerHTML = flashHtml() + html;
-    $app.querySelectorAll('form[data-form^="tournament-"]').forEach(syncTournamentForm);
     updateChrome(nav);
     fitEditorial();
   }
@@ -268,22 +147,8 @@
   // aggiornamenti rimandati: appena non si sta più compilando nulla
   setInterval(() => { if (pendingRender && !isTyping()) render(); }, 3000);
 
-  // Correzione una tantum (solo admin): gironi da 3 e da 4 tutti contro tutti con il calendario precedente.
-  function migrateRR4() {
-    if (!tourAdmin() || !Store.ready || !window.Cloud || !window.Cloud.matchDocKeys) return;
-    ui.rr4 = ui.rr4 || {};   // tornei già controllati in questa sessione
-    S().tournaments.filter(tr => tr.pools && !ui.rr4[tr.id] && tr.pools.some(p => p.mode !== 'fivb' && tr.format !== 'fivb_pools' && (p.teamIds.length === 3 || p.teamIds.length === 4))).forEach(tr => {
-      ui.rr4[tr.id] = true;
-      window.Cloud.matchDocKeys(tr.id).then(keys => {
-        const cur = tourById(tr.id);
-        if (cur && L.fixRR4(cur, k => !!(cur.results && cur.results[k]) || keys.has(k))) commit();
-      }).catch(() => { ui.rr4[tr.id] = false; });
-    });
-  }
-
   function refresh() {
     if (ui.afterLogin && scorer()) { ui.afterLogin = false; if (location.hash !== '#/mine') { location.hash = '#/mine'; return; } }
-    migrateRR4();
     if (isTyping()) { pendingRender = true; return; }
     render();
   }
@@ -293,7 +158,7 @@
   });
   $dialog.addEventListener('close', () => { if (pendingRender) render(); });
 
-  // ---------- avvisi per i visitatori (prima pagina e pagina di ogni torneo) ----------
+  // ---------- avvisi per i visitatori (prima pagina) ----------
   function richText(s) {
     return esc(s)
       .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')
@@ -301,16 +166,6 @@
   }
 
   const todayStr = () => new Date().toLocaleDateString('sv');   // AAAA-MM-GG, ora locale
-
-  // Tornei passati: caricati dal database solo quando servono (elenco dei passati, ranking, giocatori).
-  function needPast() {
-    const c = window.Cloud;
-    if (!c || !c.loadPast || c.pastLoaded) return false;
-    c.loadPast();
-    return true;
-  }
-  // Torneo terminato: passata la data di fine (o di inizio, se manca la fine).
-  const tourEnded = tour => { const d = (tour.end || tour.start || '').slice(0, 10); return !!d && d < todayStr(); };
 
   // scope: 'home' oppure l'id del torneo; until: data di scadenza dell'avviso generale (facoltativa)
   function noticeBox(scope, text, until) {
@@ -437,7 +292,6 @@
       ${noticeAlerts()}
       ${verifyNotice()}
       ${noticeBox('home', S().notice, S().noticeUntil)}
-      ${tourNoticesHome()}
       <div class="theme-hero" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <h1 class="sr-only">${esc(t('navHome'))}</h1>
       ${editorialSection()}
@@ -489,1112 +343,28 @@
     render();
   }
 
-  // Avvisi dei tornei mostrati anche in prima pagina finché il torneo non è terminato.
-  function tourNoticesHome() {
-    const list = S().tournaments.filter(tr => tr.notice && !tourEnded(tr))
-      .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-    return list.map(tr => `<div class="notice-box tour-notice" role="note">
-      <div class="notice-head"><h2><i class="ti ti-trophy" aria-hidden="true"></i> <a href="#/t/${tr.id}/info">${esc(tr.name)}</a></h2>
-        <span class="muted small">${esc(fmtRange(tr.start, tr.end))}</span></div>
-      <div class="notice-text">${richText(tr.notice)}</div>
-    </div>`).join('');
-  }
 
-  // ---------- elenco tornei ----------
-  function viewHome() {
-    // In corso e futuri: dal più vicino; passati: dal più recente. I passati si mostrano solo a richiesta.
-    const current = S().tournaments.filter(tr => !tourEnded(tr)).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-    const past = S().tournaments.filter(tourEnded).sort((a, b) => (b.start || '').localeCompare(a.start || ''));
-    const pastReady = !window.Cloud || !window.Cloud.loadPast || window.Cloud.pastLoaded;
-    let pastBlock = '';
-    if (ui.showPast) {
-      pastBlock = `<div class="page-head row past-head"><h2><i class="ti ti-history" aria-hidden="true"></i> ${esc(t('pastTournaments'))}</h2>
-          <button class="btn small" data-action="toggle-past">${esc(t('hidePast'))}</button></div>
-        ${!pastReady ? `<div class="empty"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</div>`
-          : past.length ? `<div class="cards past">${past.map(tourCard).join('')}</div>` : `<p class="muted">${esc(t('noPastTournaments'))}</p>`}`;
-    } else {
-      pastBlock = `<div class="next-step center"><button class="btn" data-action="toggle-past"><i class="ti ti-history" aria-hidden="true"></i> ${esc(t('showPast'))}${pastReady && past.length ? ` (${past.length})` : ''}</button></div>`;
-    }
-    return `
-      <div class="page-head row">
-        <h1>${esc(t('tournaments'))}</h1>
-        ${tourAdmin() ? `<a class="btn primary" href="#/new"><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('newTournament'))}</a>` : ''}
-      </div>
-      <p class="muted small">${esc(t('currentAndUpcoming'))}</p>
-      ${current.length ? `<div class="cards">${current.map(tourCard).join('')}</div>`
-        : `<div class="empty">${esc(t(tourAdmin() ? 'noTournamentsAdmin' : 'noUpcomingTournaments'))}</div>`}
-      ${pastBlock}`;
-  }
 
-  function tourProgress(tour) {
-    const ms = L.allMatches(tour).filter(m => !m.bye);
-    if (!ms.length) return '';
-    const done = ms.filter(m => m.stats).length;
-    return `<div class="tc-progress"><span class="bar"><span style="width:${Math.round(done / ms.length * 100)}%"></span></span>
-      <small>${esc(t('matchesClosed', { done, total: ms.length }))}</small></div>`;
-  }
-
-  function tourCard(tour) {
-    const st = L.status(tour);
-    const cat = catById(tour.categoryId);
-    return `
-      <a class="card tour-card" href="#/t/${tour.id}">
-        <div class="tour-card-top">
-          <span class="badge g-${tour.gender}">${esc(genderLabel(tour.gender))}</span>
-          ${cat ? `<span class="badge cat">${esc(cat.name)}</span>` : ''}
-          <span class="badge st-${st}">${esc(t('st_' + st))}</span>
-        </div>
-        ${tourFlag(tour)}
-        <h3>${esc(tour.name)}</h3>
-        <p class="muted"><i class="ti ti-calendar" aria-hidden="true"></i> ${esc(fmtRange(tour.start, tour.end))}${tour.location ? ` &nbsp;<i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(tour.location)}` : ''}</p>
-        ${regPhase(tour) && regPhase(tour) !== 'formula' ? regLine(tour) : `<p class="muted small">${esc(formatSummary(tour))}</p>
-        <p class="muted small"><i class="ti ti-users" aria-hidden="true"></i> ${tour.entries.length} ${esc(t('teamsCount'))} · ${esc(t('coefficient'))} ×${esc(fmtPts(tour.coefficient))}</p>`}
-        ${tourProgress(tour)}
-      </a>`;
-  }
-
-  // Segnale di stato nel riquadro del torneo: iscrizioni aperte (stellina verde lampeggiante),
-  // iscrizioni chiuse (stellina rossa), gare create (scritta lampeggiante "Torneo in corso").
-  function tourFlag(tour) {
-    if (tour.closed) return `<p class="tour-flag done">${esc(t('flagDone'))}</p>`;
-    if (tour.qual || tour.mainIds) return `<p class="tour-flag live"><span class="blink">${esc(t('flagLive'))}</span></p>`;
-    const ph = regPhase(tour);
-    if (ph === 'open') return `<p class="tour-flag open"><span class="flag-star blink" aria-hidden="true">★</span> ${esc(t('flagOpen'))}</p>`;
-    if (ph === 'soon') return `<p class="tour-flag soon"><span class="flag-star" aria-hidden="true">★</span> ${esc(t('flagSoon'))}</p>`;
-    if (ph) return `<p class="tour-flag shut"><span class="flag-star" aria-hidden="true">★</span> ${esc(t('flagClosed'))}</p>`;
-    return '';
-  }
-
-  // ---------- scheda torneo (creazione / modifica) ----------
-  function viewNewTournament() {
-    return `<div class="page-head"><a class="back" href="#/tournaments">← ${esc(t('tournaments'))}</a><h1>${esc(t('newTournament'))}</h1></div>
-      ${regForm(null)}`;
-  }
-
-  function viewNewTournamentFull() {
-    if (!S().categories.length) {
-      return `<div class="page-head"><a class="back" href="#/tournaments">← ${esc(t('tournaments'))}</a><h1>${esc(t('newTournament'))}</h1></div>
-        <div class="card"><p>${esc(t('needCategoryFirst'))}</p><a class="btn primary" href="#/categories">${esc(t('goCategories'))} →</a></div>`;
-    }
-    return `
-      <div class="page-head">
-        <a class="back" href="#/tournaments">← ${esc(t('tournaments'))}</a>
-        <h1>${esc(t('newTournament'))}</h1>
-      </div>
-      ${tournamentForm(null)}`;
-  }
-
-  function tournamentForm(tour) {
-    const c = tour ? tour.config : L.defaultConfig();
-    const listLock = tour && tour.entryLocked ? 'disabled' : '';
-    const fmtLock = tour && (tour.qual || tour.mainIds) ? 'disabled' : '';
-    const v = (k, d) => esc(tour && tour[k] != null ? tour[k] : (d == null ? '' : d));
-    const format = tour ? tour.format : 'single_elim';
-    return `
-    <form class="card grid-form" data-form="${tour ? 'tournament-edit' : 'tournament-new'}" ${tour ? `data-tid="${tour.id}"` : ''}>
-      <h2 class="span-all">${esc(t('details'))}</h2>
-      <label>${esc(t('category'))}<select name="categoryId" required>
-        ${S().categories.map(k => `<option value="${k.id}" ${sel(tour && tour.categoryId, k.id)}>${esc(k.name)}</option>`).join('')}
-      </select></label>
-      <label>${esc(t('coefficient'))}<input name="coefficient" type="number" min="0" step="0.01" inputmode="decimal" required value="${v('coefficient', 1)}">
-        <small class="muted">${esc(t('coefficientHelp'))}</small></label>
-      <label>${esc(t('gender'))}<select name="gender" ${tour && tour.entries.length ? 'disabled' : ''}>
-        <option value="M" ${sel(tour && tour.gender, 'M')}>${esc(t('catMen'))}</option>
-        <option value="F" ${sel(tour && tour.gender, 'F')}>${esc(t('catWomen'))}</option>
-        <option value="X" ${sel(tour && tour.gender, 'X')}>${esc(t('catMixed'))}</option></select></label>
-      <label>${esc(t('name'))}<input name="name" required maxlength="80" value="${v('name')}" placeholder="${esc(t('namePlaceholder'))}"></label>
-      <label>${esc(t('location'))}<input name="location" maxlength="80" value="${v('location')}"></label>
-      <span class="hide-sm"></span>
-
-      <h2 class="span-all">${esc(t('datesSection'))}</h2>
-      <label>${esc(t('startDate'))}<input name="start" type="date" required value="${v('start')}"></label>
-      <label>${esc(t('endDate'))}<input name="end" type="date" value="${v('end')}"></label>
-      <label>${esc(t('inquiry'))}<input name="inquiry" type="datetime-local" value="${v('inquiry')}">
-        <small class="muted">${esc(t('inquiryHelp'))}</small></label>
-      <label>${esc(t('qualStart'))}<input name="qualStart" type="datetime-local" value="${v('qualStart')}"></label>
-      <label>${esc(t('qualEnd'))}<input name="qualEnd" type="date" value="${v('qualEnd')}"></label>
-      <span class="hide-sm"></span>
-      <label>${esc(t('mainStart'))}<input name="mainStart" type="datetime-local" value="${v('mainStart')}"></label>
-      <label>${esc(t('mainEnd'))}<input name="mainEnd" type="date" value="${v('mainEnd')}"></label>
-
-      <h2 class="span-all">${esc(t('format'))}</h2>
-      ${fmtLock ? `<p class="note span-all"><i class="ti ti-lock" aria-hidden="true"></i> ${esc(t('formatLocked'))}</p>` : ''}
-      <label class="span-all">${esc(t('mainFormat'))}<select name="format" ${fmtLock}>
-        ${L.FORMATS.map(f => `<option value="${f}" ${sel(format, f)}>${esc(t('fmt_' + f))}</option>`).join('')}
-      </select><small class="muted" data-format-desc></small></label>
-      <label data-show-format="pools_ko">${esc(t('poolSize'))}<input name="poolSize" type="number" min="2" max="16" value="${c.poolSize}" ${fmtLock}></label>
-      <label data-show-format="pools_ko fivb_pools">${esc(t('qualifyPerPool'))}<input name="qualify" type="number" min="1" max="8" value="${c.qualify}" ${fmtLock}></label>
-      <label class="check" data-show-format="pools_ko fivb_pools single_elim"><input type="checkbox" name="thirdPlace" ${c.thirdPlace ? 'checked' : ''} ${tour && tour.bracket ? 'disabled' : ''}> ${esc(t('thirdPlaceMatch'))}</label>
-      ${gsFormFields(tour, c, fmtLock)}
-      <label>${esc(t('setsToWin'))}<select name="setsToWin" ${fmtLock}>
-        ${[1, 2, 3].map(n => `<option value="${n}" ${sel(c.setsToWin, n)}>${esc(n === 1 ? t('oneSet') : t('bestOfN', { w: n, n: 2 * n - 1 }))}</option>`).join('')}
-      </select><small class="muted">${esc(t('formatBothPhases'))}</small></label>
-      <label>${esc(t('setPoints'))}<input name="setPoints" type="number" min="5" max="50" value="${c.setPoints}" ${fmtLock}></label>
-      <label data-show-sets>${esc(t('tiebreakPoints'))}<input name="tiebreakPoints" type="number" min="5" max="50" value="${c.tiebreakPoints}" ${fmtLock}></label>
-
-      <h2 class="span-all">${esc(t('admission'))}</h2>
-      ${listLock ? `<p class="note span-all"><i class="ti ti-lock" aria-hidden="true"></i> ${esc(t('admissionLocked'))}</p>` : ''}
-      <label data-show-format="gold_silver">${esc(t('mainSize'))}<input name="mainSizeGs" type="number" min="6" max="64" inputmode="numeric" value="${c.mainSize}" ${listLock}>
-        <small class="muted">${esc(t('mainSizeHelp'))}</small></label>
-      <label data-hide-format="gold_silver">${esc(t('mainSize'))}<select name="mainSize" ${listLock}>
-        ${(L.MAIN_SIZES.includes(c.mainSize) ? L.MAIN_SIZES : L.MAIN_SIZES.concat(c.mainSize)).map(n => `<option value="${n}" ${sel(c.mainSize, n)}>${n} ${esc(t('teamsWord'))}</option>`).join('')}
-      </select><small class="muted">${esc(t('mainSizeHelp'))}</small></label>
-      <label>${esc(t('directSpots'))}<input name="directSpots" type="number" min="0" max="64" required value="${c.directSpots}" ${listLock}></label>
-      <label>${esc(t('qualSpots'))}<input name="qualSpots" type="number" min="0" max="64" required value="${c.qualSpots}" ${listLock}>
-        <small class="muted">${esc(t('qualSpotsHelp'))}</small></label>
-      <label>${esc(t('wcSpots'))}<input name="wcSpots" type="number" min="0" max="32" required value="${c.wcSpots}" ${listLock}>
-        <small class="muted">${esc(t('wcSpotsHelp'))}</small></label>
-      <p class="note span-all" data-composition></p>
-      <label>${esc(t('qualWcSpots'))}<input name="qualWcSpots" type="number" min="0" max="32" value="${c.qualWcSpots || 0}" ${listLock}>
-        <small class="muted">${esc(t('qualWcSpotsHelp'))}</small></label>
-      <label>${esc(t('qualMax'))}<input name="qualMax" type="number" min="0" inputmode="numeric" value="${c.qualMax || ''}" placeholder="${esc(t('unlimited'))}" ${listLock}>
-        <small class="muted">${esc(t('qualMaxHelp'))}</small></label>
-
-      <div class="form-actions span-all">
-        <button class="btn primary">${esc(tour ? t('save') : t('create'))}</button>
-        ${tour ? `<button type="button" class="btn danger" data-action="delete-tournament" data-tid="${tour.id}">${esc(t('deleteTournament'))}</button>` : ''}
-      </div>
-    </form>`;
-  }
-
-  // ---------- Gold & Silver: campi del modulo ----------
-  function gsRowInputs(which, place, pts) {
-    return `<div class="pt-row">
-      <input type="number" min="1" inputmode="numeric" name="${which}Place" value="${place}" aria-label="${esc(t('place'))}">
-      <input type="number" min="0" step="0.01" inputmode="decimal" name="${which}Pts" value="${pts}" aria-label="${esc(t('points'))}">
-      <button type="button" class="icon-btn" data-action="del-row" aria-label="${esc(t('remove'))}">✕</button>
-    </div>`;
-  }
-
-  function gsFormFields(tour, c, fmtLock) {
-    const G = Object.assign({}, L.GS_DEFAULTS, c);
-    const lockBracket = tour && tour.bracket ? 'disabled' : '';
-    const table = (which, rows) => `<div class="gs-table">
-        <h3>${esc(t(which === 'gold' ? 'goldTable' : 'silverTable'))}</h3>
-        <div class="pt-rows" data-rows="${which}">${(rows && rows.length ? rows : [[1, 0]]).map(r => gsRowInputs(which, r[0], r[1])).join('')}</div>
-        <button type="button" class="btn small" data-action="gs-add-row" data-which="${which}"><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('addRow'))}</button>
-      </div>`;
-    return `<div class="span-all gs-box" data-show-format="gold_silver">
-      <p class="muted small">${esc(t('gsIntro'))}</p>
-      <div class="grid-form tight">
-        <label>${esc(t('gsPools'))}<input name="gsPools" type="number" min="1" max="16" value="${G.poolCount}" ${fmtLock}></label>
-        <label>${esc(t('goldSpots'))}<input name="goldSpots" type="number" min="2" max="16" value="${G.goldSpots}" ${lockBracket}>
-          <small class="muted">${esc(t('goldSpotsHelp'))}</small></label>
-      </div>
-      <div class="gs-pools" data-gs-pools data-sizes="${esc((G.poolSizes || []).join(','))}" data-modes="${esc((G.poolModes || []).join(','))}" data-lock="${fmtLock ? 1 : 0}"></div>
-      <p class="note" data-gs-summary></p>
-      <label class="check"><input type="checkbox" name="goldThird" ${G.thirdPlace ? 'checked' : ''} ${lockBracket}> ${esc(t('goldThird'))}</label>
-      <label class="check"><input type="checkbox" name="silverThird" ${G.silverThird ? 'checked' : ''} ${lockBracket}> ${esc(t('silverThird'))}</label>
-      <h3>${esc(t('gsTablesTitle'))}</h3>
-      <p class="muted small">${esc(t('gsTablesHelp'))}</p>
-      <div class="gs-tables">${table('gold', tour && tour.goldRows)}${table('silver', tour && tour.silverRows)}</div>
-    </div>`;
-  }
-
-  // Elenco dei gironi (dimensione e formula) e riepilogo Gold / Silver, aggiornati mentre si compila.
-  function syncGsFields(f) {
-    const box = f.querySelector('[data-gs-pools]');
-    if (!box) return;
-    const n = +f.mainSizeGs.value || 0;
-    const P = Math.max(1, Math.min(16, +f.gsPools.value || 1));
-    const key = `${n}|${P}`;
-    const lock = box.dataset.lock === '1';
-    if (box.dataset.key !== key) {
-      // valori attuali (o quelli salvati) se tornano con il nuovo numero di gironi, altrimenti distribuzione automatica
-      let sizes = [...box.querySelectorAll('[name=gsSize]')].map(x => +x.value);
-      let modes = [...box.querySelectorAll('[name=gsMode]')].map(x => x.value);
-      if (!box.dataset.key) { sizes = (box.dataset.sizes || '').split(',').filter(Boolean).map(Number); modes = (box.dataset.modes || '').split(','); }
-      if (sizes.length !== P || sizes.reduce((a, b) => a + b, 0) !== n) sizes = Array.from({ length: P }, (_, i) => Math.floor(n / P) + (i < n % P ? 1 : 0));
-      box.dataset.key = key;
-      box.innerHTML = sizes.map((size, i) => `<div class="gs-pool">
-          <b>${esc(t('pool'))} ${String.fromCharCode(65 + i)}</b>
-          <select name="gsSize" ${lock ? 'disabled' : ''} aria-label="${esc(t('teamsWord'))}">${[3, 4, 5].map(k => `<option value="${k}" ${k === size ? 'selected' : ''}>${k} ${esc(t('teamsWord'))}</option>`).join('')}${size < 3 || size > 5 ? `<option value="${size}" selected>${size} ${esc(t('teamsWord'))}</option>` : ''}</select>
-          <select name="gsMode" ${lock ? 'disabled' : ''} aria-label="${esc(t('gsMode'))}">
-            <option value="rr" ${modes[i] !== 'fivb' ? 'selected' : ''}>${esc(t('gsModeRr'))}</option>
-            <option value="fivb" ${modes[i] === 'fivb' ? 'selected' : ''}>${esc(t('gsModeFivb'))}</option>
-          </select>
-        </div>`).join('');
-    }
-    // la formula FIVB esiste solo per i gironi da 4
-    box.querySelectorAll('.gs-pool').forEach(row => {
-      const size = +row.querySelector('[name=gsSize]').value, mode = row.querySelector('[name=gsMode]');
-      if (size !== 4) mode.value = 'rr';
-      mode.disabled = lock || size !== 4;
-    });
-    const sizes = [...box.querySelectorAll('[name=gsSize]')].map(x => +x.value);
-    const tot = sizes.reduce((a, b) => a + b, 0);
-    const gold = Math.max(0, +f.goldSpots.value || 0);
-    const sum = f.querySelector('[data-gs-summary]');
-    const problems = [];
-    if (tot !== n) problems.push(t('gsSumErr', { s: tot, n }));
-    if (sizes.some(x => x < 3 || x > 5)) problems.push(t('errPoolSizes'));
-    if (gold < 2 || gold > Math.min(16, n)) problems.push(t('errGoldSpots', { max: Math.min(16, n) }));
-    if (problems.length) { sum.textContent = '⚠ ' + problems.join(' '); sum.classList.add('warn'); return; }
-    // chi va nel Gold: 1ª, 2ª... e le migliori della posizione successiva
-    const parts = [];
-    let left = gold;
-    for (let r = 0; left > 0 && r < 5; r++) {
-      const avail = sizes.filter(x => x > r).length;
-      if (!avail) break;
-      const take = Math.min(avail, left);
-      parts.push(take === avail ? t('gsAll', { n: avail, r: r + 1 }) : t('gsBest', { n: take, r: r + 1 }));
-      left -= take;
-    }
-    sum.textContent = '✔ ' + t('gsSummary', { g: gold, parts: parts.join(', '), s: n - gold });
-    sum.classList.remove('warn');
-  }
-
-  function syncTournamentForm(f) {
-    const format = f.format.value, sets = +f.setsToWin.value;
-    f.querySelectorAll('[data-show-format]').forEach(el => { el.hidden = !el.dataset.showFormat.split(' ').includes(format); });
-    f.querySelectorAll('[data-hide-format]').forEach(el => { el.hidden = el.dataset.hideFormat.split(' ').includes(format); });
-    if (format === 'gold_silver') syncGsFields(f);
-    f.querySelectorAll('[data-show-sets]').forEach(el => { el.hidden = sets === 1; });
-    const d = f.querySelector('[data-format-desc]');
-    if (d) d.textContent = t('fmtDesc_' + format);
-    const comp = f.querySelector('[data-composition]');
-    if (comp) {
-      const n = format === 'gold_silver' ? +f.mainSizeGs.value || 0 : +f.mainSize.value, dir = +f.directSpots.value || 0, q = +f.qualSpots.value || 0, w = +f.wcSpots.value || 0;
-      const ok = dir + q + w === n;
-      comp.textContent = ok ? '✔ ' + t('mainComposition', { n, d: dir, q, w }) : '⚠ ' + t('errComposition', { n, s: dir + q + w });
-      comp.classList.toggle('warn', !ok);
-    }
-  }
-
-  function readTournamentForm(f, tour) {
-    const num = (name, min, def) => { const x = parseFloat(String(f[name].value).replace(',', '.')); return isNaN(x) ? def : Math.max(min, x); };
-    const data = {
-      name: f.name.value.trim(), location: f.location.value.trim(), categoryId: f.categoryId.value,
-      coefficient: num('coefficient', 0, 1),
-      start: f.start.value, end: f.end.value, inquiry: f.inquiry.value, qualStart: f.qualStart.value, qualEnd: f.qualEnd.value,
-      mainStart: f.mainStart.value, mainEnd: f.mainEnd.value
-    };
-    if (!tour || !tour.entries.length) data.gender = f.gender.value;
-    const cfg = Object.assign({}, tour ? tour.config : L.defaultConfig());
-    if (!tour || !(tour.qual || tour.mainIds)) {
-      data.format = f.format.value;
-      Object.assign(cfg, {
-        poolSize: Math.round(num('poolSize', 2, 4)), qualify: Math.round(num('qualify', 1, 2)),
-        setsToWin: +f.setsToWin.value, setPoints: Math.round(num('setPoints', 5, 21)),
-        tiebreakPoints: Math.round(num('tiebreakPoints', 5, 15))
-      });
-    }
-    if (!tour || !tour.entryLocked) {
-      Object.assign(cfg, {
-        mainSize: Math.round(num('mainSize', 2, 16)), directSpots: Math.round(num('directSpots', 0, 0)),
-        qualSpots: Math.round(num('qualSpots', 0, 0)), wcSpots: Math.round(num('wcSpots', 0, 0)),
-        qualWcSpots: Math.round(num('qualWcSpots', 0, 0)), qualMax: Math.round(num('qualMax', 0, 0))
-      });
-    }
-    if (!tour || !tour.bracket) cfg.thirdPlace = f.thirdPlace.checked;
-    // Gold & Silver: gironi, squadre al Gold, finali 3°/4°, tabelle punti (solo per questo formato)
-    const fmt = data.format || (tour && tour.format);
-    if (fmt === 'gold_silver') {
-      if (!tour || !tour.entryLocked) cfg.mainSize = Math.round(num('mainSizeGs', 2, 16));
-      if (!tour || !(tour.qual || tour.mainIds)) {
-        const sizes = [...f.querySelectorAll('[name=gsSize]')].map(x => +x.value);
-        const modes = [...f.querySelectorAll('[name=gsMode]')].map((x, i) => (sizes[i] === 4 && x.value === 'fivb' ? 'fivb' : 'rr'));
-        Object.assign(cfg, { poolCount: sizes.length || Math.round(num('gsPools', 1, 4)), poolSizes: sizes, poolModes: modes });
-      }
-      if (!tour || !tour.bracket) {
-        cfg.goldSpots = Math.round(num('goldSpots', 2, 8));
-        cfg.thirdPlace = f.goldThird.checked;
-        cfg.silverThird = f.silverThird.checked;
-      }
-      const rows = which => {
-        const pl = [...f.querySelectorAll(`[name=${which}Place]`)].map(x => parseInt(x.value, 10));
-        const pt = [...f.querySelectorAll(`[name=${which}Pts]`)].map(x => parseFloat(String(x.value).replace(',', '.')));
-        return pl.map((p, i) => [p, pt[i]]).filter(r => r[0] > 0 && r[1] >= 0).sort((a, b) => a[0] - b[0]);
-      };
-      data.goldRows = rows('gold');
-      data.silverRows = rows('silver');
-    }
-    data.config = cfg;
-    return data;
-  }
-
-  // ---------- torneo ----------
-  function tabsFor(tour) {
-    const ph = regPhase(tour);
-    if (ph && ph !== 'formula') {
-      const tb = ['info', 'entries'];
-      if (tourAdmin()) tb.push('manage', 'edit');
-      return tb;
-    }
-    const tabs = ['info', 'entries', 'calendar'];
-    if (tour.qual) tabs.push('qual');
-    if (tour.pools) tabs.push('pools');
-    if (tour.bracket) tabs.push('bracket');
-    tabs.push('final');
-    if (tourAdmin() || scorerTour(tour)) tabs.push('referti');
-    if (tourAdmin()) tabs.push('manage', 'edit');
-    return tabs;
-  }
-
-  function viewTournament(tour, tab) {
-    const tabs = tabsFor(tour);
-    if (!tabs.includes(tab)) tab = tourAdmin() ? 'manage' : 'info';
-    const st = L.status(tour);
-    const cat = catById(tour.categoryId);
-    const body = {
-      info: tabInfo, entries: tabEntries, calendar: tabCalendar, qual: tabQual, pools: tabPools,
-      bracket: tabBracket, final: tabFinal, referti: tabReferti, manage: tabManage, edit: tabEdit
-    }[tab](tour);
-    return `
-      <div class="page-head">
-        <a class="back" href="#/tournaments">← ${esc(t('tournaments'))}</a>
-        <h1>${esc(tour.name)}</h1>
-        <p class="meta">
-          <span class="badge g-${tour.gender}">${esc(genderLabel(tour.gender))}</span>
-          ${cat ? `<span class="badge cat">${esc(cat.name)}</span>` : ''}
-          <span class="badge st-${st}">${esc(t('st_' + st))}</span>
-          <span class="muted"><i class="ti ti-calendar" aria-hidden="true"></i> ${esc(fmtRange(tour.start, tour.end))}${tour.location ? ` &nbsp;<i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(tour.location)}` : ''}</span>
-        </p>
-      </div>
-      ${noticeBox(tour.id, tour.notice)}
-      <nav class="tabs" aria-label="${esc(t('sections'))}">
-        ${tabs.map(k => `<a href="#/t/${tour.id}/${k}" class="${k === tab ? 'active' : ''} ${k === 'manage' || k === 'edit' ? 'tab-admin' : ''}">${esc(t('tab_' + k))}</a>`).join('')}
-      </nav>
-      <section class="tab-body">${body}</section>`;
-  }
-
-  // Scheda: impostazioni delle iscrizioni finché la lista non è confermata, poi la formula completa.
-  function tabEdit(tour) {
-    const ph = regPhase(tour);
-    if (ph && ph !== 'confirmed' && ph !== 'formula') return regForm(tour);
-    if (ph && !S().categories.length) return `<div class="card"><p>${esc(t('needCategoryFirst'))}</p><a class="btn primary" href="#/categories">${esc(t('goCategories'))} →</a></div>`;
-    return (ph === 'confirmed' ? `<p class="note"><i class="ti ti-info-circle" aria-hidden="true"></i> ${esc(t('regFormulaNote', { n: tour.entries.length }))}</p>` : '') + tournamentForm(tour);
-  }
-
-  function gsPointsCard(tour) {
-    const tbl = (title, rows, offset) => `<h3>${esc(title)}</h3><div class="table-wrap"><table class="table">
-        <thead><tr><th>${esc(t('place'))}</th><th class="num">${esc(t('teamPts'))}</th><th class="num">${esc(t('perPlayer'))}</th></tr></thead>
-        <tbody>${rows.slice().sort((a, b) => a[0] - b[0]).map((r, i, arr) => {
-          const next = arr[i + 1];
-          const range = next && next[0] - 1 > r[0] ? `${r[0]}°–${next[0] - 1}°` : `${r[0]}°${next ? '' : '+'}`;
-          const tp = L.teamPoints(S(), tour, r[0] + offset);
-          return `<tr><td>${range}</td><td class="num"><strong>${fmtPts(tp)}</strong></td><td class="num">${fmtPts(tp / 2)}</td></tr>`;
-        }).join('')}</tbody></table></div>`;
-    return `<div class="card">
-      <h2>${esc(t('pointsAwarded'))}</h2>
-      ${tbl(t('goldTable'), tour.goldRows || [], 0)}
-      ${tbl(t('silverTable'), tour.silverRows || [], L.goldCount(tour))}
-      <p class="muted small">${esc(t('pointsFormula', { coef: fmtPts(tour.coefficient) }))}</p>
-    </div>`;
-  }
-
-  function tabInfo(tour) {
-    const ph = regPhase(tour);
-    if (ph && ph !== 'formula' && tour.reg.formulaSet) return regBox(tour) + tabInfoFull(tour);
-    if (ph && ph !== 'formula') {
-      const r = tour.reg;
-      const row = (k, v) => v ? `<div class="kv"><span>${esc(t(k))}</span><strong>${v}</strong></div>` : '';
-      return regBox(tour) + `<div class="card">
-        <h2>${esc(t('details'))}</h2>
-        ${row('startDateTime', esc(fmtDateTime(r.startAt)))}
-        ${row('gender', esc(genderLabel(tour.gender)))}
-        ${row('location', esc(tour.location))}
-        ${row('maxTeams', esc(r.maxTeams))}
-        ${row('regDeadline', esc(fmtDateTime(r.deadline)))}
-        <p class="muted small">${esc(t('regFormulaLater'))}</p>
-      </div>`;
-    }
-    return tabInfoFull(tour);
-  }
-
-  function tabInfoFull(tour) {
-    const c = tour.config, cat = catById(tour.categoryId);
-    const rows = cat ? cat.rows.slice().sort((a, b) => a[0] - b[0]) : [];
-    const row = (k, v) => v ? `<div class="kv"><span>${esc(t(k))}</span><strong>${v}</strong></div>` : '';
-    const direct = Math.max(0, c.mainSize - c.qualSpots - c.wcSpots);
-    return `
-      <div class="pools-grid">
-        <div class="card">
-          <h2>${esc(t('details'))}</h2>
-          ${row('category', esc(cat ? cat.name : '—'))}
-          ${row('coefficient', '×' + esc(fmtPts(tour.coefficient)))}
-          ${row('location', esc(tour.location))}
-          ${row('tournamentDates', esc(fmtRange(tour.start, tour.end)))}
-          ${row('inquiry', esc(fmtDateTime(tour.inquiry)))}
-          ${row('qualification', esc([fmtDateTime(tour.qualStart), tour.qualEnd ? fmtDate(tour.qualEnd) : ''].filter(Boolean).join(' → ')))}
-          ${row('mainDraw', esc([fmtDateTime(tour.mainStart), tour.mainEnd ? fmtDate(tour.mainEnd) : ''].filter(Boolean).join(' → ')))}
-          ${row('format', esc(formatSummary(tour)))}
-          ${row('mainSize', esc(t('mainComposition', { n: c.mainSize, d: direct, q: c.qualSpots, w: c.wcSpots })))}
-          ${c.qualSpots ? row('qualMax', esc(c.qualMax ? c.qualMax : t('unlimited'))) : ''}
-          ${c.qualSpots && c.qualWcSpots ? row('qualWcSpots', esc(c.qualWcSpots)) : ''}
-        </div>
-        ${tour.format === 'gold_silver' ? gsPointsCard(tour) : `<div class="card">
-          <h2>${esc(t('pointsAwarded'))}</h2>
-          <div class="table-wrap"><table class="table">
-            <thead><tr><th>${esc(t('place'))}</th><th class="num">${esc(t('teamPts'))}</th><th class="num">${esc(t('perPlayer'))}</th></tr></thead>
-            <tbody>${rows.map((r, i) => {
-              const next = rows[i + 1];
-              const range = next && next[0] - 1 > r[0] ? `${r[0]}°–${next[0] - 1}°` : `${r[0]}°${next ? '' : '+'}`;
-              const tp = L.teamPoints(S(), tour, r[0]);
-              return `<tr><td>${range}</td><td class="num"><strong>${fmtPts(tp)}</strong></td><td class="num">${fmtPts(tp / 2)}</td></tr>`;
-            }).join('')}</tbody></table></div>
-          <p class="muted small">${esc(t('pointsFormula', { coef: fmtPts(tour.coefficient) }))}</p>
-        </div>`}
-      </div>`;
-  }
-
-  // Tabella di squadre con punti dei giocatori (lista d'ingresso).
-  function entryTable(tour, ids, opts) {
-    opts = opts || {};
-    const map = rankMap(tour.gender);
-    if (!ids.length) return `<p class="muted">${esc(t('noTeams'))}</p>`;
-    const qualWinners = tour.qualClosed && tour.qual ? new Set(L.qualWinners(tour) || []) : new Set();
-    const wcSet = new Set(tour.split ? tour.split.wc : tour.entries.filter(e => e.wc === 'main').map(e => e.id));
-    const qwcSet = new Set(tour.split ? (tour.split.qualWc || []) : tour.entries.filter(e => e.wc === 'qual').map(e => e.id));
-    const rows = ids.map((id, i) => {
-      const e = entryById(tour, id);
-      if (!e) return '';
-      const [p1, p2] = L.entryPts(tour, e, map);
-      const a = player(e.p1), b = player(e.p2);
-      const ptsCell = (which, val, man) => opts.editable
-        ? `<input class="pts-input" type="number" step="0.01" min="0" inputmode="decimal" value="${man != null ? man : ''}" placeholder="${fmtPts(val)}" data-change="entry-pts" data-tid="${tour.id}" data-id="${e.id}" data-which="${which}" aria-label="${esc(t('points'))}">`
-        : `<b>${fmtPts(val)}</b>`;
-      const badges = `${wcSet.has(id) ? '<span class="badge wc">WC</span>' : ''}${qwcSet.has(id) ? `<span class="badge wc" title="${esc(t('qualWcSpots'))}">WC-Q</span>` : ''}${qualWinners.has(id) ? '<span class="badge q">Q</span>' : ''}`;
-      return `<tr>
-        <td class="num">${opts.posInput
-          ? `<input class="pos-input" type="number" min="1" max="${ids.length}" inputmode="numeric" value="${i + 1}" data-change="main-pos" data-tid="${tour.id}" data-id="${e.id}" aria-label="${esc(t('movePos'))}" title="${esc(t('movePos'))}">`
-          : i + 1 + (opts.offset || 0)}</td>
-        <td>
-          <div class="entry-player"><a href="#/p/${e.p1}">${esc(playerFull(a))}</a> ${ptsCell(1, p1, e.man1)}</div>
-          <div class="entry-player"><a href="#/p/${e.p2}">${esc(playerFull(b))}</a> ${ptsCell(2, p2, e.man2)}</div>
-        </td>
-        <td class="num"><strong>${fmtPts(p1 + p2)}</strong> ${badges}</td>
-        ${opts.editable || opts.movable ? `<td class="num nowrap">
-          <button class="icon-btn" data-action="${opts.movable === 'main' ? 'main-move' : 'entry-move'}" data-dir="-1" data-tid="${tour.id}" data-id="${e.id}" aria-label="${esc(t('moveUp'))}" ${i === 0 ? 'disabled' : ''}>↑</button>
-          <button class="icon-btn" data-action="${opts.movable === 'main' ? 'main-move' : 'entry-move'}" data-dir="1" data-tid="${tour.id}" data-id="${e.id}" aria-label="${esc(t('moveDown'))}" ${i === ids.length - 1 ? 'disabled' : ''}>↓</button>
-          ${opts.editable ? `
-          <select class="wc-select" data-change="entry-wc" data-tid="${tour.id}" data-id="${e.id}" aria-label="${esc(t('wildCard'))}">
-            <option value="" ${e.wc ? '' : 'selected'}>—</option>
-            <option value="main" ${sel(e.wc, 'main')}>WC</option>
-            <option value="qual" ${sel(e.wc, 'qual')}>WC-Q</option>
-          </select>
-          ${opts.editBtn ? `<button class="icon-btn" data-action="entry-edit-open" data-tid="${tour.id}" data-id="${e.id}" title="${esc(t('edit'))}" aria-label="${esc(t('edit'))}"><i class="ti ti-pencil" aria-hidden="true"></i></button>` : ''}
-          <button class="icon-btn" data-action="remove-entry" data-tid="${tour.id}" data-id="${e.id}" title="${esc(t('remove'))}" aria-label="${esc(t('remove'))}">✕</button>` : ''}
-        </td>` : ''}
-      </tr>`;
-    }).join('');
-    return `<div class="table-wrap"><table class="table entries">
-      <thead><tr><th class="num">#</th><th>${esc(t('team'))} · ${esc(t('rankPts'))}</th><th class="num">${esc(t('total'))}</th>${opts.editable || opts.movable ? '<th></th>' : ''}</tr></thead>
-      <tbody>${rows}</tbody></table></div>`;
-  }
-
-  function tabEntries(tour) {
-    const rph = regPhase(tour);
-    if (rph === 'open' || rph === 'expired' || rph === 'soon') {
-      return (presetCount(tour) ? `<div class="card"><h2>${esc(t('regPresetTitle'))} (${presetCount(tour)})</h2>${entryTable(tour, tour.entries.filter(e => !e.regId).map(e => e.id))}</div>` : '')
-        + `<div class="card"><h2>${esc(t('regRegistered'))} (${regsOf(tour).length + presetCount(tour)}/${tour.reg.maxTeams})</h2>
-        <p class="muted small">${esc(t('regListHelp', { n: Math.max(0, tour.reg.maxTeams - presetCount(tour)) }))}</p>${regList(tour)}</div>`;
-    }
-    const card = (title, ids, note, offset) => `<div class="card"><h2>${esc(title)} (${ids.length})</h2>${note ? `<p class="muted small">${esc(note)}</p>` : ''}${entryTable(tour, ids, { offset })}</div>`;
-    if (tour.mainList) {
-      return card(t('mainDrawList'), tour.mainList, tour.mainLocked ? '' : t('listProvisional'))
-        + (tour.split && tour.split.reserve.length ? card(t('reserves'), tour.split.reserve) : '');
-    }
-    if (tour.split) {
-      return card(t('mainDrawDirect'), tour.split.main)
-        + (tour.config.qualSpots ? card(t('qualEntries'), tour.split.qual, t('qualEntriesNote', { spots: tour.config.qualSpots })) : '')
-        + (tour.split.reserve.length ? card(t('reserves'), tour.split.reserve) : '');
-    }
-    return card(t('entryList'), tour.entries.map(e => e.id), t('listProvisional'));
-  }
-
-  // ---------- calendario ----------
-  function dayTitle(d) {
-    const dt = new Date(d + 'T12:00:00');
-    if (isNaN(dt)) return d;
-    const s = dt.toLocaleDateString(I18n.locale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    return s.charAt(0).toUpperCase() + s.slice(1);
-  }
-
-  // Calendario: per giorno (ordine di orario; "a seguire" dopo la gara precedente sullo stesso campo) o per fase.
-  function tabCalendar(tour) {
-    const planned = L.plannedMatches(tour).filter(m => !(m.bye && m.a === L.BYE && m.b === L.BYE));
-    if (!planned.length) return `<div class="card"><p class="muted">${esc(t('noMatchesYet'))}</p></div>`;
-    // I visitatori vedono solo le gare pubblicate.
-    const matches = tourAdmin() ? planned : planned.filter(m => isVisible(tour, m));
-    if (!matches.length) return `<div class="card"><p class="muted"><i class="ti ti-eye-off" aria-hidden="true"></i> ${esc(t('calendarNotPublished'))}</p></div>`;
-    const view = ui.calView || 'day';
-    const views = [['number', 'hash', 'calByNumber'], ['day', 'calendar-event', 'calByDay'], ['court', 'map-pin', 'calByCourt'], ['phase', 'list-details', 'calByPhase']];
-    const toggle = `<div class="toolbar"><span class="muted small">${esc(t('sortBy'))}</span><div class="segmented wrap" role="group">
-      ${views.map(([v, ic, k]) => `<button data-action="cal-view" data-view="${v}" aria-pressed="${view === v}"><i class="ti ti-${ic}" aria-hidden="true"></i> ${esc(t(k))}</button>`).join('')}
-    </div></div>`;
-    const groups = [];
-    const push = (title, m, icon) => {
-      if (!groups.length || groups[groups.length - 1].title !== title) groups.push({ title, icon, items: [] });
-      groups[groups.length - 1].items.push(m);
-    };
-    // Chiave di ordinamento per data e orario: le gare "a seguire" dopo la precedente sullo stesso campo.
-    const timeKey = {};
-    const last = {};
-    matches.forEach((m, i) => {
-      const s = tour.schedule[m.key];
-      if (!s || !s.date) return;
-      const seq = String(i).padStart(4, '0');
-      let base;
-      if (s.time && !s.follow) { base = s.time; last[s.date + '|' + (s.court || '')] = s.time; last[s.date] = s.time; }
-      else base = last[s.date + '|' + (s.court || '')] || last[s.date] || '99:99';
-      timeKey[m.key] = `${s.date} ${base}~${s.follow ? seq : '0000' + seq}`;
-    });
-    const num = m => { const s = gNo(tour, m); return s ? (s[0] === 'Q' ? 0 : 1e6) + parseInt(s.slice(1), 10) : 1e9; };
-    // Per tempo: prima le gare con data e orario (in ordine), poi quelle da programmare in ordine di numero di gara.
-    const byTime = list => list.slice().sort((a, b) => {
-      const ka = timeKey[a.key], kb = timeKey[b.key];
-      if (ka && kb) return ka.localeCompare(kb);
-      if (ka || kb) return ka ? -1 : 1;
-      return num(a) - num(b);
-    });
-
-    if (view === 'phase') {
-      matches.forEach(m => push(m.stage === 'qual' ? t('qualification') : m.stage === 'pool' ? t('tab_pools') : t('mainDraw'), m));
-    } else if (view === 'number') {
-      matches.slice().sort((a, b) => num(a) - num(b)).forEach(m => push(t('allMatches'), m, 'hash'));
-    } else if (view === 'court') {
-      const courtOf = m => ((tour.schedule[m.key] || {}).court || '').trim();
-      const courts = [...new Set(matches.map(courtOf))].sort((a, b) => !a ? 1 : !b ? -1 : a.localeCompare(b, undefined, { numeric: true }));
-      courts.forEach(c => byTime(matches.filter(m => courtOf(m) === c)).forEach(m => push(c ? `${t('court')} ${c}` : t('courtTbd'), m, 'map-pin')));
-    } else {
-      byTime(matches).forEach(m => {
-        if (timeKey[m.key]) push(dayTitle(tour.schedule[m.key].date), m, 'calendar-event');
-        else push(t('toSchedule'), m, 'clock-question');
-      });
-    }
-    const gsNote = tourAdmin() && tour.format === 'gold_silver' && tour.gsNums
-      ? `<p class="note"><i class="ti ti-hash" aria-hidden="true"></i> ${esc(t('gsNumsChanged'))} <button class="btn small" data-action="gs-nums-reset" data-tid="${tour.id}">${esc(t('gsNumsReset'))}</button></p>` : '';
-    return visibilityBar(tour, planned) + toggle + gsNote + groups.map(g => `
-      <div class="card">
-        <div class="card-head"><h2>${g.icon ? `<i class="ti ti-${g.icon}" aria-hidden="true"></i> ` : ''}${esc(g.title)} <span class="muted small">(${g.items.length})</span></h2>${groupVisButtons(tour, g.items)}</div>
-        <ul class="cal-list">${g.items.map(m => calRow(tour, m, view === 'day')).join('')}</ul>
-      </div>`).join('');
-  }
-
-  // Data sempre indicata; orario oppure "a seguire"; campo. Nella vista per giorno la data è nell'intestazione.
-  function scheduleText(tour, key, hideDate) {
-    const s = tour.schedule[key];
-    if (!s) return '';
-    return [hideDate || !s.date ? '' : fmtDate(s.date), s.follow ? t('toFollow') : s.time || '', s.court ? `${t('court')} ${s.court}` : '']
-      .filter(Boolean).join(' · ');
-  }
-
-  function scoreBlock(tour, m) {
-    if (m.stats) {
-      const sets = m.res.sets.map(([a, b]) => `${a}-${b}`).join(' ');
-      return `<strong>${m.stats.a.sw}-${m.stats.b.sw}</strong><small>${esc([sets, m.stats.tag].filter(Boolean).join(' '))}</small>`;
-    }
-    if (tourAdmin() && m.draft) return `<small class="draft">${esc(t('notClosed'))}</small>`;
-    return '';
-  }
-
-  function canEdit(tour) { return tourAdmin() && !tour.closed; }
-
-  // ---------- referto elettronico: punteggio in diretta e risultato in attesa di omologa ----------
-  const liveId = (tour, key) => `${tour.id}_${key}`;
-  // Dati del referto per una gara ancora senza risultato ufficiale (null se assente o per altre squadre).
-  function liveFor(tour, m) {
-    const lv = S().live && S().live[liveId(tour, m.key)];
-    if (!lv || m.stats || lv.a !== m.a || lv.b !== m.b) return null;
-    if (lv.status === 'live' && !(lv.sets && lv.sets.length)) return null;
-    return lv.status === 'live' || lv.status === 'finished' ? lv : null;
-  }
-  function rawLive(tour, m) {
-    const lv = S().live && S().live[liveId(tour, m.key)];
-    return lv && lv.a === m.a && lv.b === m.b ? lv : null;
-  }
-  const liveSummary = lv => `${lv.setsWon.a}-${lv.setsWon.b}${lv.sets && lv.sets.length ? ` (${lv.sets.map(x => `${x[0]}-${x[1]}`).join(', ')})` : ''}${lv.outcome ? ` · ${lv.outcome.type.toUpperCase()}` : ''}`;
-  const liveSets = lv => (lv.sets || []).map(x => `${x[0]}-${x[1]}`).join('  ');
-  const liveTag = lv => lv.status === 'live'
-    ? `<span class="live-badge"><i class="dot" aria-hidden="true"></i>${esc(t('liveBadge'))}</span>`
-    : `<span class="pending-badge"><i class="ti ti-hourglass" aria-hidden="true"></i> ${esc(t('pendingBadge'))}</span>`;
-  const liveWin = (lv, side) => lv.status === 'finished' && lv.winner === side;
-  // Pulsanti accanto alla gara (admin): link per il refertista e, se il referto è concluso, omologa.
-  function escoreButtons(tour, m) {
-    if (!(canEdit(tour) || (scorerTour(tour) && !tour.closed)) || m.bye || m.stats || !L.real(m.a) || !L.real(m.b)) return '';
-    const lv = liveFor(tour, m);
-    return `<div class="cal-actions">
-      <button class="btn small escore-btn" data-action="escore-open" data-tid="${tour.id}" data-key="${m.key}" title="${esc(t('escoreTitle'))}"><i class="ti ti-device-mobile" aria-hidden="true"></i> ${esc(t('escoreBtn'))}</button>
-      ${lv && lv.status === 'finished' && tourAdmin() ? `<button class="btn small primary" data-action="escore-approve" data-tid="${tour.id}" data-key="${m.key}"><i class="ti ti-rosette-discount-check" aria-hidden="true"></i> ${esc(t('approveResult'))}</button>` : ''}
-    </div>`;
-  }
-
-  // ---------- visibilità delle gare ai visitatori ----------
-  const isVisible = (tour, m) => !!(tour.visible && tour.visible[m.key]);
-
-  function visToggle(tour, key, vis) {
-    return `<button class="vis-toggle ${vis ? 'on' : ''}" data-action="toggle-visible" data-tid="${tour.id}" data-key="${key}"
-      title="${esc(t(vis ? 'hideGroup' : 'publishGroup'))}" aria-label="${esc(t('visibleToPublic'))}" aria-pressed="${vis}">
-      <i class="ti ti-${vis ? 'eye' : 'eye-off'}" aria-hidden="true"></i></button>`;
-  }
-
-  function visibilityBar(tour, planned) {
-    if (!tourAdmin()) return '';
-    const n = planned.length, v = planned.filter(m => isVisible(tour, m)).length;
-    return `<div class="card vis-bar">
-      <div class="vis-count"><i class="ti ti-${v === n ? 'eye' : 'eye-off'}" aria-hidden="true"></i> <strong>${esc(t('visibleCount', { v, n }))}</strong></div>
-      <p class="muted small">${esc(t('visibilityHelp'))}</p>
-      <div class="btn-row">
-        <button class="btn small primary" data-action="vis-all" data-tid="${tour.id}" data-value="1"><i class="ti ti-eye" aria-hidden="true"></i> ${esc(t('publishAll'))}</button>
-        <button class="btn small" data-action="vis-all" data-tid="${tour.id}" data-value="0"><i class="ti ti-eye-off" aria-hidden="true"></i> ${esc(t('hideAll'))}</button>
-        <a class="btn small" href="#/t/${tour.id}/referti"><i class="ti ti-folder" aria-hidden="true"></i> ${esc(t('archive'))}</a>
-      </div>
-    </div>`;
-  }
-
-  function groupVisButtons(tour, items) {
-    if (!tourAdmin()) return '';
-    const keys = items.map(m => m.key).join(',');
-    const allVis = items.every(m => isVisible(tour, m));
-    return `<button class="btn small" data-action="vis-group" data-tid="${tour.id}" data-keys="${esc(keys)}" data-value="${allVis ? 0 : 1}">
-      <i class="ti ti-${allVis ? 'eye-off' : 'eye'}" aria-hidden="true"></i> ${esc(t(allVis ? 'hideGroup' : 'publishGroup'))}</button>`;
-  }
-
-  function setVisible(tour, keys, value) {
-    keys.forEach(k => { if (value) tour.visible[k] = true; else delete tour.visible[k]; });
-  }
-
-  function calRow(tour, m, hideDate) {
-    const s = m.stats;
-    const lv = liveFor(tour, m);
-    const edit = canEdit(tour);
-    const when = scheduleText(tour, m.key, hideDate);
-    const sets = s ? [m.res.sets.map(([a, b]) => `${a}-${b}`).join('  '), s.tag].filter(Boolean).join(' · ') : lv ? liveSets(lv) : '';
-    const line = (id, side) => `<span class="cal-team ${(s && s.winner === side) || (lv && liveWin(lv, side)) ? 'win' : ''}">
-        <span class="nm">${slotName(tour, m, side === 'b' ? 1 : 0)}</span><b class="sc">${s ? s[side].sw : lv ? lv.setsWon[side] : ''}</b></span>`;
-    const inner = `
-      <span class="cal-head">
-        <span class="cal-when">${when ? `<i class="ti ti-clock" aria-hidden="true"></i> ${esc(when)}` : `<span class="muted">${esc(t('toBeScheduled'))}</span>`}</span>
-        <span class="cal-phase">${tourAdmin() && !isVisible(tour, m) ? `<span class="badge hidden-b"><i class="ti ti-eye-off" aria-hidden="true"></i> ${esc(t('hiddenBadge'))}</span> ` : ''}${gNo(tour, m) ? `<b class="gno">${gNo(tour, m)}</b> ` : ''}${esc(phaseLabel(tour, m))}</span>
-      </span>
-      <span class="cal-teams">${line(m.a, 'a')}${line(m.b, 'b')}</span>
-      ${lv ? `<span class="cal-sets live-sets">${liveTag(lv)} ${esc(sets)}</span>` : sets ? `<span class="cal-sets">${esc(sets)}</span>` : tourAdmin() && m.draft ? `<span class="cal-sets draft">${esc(t('notClosed'))}</span>` : ''}`;
-    const vis = isVisible(tour, m);
-    return `<li class="cal-item ${s ? 'played' : ''} ${lv ? 'is-' + lv.status : ''} ${tourAdmin() ? 'with-vis' : ''} ${tourAdmin() && !vis ? 'is-hidden' : ''}">${tourAdmin() ? visToggle(tour, m.key, vis) : ''}${edit
-      ? `<button class="cal-btn" data-action="edit-match" data-tid="${tour.id}" data-key="${m.key}">${inner}</button>`
-      : `<div class="cal-btn">${inner}</div>`}${escoreButtons(tour, m)}</li>`;
-  }
-
-  // ---------- tabelloni ----------
-  function koCard(tour, m, title) {
-    // Gara nascosta: i visitatori vedono le squadre nel tabellone ma non orario, campo e risultato.
-    const vis = m.bye || isVisible(tour, m);
-    const show = tourAdmin() || vis;
-    const stats = show ? m.stats : null;
-    const lv = show ? liveFor(tour, m) : null;
-    const sets = stats ? m.res.sets : lv ? lv.sets || [] : [];
-    const edit = canEdit(tour) && !m.bye;
-    const line = (id, side) => `<div class="ko-team ${(stats && m.winner === id && L.real(id)) || (lv && liveWin(lv, side ? 'b' : 'a')) ? 'win' : ''}">
-        <span class="ko-name">${slotName(tour, m, side)}</span>
-        <span class="ko-sets">${sets.map(x => `<b>${x[side]}</b>`).join('')}</span></div>`;
-    const sch = show ? scheduleText(tour, m.key) : '';
-    return `<button class="ko-card ${stats ? 'played' : ''} ${m.bye ? 'is-bye' : ''}" ${edit ? '' : 'disabled'} data-action="edit-match" data-tid="${tour.id}" data-key="${m.key}">
-      ${gNo(tour, m) ? `<small class="gno-tag">${gNo(tour, m)}${tourAdmin() && !vis ? ` · <span class="hidden-b"><i class="ti ti-eye-off" aria-hidden="true"></i> ${esc(t('hiddenBadge'))}</span>` : ''}</small>` : ''}
-      ${line(m.a, 0)}${line(m.b, 1)}
-      ${stats && stats.tag ? `<small class="tag">${esc(stats.tag)}</small>` : ''}
-      ${lv ? `<small class="ko-live">${liveTag(lv)}</small>` : ''}
-      ${!stats && tourAdmin() && m.draft ? `<small class="draft">${esc(t('notClosed'))}</small>` : ''}
-      ${sch ? `<small class="muted">${esc(sch)}</small>` : ''}
-    </button>`;
-  }
-
-  // Tabellone: con connected=true le partite sono raggruppate a coppie e collegate da linee
-  // alla partita del turno successivo (le linee diventano colorate quando la gara è decisa).
-  function bracketCols(tour, rounds, labelFn, connected) {
-    const slot = m => `<div class="br-slot ${m.winner && L.real(m.winner) ? 'done' : ''}">${koCard(tour, m)}</div>`;
-    return `<div class="bracket ${connected ? 'connected' : ''}">${rounds.map((round, r) => {
-      let body;
-      if (connected && r < rounds.length - 1) {
-        const pairs = [];
-        for (let i = 0; i < round.length; i += 2) pairs.push(`<div class="br-pair">${slot(round[i])}${round[i + 1] ? slot(round[i + 1]) : ''}</div>`);
-        body = pairs.join('');
-      } else {
-        body = round.map(slot).join('');
-      }
-      return `<div class="br-col"><h3>${esc(labelFn(r))}</h3><div class="br-matches">${body}</div></div>`;
-    }).join('')}</div>`;
-  }
-
-  function tabQual(tour) {
-    const rounds = L.computeQual(tour);
-    const winners = L.qualWinners(tour);
-    return `
-      <p class="muted">${esc(t('qualSummary', { spots: tour.config.qualSpots }))}</p>
-      <div class="bracket-scroll">${bracketCols(tour, rounds, r => r === rounds.length - 1 ? t('qualDecisive') : t('qualRound', { n: r + 1 }), true)}</div>
-      ${winners ? `<div class="card"><h2>${esc(t('qualifiedTeams'))}</h2><ol class="plain-list">${winners.map(id => `<li>${teamName(tour, id)}</li>`).join('')}</ol></div>` : ''}`;
-  }
-
-  function tabPools(tour) {
-    const qualify = tour.format === 'round_robin' ? 0 : tour.config.qualify;
-    const gs = tour.format === 'gold_silver';
-    const goldIds = gs ? new Set(L.gsSplit(tour).gold.map(x => x.id)) : null;
-    return `<div class="pools-grid">${tour.pools.map((p, pi) => {
-      const st = L.poolStandings(tour, pi);
-      const matches = L.poolMatches(tour, pi);
-      return `<div class="card pool">
-        <h2>${esc(p.name ? `${t('pool')} ${p.name}` : t('singlePool'))}${gs ? ` <span class="badge">${esc(t(p.mode === 'fivb' ? 'gsModeFivb' : 'gsModeRr'))}</span>` : ''}</h2>
-        <div class="table-wrap"><table class="table standings">
-          <thead><tr><th class="num">#</th><th>${esc(t('team'))}</th><th class="num">${esc(t('winsShort'))}-${esc(t('lossesShort'))}</th><th class="num">${esc(t('ptsShort'))}</th><th class="num hide-sm">${esc(t('setsShort'))}</th><th class="num">${esc(t('pointsRatio'))}</th></tr></thead>
-          <tbody>${st.map((r, i) => `<tr class="${gs ? (goldIds.has(r.id) ? 'qualified' : '') : i < qualify ? 'qualified' : ''}">
-            <td class="num">${i + 1}</td><td>${teamName(tour, r.id)}</td><td class="num">${r.w}-${r.l}</td>
-            <td class="num"><strong>${r.mp}</strong></td><td class="num hide-sm">${r.sw}:${r.sl}</td>
-            <td class="num">${r.played ? (r.pl ? (r.pw / r.pl).toFixed(3) : '∞') : '—'}</td></tr>`).join('')}
-          </tbody></table></div>
-        <ul class="cal-list">${matches.filter(m => tourAdmin() || isVisible(tour, m)).map(m => calRow(tour, m)).join('')}</ul>
-      </div>`;
-    }).join('')}</div>
-    <p class="muted small">${esc(t(gs ? 'gsLegend' : tour.format === 'fivb_pools' ? 'fivbLegend' : 'tiebreakLegend'))}</p>`;
-  }
-
-  function teamText(tour, id) {
-    const e = entryById(tour, id);
-    if (!e) return '?';
-    const a = player(e.p1), b = player(e.p2);
-    return `${shortName(a)} / ${shortName(b)}`;
-  }
-
-  // Fase finale dopo i gironi: l'admin assegna le squadre qualificate alle partite del primo turno.
-  function slotAssignCard(tour) {
-    const br = tour.bracket;
-    if (!tourAdmin() || !br.manual || tour.closed) return '';
-    const cands = L.bracketCandidates(tour);
-    const byes = br.size - br.qualified;
-    const placed = br.slots.filter(Boolean).length;
-    const usedAt = {};
-    br.slots.forEach((id, i) => { if (id) usedAt[id] = i; });
-    const select = idx => {
-      const cur = br.slots[idx];
-      return `<select data-change="slot-assign" data-tid="${tour.id}" data-idx="${idx}" aria-label="${esc(t('chooseTeam'))}">
-        <option value="">— ${esc(t('chooseTeam'))} —</option>
-        ${cands.map(c => `<option value="${c.id}" ${cur === c.id ? 'selected' : ''}>${c.rank}° ${esc(t('pool'))} ${esc(c.pool)}${c.mp != null ? ` (${c.mp} ${esc(t('ptsShort'))})` : ''} · ${esc(teamText(tour, c.id))}${usedAt[c.id] != null && usedAt[c.id] !== idx ? ' ✓' : ''}</option>`).join('')}
-        ${byes ? `<option value="${L.BYE}" ${cur === L.BYE ? 'selected' : ''}>BYE</option>` : ''}
-      </select>`;
-    };
-    const clashes = tour.format === 'gold_silver' ? L.gsClashes(tour, br.slots) : [];
-    const clashNote = clashes.length ? `<p class="note warn"><i class="ti ti-alert-triangle" aria-hidden="true"></i> ${esc(t('gsClashWarn'))}<br>${clashes.map(c => esc(t('gsClashRow', { a: teamText(tour, c.a), b: teamText(tour, c.b), pool: c.pool }))).join('<br>')}</p>` : '';
-    const rows = [];
-    for (let i = 0; i < br.size / 2; i++) {
-      const no = nums(tour)['W0-' + i];
-      rows.push(`<div class="assign-row"><b class="gno">${no || '#' + (i + 1)}</b>${select(2 * i)}<span class="vs">vs</span>${select(2 * i + 1)}</div>`);
-    }
-    return `<div class="card">
-      <h2><i class="ti ti-arrows-shuffle" aria-hidden="true"></i> ${esc(t('assignTitle'))} <span class="badge ${placed === br.size ? 'st-done' : ''}">${placed}/${br.size}</span></h2>
-      <p class="muted small">${esc(tour.format === 'gold_silver' ? t('assignHelpGs', { b: byes }) : t('assignHelp', { q: tour.config.qualify, b: byes }))}</p>
-      ${clashNote}
-      <div class="assign-list">${rows.join('')}</div>
-      <div class="btn-row">
-        <button class="btn" data-action="auto-fill-bracket" data-tid="${tour.id}"><i class="ti ti-wand" aria-hidden="true"></i> ${esc(t('autoFill'))}</button>
-        <button class="btn" data-action="clear-bracket-slots" data-tid="${tour.id}"><i class="ti ti-eraser" aria-hidden="true"></i> ${esc(t('clearSlots'))}</button>
-      </div>
-    </div>`;
-  }
-
-  function tabBracket(tour) {
-    const cm = L.computeMain(tour);
-    const size = tour.bracket.size;
-    const assign = slotAssignCard(tour);
-    if (tour.format === 'gold_silver') {
-      const sv = cm.silver;
-      return `${assign}
-        <h2 class="section-title gs-title gold">🥇 Gold</h2>
-        ${cm.champion ? `<p class="champion"><i class="ti ti-trophy" aria-hidden="true"></i> ${teamName(tour, cm.champion)}</p>` : ''}
-        <div class="bracket-scroll">${bracketCols(tour, cm.rounds, r => roundLabel(size / 2 ** r), true)}</div>
-        ${cm.third ? `<div class="third"><h3>${esc(t('thirdPlace'))}</h3>${koCard(tour, cm.third)}</div>` : ''}
-        ${sv ? `<h2 class="section-title gs-title silver">🥈 Silver</h2>
-        ${sv.champion ? `<p class="champion"><i class="ti ti-trophy" aria-hidden="true"></i> ${teamName(tour, sv.champion)}</p>` : ''}
-        <div class="bracket-scroll">${bracketCols(tour, sv.rounds, r => roundLabel(tour.silver.size / 2 ** r), true)}</div>
-        ${sv.third ? `<div class="third"><h3>${esc(t('thirdPlace'))}</h3>${koCard(tour, sv.third)}</div>` : ''}` : ''}`;
-    }
-    if (cm.type === 'single') {
-      return `${assign}${cm.champion ? `<p class="champion"><i class="ti ti-trophy" aria-hidden="true"></i> ${teamName(tour, cm.champion)}</p>` : ''}
-        <div class="bracket-scroll">${bracketCols(tour, cm.rounds, r => roundLabel(size / 2 ** r), true)}</div>
-        ${cm.third ? `<div class="third"><h3>${esc(t('thirdPlace'))}</h3>${koCard(tour, cm.third)}</div>` : ''}`;
-    }
-    return `${cm.champion ? `<p class="champion"><i class="ti ti-trophy" aria-hidden="true"></i> ${teamName(tour, cm.champion)}</p>` : ''}
-      <h2 class="section-title">${esc(t('winnersBracket'))}</h2>
-      <div class="bracket-scroll">${bracketCols(tour, cm.wb, r => r === cm.wb.length - 1 ? t('final') : t('roundN', { n: r + 1 }), true)}</div>
-      <h2 class="section-title">${esc(t('losersBracket'))}</h2>
-      <div class="bracket-scroll">${bracketCols(tour, cm.lb, r => r === cm.lb.length - 1 ? t('final') : t('roundN', { n: r + 1 }), false)}</div>
-      <div class="third"><h3>${esc(t('grandFinal'))}</h3>${koCard(tour, cm.gf)}</div>`;
-  }
-
-  function tabFinal(tour) {
-    const pl = L.placements(tour);
-    if (!pl || (!tour.closed && !tourAdmin())) return `<div class="card"><p class="muted">${esc(t('finalNotReady'))}</p></div>`;
-    const rows = tour.entries.filter(e => pl[e.id] != null).sort((a, b) => pl[a.id] - pl[b.id]);
-    return `<div class="card">
-      <h2>${esc(t('finalStandings'))}</h2>
-      ${tour.closed ? '' : `<p class="note warn">${esc(t('finalPreview'))}</p>`}
-      <div class="table-wrap"><table class="table">
-        <thead><tr><th class="num">${esc(t('place'))}</th><th>${esc(t('team'))}</th><th class="num">${esc(t('teamPts'))}</th><th class="num">${esc(t('perPlayer'))}</th></tr></thead>
-        <tbody>${rows.map(e => {
-          const tp = L.teamPoints(S(), tour, pl[e.id]);
-          return `<tr class="${pl[e.id] <= 3 ? 'podium' : ''}">
-          <td class="num">${medal(pl[e.id])}</td>
-          <td>${teamName(tour, e.id)}${tour.format === 'gold_silver' ? ` <span class="badge ${pl[e.id] <= L.goldCount(tour) ? 'gs-gold' : 'gs-silver'}">${pl[e.id] <= L.goldCount(tour) ? 'Gold' : 'Silver'}</span>` : ''}<div class="muted small"><a href="#/p/${e.p1}">${esc(playerFull(player(e.p1)))}</a> · <a href="#/p/${e.p2}">${esc(playerFull(player(e.p2)))}</a></div></td>
-          <td class="num">${fmtPts(tp)}</td><td class="num"><strong>${fmtPts(tp / 2)}</strong></td></tr>`;
-        }).join('')}</tbody>
-      </table></div>
-    </div>`;
-  }
-
-  // ---------- gestione del torneo (admin) ----------
-  function stepIndex(tour) {
-    if (tour.closed) return 5;
-    if (tour.mainIds) return 4;
-    if (tour.qualClosed) return 3;
-    if (tour.qual || tour.entryLocked) return 2;
-    return 1;
-  }
-
-  // Gold & Silver: come verranno i gironi con l'ordine attuale della lista (serpentina).
-  function gsPreviewCard(tour) {
-    const ids = tour.mainList || [];
-    if (ids.length < 3) return '';
-    const sizes = L.gsSizes(tour, ids.length);
-    const pools = L.snakeSizes(ids, sizes);
-    const modes = tour.config.poolModes || [];
-    return `<div class="card">
-      <h2><i class="ti ti-layout-grid" aria-hidden="true"></i> ${esc(t('gsPreviewTitle'))}</h2>
-      <p class="muted small">${esc(t(tour.mainLocked ? 'gsPreviewHelpLocked' : 'gsPreviewHelp'))}</p>
-      <div class="gs-preview">${pools.map((teamIds, pi) => `<div class="gs-preview-pool">
-        <h3>${esc(t('pool'))} ${String.fromCharCode(65 + pi)} <span class="badge">${esc(t(teamIds.length === 4 && modes[pi] === 'fivb' ? 'gsModeFivb' : 'gsModeRr'))}</span></h3>
-        <ol>${teamIds.map(id => `<li><b class="seed-no">${ids.indexOf(id) + 1}</b> ${esc(teamText(tour, id))}</li>`).join('')}</ol>
-      </div>`).join('')}</div>
-    </div>`;
-  }
-
-  function tabManage(tour) {
-    const rph = regPhase(tour);
-    if (rph && rph !== 'formula') return regManagePanel(tour);
-    if (canOpenReg(tour) && ui.openRegFor === tour.id) return openRegCard(tour);
-    const step = stepIndex(tour);
-    const steps = ['stepEntries', 'stepQual', 'stepMainList', 'stepMain', 'stepClosed'];
-    const stepper = `<ol class="stepper">${steps.map((k, i) => `<li class="${i + 1 < step ? 'done' : i + 1 === step ? 'current' : ''}">${esc(t(k))}</li>`).join('')}</ol>`;
-    const btn = (action, label, cls, disabled, icon) => `<button class="btn ${cls || ''}" data-action="${action}" data-tid="${tour.id}" ${disabled ? 'disabled' : ''}>${icon ? `<i class="ti ti-${icon}" aria-hidden="true"></i> ` : ''}${esc(label)}</button>`;
-    let panel = '';
-
-    if (tour.closed) {
-      panel = `<div class="card"><h2><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(t('tournamentClosed'))}</h2><p class="muted">${esc(t('tournamentClosedHelp'))}</p>
-        <div class="btn-row">${btn('reopen-tournament', t('reopenTournament'), 'danger')}</div></div>`;
-    } else if (tour.mainIds) {
-      const all = L.allMatches(tour).filter(m => !m.bye && (m.stage !== 'qual'));
-      const done = all.filter(m => m.stats).length;
-      const needKo = L.hasPools(tour.format) && L.hasBracket(tour.format) && !tour.bracket;
-      const canClose = !!L.placements(tour);
-      const pendingSlots = tour.bracket && tour.bracket.manual && tour.bracket.slots.some(s => !s);
-      panel = `<div class="card"><h2>${esc(t('stepMain'))}</h2>
-        ${progress(done, all.length)}
-        ${pendingSlots ? `<p class="note warn">${esc(t('assignPending'))} <a href="#/t/${tour.id}/bracket">${esc(t('tab_bracket'))} →</a></p>` : ''}
-        <div class="btn-row">
-          ${needKo ? btn('gen-bracket', t('generateKo'), 'primary', !L.poolsComplete(tour)) : ''}
-          ${btn('close-tournament', t('closeTournament'), 'primary', !canClose)}
-          <a class="btn" href="#/t/${tour.id}/calendar">${esc(t('tab_calendar'))} →</a>
-          ${btn('reset-main', t('resetMain'), 'danger')}
-        </div>
-        ${needKo && !L.poolsComplete(tour) ? `<p class="muted small">${esc(t('koAfterPools'))}</p>` : ''}
-        ${!canClose ? `<p class="muted small">${esc(t('closeWhenDone'))}</p>` : ''}</div>`;
-    } else if (tour.qualClosed) {
-      const check = L.mainDrawCheck(tour);
-      panel = `<div class="card"><h2>${esc(t('stepMainList'))}</h2>
-        <p class="muted">${esc(t(tour.mainLocked ? 'mainListLockedHelp' : 'mainListHelp'))}</p>
-        ${entryTable(tour, tour.mainList, tour.mainLocked ? {} : { movable: 'main', posInput: tour.format === 'gold_silver' })}
-        <div class="btn-row">
-          ${tour.mainLocked
-            ? btn('unlock-main', t('unlockList')) + btn('start-main', t('generateMain'), 'primary', !!check)
-            : btn('sort-main', t('sortByPoints')) + btn('lock-main', t('lockList'), 'primary')}
-          ${btn('reopen-qual', t('reopenQual'), 'danger')}
-        </div>
-        ${tour.mainLocked && check ? `<p class="note warn">${esc(t(check.key, check))}</p>` : ''}</div>
-        ${tour.format === 'gold_silver' ? gsPreviewCard(tour) : ''}`;
-    } else if (tour.qual) {
-      const ms = L.allMatches(tour).filter(m => m.stage === 'qual' && !m.bye);
-      const done = ms.filter(m => m.stats).length;
-      const complete = !!L.qualWinners(tour);
-      panel = `<div class="card"><h2>${esc(t('stepQual'))}</h2>
-        ${progress(done, ms.length)}
-        <div class="btn-row">
-          ${btn('close-qual', t('closeQual'), 'primary', !complete)}
-          <a class="btn" href="#/t/${tour.id}/calendar">${esc(t('tab_calendar'))} →</a>
-          ${btn('reset-qual', t('resetQual'), 'danger')}
-        </div>
-        ${!complete ? `<p class="muted small">${esc(t('closeQualHelp'))}</p>` : ''}</div>`;
-    } else if (tour.entryLocked) {
-      const need = L.qualNeeded(tour);
-      panel = `<div class="card"><h2>${esc(t('listLocked'))}</h2>
-        <p class="muted">${esc(t('splitSummary', { main: tour.split.main.length, qual: tour.split.qual.length, res: tour.split.reserve.length }))}</p>
-        <div class="btn-row">
-          ${btn('unlock-entries', t('unlockList'))}
-          ${need ? btn('gen-qual', t('generateMatches'), 'primary') : btn('skip-qual', t('proceedMain'), 'primary')}
-        </div>
-        ${!need && tour.config.qualSpots ? `<p class="muted small">${esc(t('noQualNeeded'))}</p>` : ''}</div>
-        ${tabEntries(tour)}`;
-    } else {
-      panel = (canOpenReg(tour) ? `<div class="card"><p class="muted small">${esc(t('regOpenLegacyAsk'))}</p>
-          <button class="btn primary" data-action="reg-open-start" data-tid="${tour.id}"><i class="ti ti-pencil-plus" aria-hidden="true"></i> ${esc(t('regOpenLegacy'))}</button></div>` : '')
-        + wcCard(tour) + `<div class="card">
-        <h2>${esc(t('stepEntries'))} (${tour.entries.length})</h2>
-        <p class="muted">${esc(t(tour.gender === 'X' ? 'entriesHelpMixed' : 'entriesHelp'))}</p>
-        <div class="btn-row">
-          ${btn('import-entries', t('importExcel'), 'primary', false, 'upload')}
-          ${btn('template-entries', t('downloadTemplate'), '', false, 'download')}
-          ${tour.entries.length > 1 ? btn('sort-entries', t('sortByPoints'), '', false, 'arrows-sort') : ''}
-        </div>
-        ${entryTable(tour, tour.entries.map(e => e.id), { editable: true })}
-        <p class="muted small">${esc(t('entriesEditHelp'))}</p>
-        <details class="sub-form"><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('addTeamManually'))}</summary>
-          <form class="grid-form" data-form="entry-add" data-tid="${tour.id}">
-            ${teamNameFields(tour)}
-            <label>${esc(t('wildCard'))}<select name="wc"><option value="">—</option><option value="main">WC</option><option value="qual">WC-Q</option></select></label>
-            <div class="form-actions"><button class="btn primary">${esc(t('add'))}</button></div>
-          </form>
-          ${teamDatalists(tour)}
-        </details>
-        <div class="btn-row end">${btn('lock-entries', t('lockList'), 'primary', tour.entries.length < 2, 'lock')}</div>
-      </div>`;
-    }
-    return stepper + panel;
-  }
-
-  // Campi cognome/nome dei due giocatori (nei tornei misti: uomo e donna) e suggerimenti dei cognomi.
-  function teamNameFields(tour) {
-    const g = teamGenders(tour), lab = teamLabels(tour);
-    return [1, 2].map(i => `
-            <label>${esc(t('lastName'))} ${esc(lab[i - 1])}<input name="l${i}" required list="dl-last-${g[i - 1]}"></label>
-            <label>${esc(t('firstName'))} ${esc(lab[i - 1])}<input name="f${i}" required></label>`).join('');
-  }
-
-  function teamDatalists(tour) {
-    return [...new Set(teamGenders(tour))].map(g => `<datalist id="dl-last-${g}">${[...new Set(S().players.filter(p => p.gender === g).map(p => p.last))]
-      .map(n => `<option value="${esc(n)}">`).join('')}</datalist>`).join('');
-  }
-
-  const wcLimit = (tour, kind) => (kind === 'qual' ? tour.config.qualWcSpots || 0 : tour.config.wcSpots);
-
-  // Wild card (main draw o qualifiche): numero previsto nella scheda del torneo e squadre assegnate.
-  function wcCard(tour) {
-    const block = kind => {
-      const n = wcLimit(tour, kind);
-      const wcs = tour.entries.filter(e => e.wc === kind);
-      const label = kind === 'qual' ? t('wcQualSection') : t('wcSection');
-      if (!n && !wcs.length) return `<div class="wc-block"><h3>${esc(label)} <span class="badge">0</span></h3><p class="muted small">${esc(t('wcNone'))} <a href="#/t/${tour.id}/edit">${esc(t('tab_edit'))}</a></p></div>`;
-      return `<div class="wc-block">
-        <h3>${esc(label)} <span class="badge ${wcs.length === n ? 'st-done' : ''}">${wcs.length}/${n}</span></h3>
-        ${wcs.length ? `<ul class="player-list">${wcs.map(e => `<li>
-          <span class="badge wc">${kind === 'qual' ? 'WC-Q' : 'WC'}</span>
-          <span class="pl-name"><strong>${teamName(tour, e.id)}</strong> <small class="muted">${esc(playerFull(player(e.p1)))} · ${esc(playerFull(player(e.p2)))}</small></span>
-          <button class="btn small" data-action="set-wc" data-kind="" data-tid="${tour.id}" data-id="${e.id}">${esc(t('removeWc'))}</button></li>`).join('')}</ul>` : ''}
-        ${wcs.length > n ? `<p class="note warn">${esc(t('wcTooMany', { n }))}</p>` : ''}
-        ${wcs.length >= n ? '' : `<form class="grid-form" data-form="wc-add" data-kind="${kind}" data-tid="${tour.id}">
-          ${teamNameFields(tour)}
-          <div class="form-actions"><button class="btn primary"><i class="ti ti-star" aria-hidden="true"></i> ${esc(t('addWc'))}</button></div>
-        </form>`}
-      </div>`;
-    };
-    return `<div class="card">
-      <h2><i class="ti ti-star" aria-hidden="true"></i> ${esc(t('wcTitle'))}</h2>
-      <p class="muted">${esc(t('wcHelp'))}</p>
-      ${block('main')}
-      ${tour.config.qualSpots ? block('qual') : ''}
-    </div>`;
-  }
-
-  function progress(done, total) {
-    return `<div class="toolbar"><span class="progress"><span style="width:${total ? done / total * 100 : 0}%"></span></span>
-      <span class="muted">${esc(t('matchesClosed', { done, total }))}</span></div>`;
-  }
 
   // ====================================================================
-  // ISCRIZIONI ONLINE, PROFILO, REWARD, MESSAGGI (utenti registrati)
+  // UTENTI REGISTRATI, PROFILO, MESSAGGI
   // ====================================================================
   const member = () => (window.Cloud && !window.Cloud.isAdmin && !window.Cloud.scorer && window.Cloud.member) || null;
-  const nowMs = () => Date.now();
-  const msOf = v => Date.parse(v) || 0;
-  const regOf = tour => tour.reg || null;
-  // Fase del torneo con iscrizioni online: open (aperte) → closed (squadre importate) → confirmed (lista
-  // ufficiale) → formula (formula scelta: da qui il flusso normale del torneo).
-  function regPhase(tour) {
-    const r = regOf(tour);
-    if (!r) return null;
-    if (!r.closed) {
-      // stato scelto dall'admin: non ancora aperte / aperte (fino al termine) / chiuse
-      if (r.status === 'soon') return 'soon';
-      if (r.status === 'closed') return 'expired';
-      return nowMs() < msOf(r.deadline) ? 'open' : 'expired';
-    }
-    if (!r.confirmed) return 'closed';
-    return r.formulaSet ? 'formula' : 'confirmed';
-  }
-  // Squadre già inserite dall'admin (non da iscrizione online): occupano i primi posti finché le iscrizioni sono aperte.
-  const presetCount = tour => (tour.reg && !tour.reg.closed ? tour.entries.filter(e => !e.regId).length : 0);
-  const regsOf = tour => (S().registrations || []).filter(x => x.tid === tour.id).sort((a, b) => (a.created || 0) - (b.created || 0));
   const personName = p => `${p.last} ${p.first}`;
   // Nome mostrato agli altri: alias dell'admin se l'utente ne ha uno.
   const personLabel = p => (p && p.uid && (S().nicks || {})[p.uid]) || personName(p);
-  const sameName = (a, b) => L.nameKey(a.last, a.first) === L.nameKey(b.last, b.first) && a.gender === b.gender;
-  // Persona già iscritta al torneo (per uid se registrata, altrimenti per nome e sesso).
-  const personInRegs = (tour, p) => regsOf(tour).find(r => [r.p1, r.p2].some(x => (p.uid && x.uid === p.uid) || (!p.uid && !x.uid && sameName(x, p)) || (p.uid && !x.uid && sameName(x, p))));
-
-  // ---------- reward (stelline, stelle comete, Terra, pianeti, galassia) ----------
-  const REWARDS = [['star', '⭐'], ['comet', '☄️'], ['earth', '🌍'], ['planets', '🪐'], ['galaxy', '🌌']];
-  // Tornei disputati: il giocatore è nella lista ufficiale (confermata o bloccata).
-  function playedCount(pid) {
-    return S().tournaments.filter(tr => (tr.reg ? tr.reg.confirmed : tr.entryLocked) && tr.entries.some(e => e.p1 === pid || e.p2 === pid)).length;
-  }
-  function rewardFor(n) {
-    const th = S().rewards || {};
-    let best = null;
-    REWARDS.forEach(([k, icon]) => { const v = Number(th[k]); if (v > 0 && n >= v) best = { key: k, icon }; });
-    return best;
-  }
-  // Reward visibili solo all'admin nelle liste (l'utente vede il suo nel profilo).
-  const rewardBadge = n => { if (!tourAdmin()) return ''; const r = rewardFor(n); return r ? `<span class="reward" title="${esc(t('rw_' + r.key))}">${r.icon}</span>` : ''; };
-
-  function rewardsCard() {
-    const th = S().rewards || {};
-    return `<form class="card" data-form="rewards-save" id="rewards">
-      <h2><i class="ti ti-star" aria-hidden="true"></i> ${esc(t('rewardsTitle'))}</h2>
-      <p class="muted small">${esc(t('rewardsHelp'))}</p>
-      <div class="grid-form">${REWARDS.map(([k, icon]) => `<label>${icon} ${esc(t('rw_' + k))}
-        <input name="${k}" type="number" min="0" inputmode="numeric" value="${th[k] || ''}" placeholder="—"></label>`).join('')}</div>
-      <div class="form-actions"><button class="btn primary">${esc(t('save'))}</button></div>
-    </form>`;
-  }
 
   // ---------- omonimi (utenti registrati con stesso nome, cognome e sesso) ----------
-  const nameKeyOf = p => `${p.gender}|${L.nameKey(p.last, p.first)}`;
+  const nameKeyOf = p => `${p.gender}|${norm(`${p.last} ${p.first}`)}`;
   function homonymGroups() {
     const g = {};
     (S().members || []).forEach(m => { (g[nameKeyOf(m)] = g[nameKeyOf(m)] || []).push(m); });
     return Object.values(g).filter(list => list.length > 1);
   }
-  const isHomonym = p => (S().members || []).filter(m => nameKeyOf(m) === nameKeyOf(p)).length > 1;
   // Gruppi di omonimi ancora da distinguere con un alias (due o più persone mostrate con lo stesso nome).
   const homonymPending = () => homonymGroups().filter(list => new Set(list.map(m => personLabel(m).toLowerCase())).size < list.length);
 
-  // ---------- giocatore collegato all'utente ----------
-  // Per uid; per nome solo se il nome non è condiviso da più utenti (omonimi: li collega l'admin).
-  function memberPlayer(m) {
-    if (!m) return null;
-    const byUid = S().players.find(p => p.uid === m.uid);
-    if (byUid || isHomonym(m)) return byUid || null;
-    return S().players.find(p => !p.uid && p.gender === m.gender && L.nameKey(p.last, p.first) === L.nameKey(m.last, m.first)) || null;
-  }
-
-  // Persona di un'iscrizione → giocatore dell'anagrafica (creato se manca; collegato all'utente se registrato).
-  function personToPlayer(p, created) {
-    if (p.uid) {
-      let pl = S().players.find(x => x.uid === p.uid);
-      if (!pl && !isHomonym(p)) pl = S().players.find(x => !x.uid && x.gender === p.gender && L.nameKey(x.last, x.first) === L.nameKey(p.last, p.first));
-      if (!pl) { pl = { id: Store.uid('p'), first: p.first, last: p.last, gender: p.gender, club: '', base: 0 }; S().players.push(pl); created.n++; }
-      pl.uid = p.uid;
-      return pl;
-    }
-    return findOrCreatePlayer(p.last, p.first, p.gender, created);
-  }
-
-  // ---------- utenti registrati (solo admin): email, alias, giocatore collegato ----------
+  // ---------- utenti registrati (solo admin): email, alias, ruoli ----------
   // Stato della conferma: email confermata dall'utente, confermato a mano dall'admin, oppure da confermare.
   function verifyBadge(uid) {
     if ((S().emailVerified || {})[uid]) return `<span class="badge st-done"><i class="ti ti-mail-check" aria-hidden="true"></i> ${esc(t('verEmail'))}</span>`;
@@ -1623,13 +393,12 @@
       </ul></div>`;
   }
   function viewUsers() {
-    const f = L.norm(ui.userFilter || '');
+    const f = norm(ui.userFilter || '');
     const acc = S().accounts || {};
     const pend = new Set(homonymPending().flat().map(m => m.uid));
     const homs = new Set(homonymGroups().flat().map(m => m.uid));
-    const list = (S().members || []).filter(m => !f || L.norm(`${m.first} ${m.last} ${acc[m.uid] || ''} ${(S().nicks || {})[m.uid] || ''}`).includes(f))
+    const list = (S().members || []).filter(m => !f || norm(`${m.first} ${m.last} ${acc[m.uid] || ''} ${(S().nicks || {})[m.uid] || ''}`).includes(f))
       .sort((a, b) => personName(a).localeCompare(personName(b)));
-    const linked = m => S().players.find(p => p.uid === m.uid);
     return `
       <div class="page-head"><a class="back" href="#/settings">← ${esc(t('settings'))}</a><h1><i class="ti ti-users" aria-hidden="true"></i> ${esc(t('usersTitle'))} (${(S().members || []).length})</h1>
         <p class="muted">${esc(t('usersIntro'))}</p></div>
@@ -1648,12 +417,10 @@
         </form></details>
       <div class="toolbar"><input type="search" class="search" placeholder="${esc(t('search'))}" value="${esc(ui.userFilter || '')}" data-change="user-filter" aria-label="${esc(t('search'))}"></div>
       <div class="card"><ul class="reg-list users-list">${list.map(m => {
-        const pl = linked(m);
-        const cands = homs.has(m.uid) ? S().players.filter(p => p.gender === m.gender && L.nameKey(p.last, p.first) === L.nameKey(m.last, m.first) && (!p.uid || p.uid === m.uid)) : [];
         return `<li class="${pend.has(m.uid) ? 'homonym' : ''} ${banOf(m.uid).tour ? 'banned' : ''}">
           <span class="reg-names"><strong>${esc(personName(m))}</strong> <span class="badge g-${m.gender}">${esc(m.gender)}</span>
             ${homs.has(m.uid) ? `<span class="badge warn-b">${esc(t('homonym'))}</span>` : ''}<br>
-            <small class="muted">${esc(acc[m.uid] || '—')}${pl ? ` · ${esc(t('linkedPlayer'))}: <a href="#/p/${pl.id}">${esc(pl.last)} ${esc(pl.first)}</a>` : ''}</small>
+            <small class="muted">${esc(acc[m.uid] || '—')}</small>
             <button class="btn small danger" data-action="user-delete" data-uid="${m.uid}"><i class="ti ti-user-x" aria-hidden="true"></i> ${esc(t('userDelete'))}</button>
             <span class="ban-row">${verifyBadge(m.uid)} ${m.privacyAt ? `<span class="badge st-done" title="${esc(t('privacyAcceptedOn', { d: fmtDate(new Date(m.privacyAt).toLocaleDateString('sv')) }))}"><i class="ti ti-shield-check" aria-hidden="true"></i> ${esc(t('privacyOkBadge'))}</span>` : `<span class="badge tess-no">${esc(t('privacyNoBadge'))}</span>`}${m.deleteReq ? ` <span class="badge st-full">${esc(t('deleteRequested', { d: fmtDate(new Date(m.deleteReq).toLocaleDateString('sv')) }))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('rolesTitle'))}:
@@ -1663,258 +430,9 @@
               <label class="check"><input type="checkbox" data-change="ban" data-uid="${m.uid}" data-what="tour" ${banOf(m.uid).tour ? 'checked' : ''}> ${esc(t('banTour'))}</label></span></span>
           <form class="nick-form" data-form="nick-save" data-uid="${m.uid}">
             <input name="nick" maxlength="40" value="${esc((S().nicks || {})[m.uid] || '')}" placeholder="${esc(t('nickPh'))}" aria-label="${esc(t('nick'))}">
-            ${cands.length ? `<select name="link" aria-label="${esc(t('linkedPlayer'))}"><option value="">${esc(t('linkNone'))}</option>
-              ${cands.map(p => `<option value="${p.id}" ${pl && pl.id === p.id ? 'selected' : ''}>${esc(p.last)} ${esc(p.first)} · ${esc(t('tournamentsPlayedN', { n: playedCount(p.id) }))}</option>`).join('')}</select>` : ''}
             <button class="btn small">${esc(t('save'))}</button>
           </form>
         </li>`; }).join('') || `<li class="muted">${esc(t('noMembers'))}</li>`}</ul></div>`;
-  }
-
-  // ---------- tornei già creati: apertura delle iscrizioni online ----------
-  const canOpenReg = tour => !tour.reg && !tour.closed && !tour.entryLocked && !tour.qual && !tour.mainIds;
-  function openRegCard(tour) {
-    return `<form class="card grid-form" data-form="reg-open-legacy" data-tid="${tour.id}">
-      <h2 class="span-all"><i class="ti ti-pencil-plus" aria-hidden="true"></i> ${esc(t('regOpenLegacy'))}</h2>
-      <p class="muted small span-all">${esc(t('regOpenLegacyHelp', { n: tour.entries.length }))}</p>
-      <label>${esc(t('startDateTime'))}<input name="startAt" type="datetime-local" required value="${esc(tour.start ? tour.start + 'T09:00' : '')}"></label>
-      <label>${esc(t('maxTeams'))}<input name="maxTeams" type="number" min="2" max="128" inputmode="numeric" required value="${Math.max(tour.config.mainSize || 16, tour.entries.length)}"></label>
-      <label>${esc(t('regDeadline'))}<input name="deadline" type="datetime-local" required></label>
-      <label>${esc(t('regStateTitle'))}<select name="status">
-        ${[['soon', 'flagSoon'], ['open', 'flagOpen']].map(([x, k]) => `<option value="${x}" ${x === 'open' ? 'selected' : ''}>${esc(t(k))}</option>`).join('')}
-      </select></label>
-      <div class="form-actions span-all"><button class="btn primary">${esc(t('regOpenBtn'))}</button></div>
-    </form>`;
-  }
-
-  // ---------- fase 1: creazione del torneo ----------
-  function regForm(tour) {
-    const r = tour ? tour.reg : null;
-    const v = (x, d) => esc(x != null ? x : (d || ''));
-    return `<form class="card grid-form" data-form="${tour ? 'tour-reg-edit' : 'tour-create'}" ${tour ? `data-tid="${tour.id}"` : ''}>
-      <h2 class="span-all">${esc(t(tour ? 'regSettings' : 'phase1Title'))}</h2>
-      <p class="muted small span-all">${esc(t('phase1Help'))}</p>
-      <label class="span-all">${esc(t('name'))}<input name="name" required maxlength="80" value="${v(tour && tour.name)}" placeholder="${esc(t('namePlaceholder'))}"></label>
-      <label>${esc(t('startDateTime'))}<input name="startAt" type="datetime-local" required value="${v(r && r.startAt)}"></label>
-      <label>${esc(t('gender'))}<select name="gender" ${tour && (tour.entries.length || regsOf(tour).length) ? 'disabled' : ''}>
-        <option value="M" ${sel(tour && tour.gender, 'M')}>${esc(t('catMen'))}</option>
-        <option value="F" ${sel(tour && tour.gender, 'F')}>${esc(t('catWomen'))}</option>
-        <option value="X" ${sel(tour && tour.gender, 'X')}>${esc(t('catMixed'))}</option></select></label>
-      <label>${esc(t('maxTeams'))}<input name="maxTeams" type="number" min="2" max="128" inputmode="numeric" required value="${v(r && r.maxTeams, 16)}"></label>
-      <label>${esc(t('regDeadline'))}<input name="deadline" type="datetime-local" required value="${v(r && r.deadline)}"></label>
-      <label>${esc(t('regStateTitle'))}<select name="status">
-        ${[['soon', 'flagSoon'], ['open', 'flagOpen'], ['closed', 'flagClosed']].map(([x, k]) => `<option value="${x}" ${sel((r && r.status) || 'open', x)}>${esc(t(k))}</option>`).join('')}
-      </select></label>
-      <div class="form-actions span-all">
-        <button class="btn primary">${esc(t(tour ? 'save' : 'create'))}</button>
-        ${tour ? `<button type="button" class="btn danger" data-action="delete-tournament" data-tid="${tour.id}">${esc(t('deleteTournament'))}</button>` : ''}
-      </div>
-    </form>`;
-  }
-
-  function readRegForm(f) {
-    const d = { name: f.name.value.trim(), startAt: f.startAt.value, deadline: f.deadline.value, maxTeams: Math.max(2, parseInt(f.maxTeams.value, 10) || 2), status: f.status ? f.status.value : 'open' };
-    if (f.gender && !f.gender.disabled) d.gender = f.gender.value;
-    if (!d.name || !d.startAt || !d.deadline) return { err: 'errRegFields' };
-    if (msOf(d.deadline) >= msOf(d.startAt)) return { err: 'errRegDeadline' };
-    return d;
-  }
-
-  // ---------- riepilogo iscrizioni (carte e pagine del torneo) ----------
-  function regLine(tour) {
-    const r = regOf(tour), ph = regPhase(tour);
-    if (!r || ph === 'formula') return '';
-    const n = ph === 'open' || ph === 'expired' || ph === 'soon' ? regsOf(tour).length + presetCount(tour) : tour.entries.length;
-    const label = ph === 'soon' ? t('flagSoon') : ph === 'open' ? t('regOpenUntil', { d: fmtDateTime(r.deadline) }) : ph === 'expired' ? t('regClosedWait') : ph === 'closed' ? t('regReview') : t('regConfirmedLine');
-    return `<p class="reg-line ${ph === 'open' ? 'open' : ''}"><i class="ti ti-${ph === 'open' ? 'pencil-plus' : 'lock'}" aria-hidden="true"></i> ${esc(label)} · ${esc(t('teamsOfMax', { n, max: r.maxTeams }))}</p>`;
-  }
-
-  // Lista delle iscrizioni online (in lista / lista d'attesa).
-  function regList(tour, opts) {
-    opts = opts || {};
-    const list = regsOf(tour), max = Math.max(0, tour.reg.maxTeams - presetCount(tour));
-    if (!list.length) return `<p class="muted">${esc(t('noRegs'))}</p>`;
-    return `<ol class="reg-list">${list.map((x, i) => `<li class="${i >= max ? 'wait' : ''}">
-      <span class="reg-no">${i + 1}</span>
-      <span class="reg-names">${esc(personLabel(x.p1))} · ${esc(personLabel(x.p2))}${x.p2.uid ? '' : ` <small class="muted">(${esc(t('notRegistered'))})</small>`}</span>
-      ${i >= max ? `<span class="badge">${esc(t('waitingList'))}</span>` : ''}
-      ${opts.admin ? `<button class="icon-btn" data-action="reg-remove" data-id="${x.id}" title="${esc(t('remove'))}" aria-label="${esc(t('remove'))}">✕</button>` : ''}
-    </li>`).join('')}</ol>`;
-  }
-
-  // Box di iscrizione nella pagina del torneo.
-  function regBox(tour) {
-    const r = regOf(tour), ph = regPhase(tour);
-    if (!r || ph === 'formula' || ph === 'confirmed') return '';
-    const m = member();
-    let body;
-    if (ph === 'soon') body = `<p class="muted">${esc(t('regSoonMsg'))}</p>`;
-    else if (ph !== 'open') body = `<p class="muted">${esc(t('regClosedMsg'))}</p>`;
-    else if (tourAdmin()) body = `<p class="muted small">${esc(t('regAdminNote'))}</p>`;
-    else if (!m) body = `<p>${esc(t('regLoginFirst'))}</p><a class="btn primary" href="#/settings">${esc(t('loginOrRegister'))}</a>`;
-    else if (!regsOf(tour).some(x => x.uids && x.uids.includes(m.uid)) && banOf(m.uid).tour) body = banNotice('tour');
-    else if (!regsOf(tour).some(x => x.uids && x.uids.includes(m.uid)) && needsVerify()) body = verifyNotice();
-    else {
-      const mine = regsOf(tour).find(x => x.uids && x.uids.includes(m.uid));
-      if (mine) {
-        const pos = regsOf(tour).indexOf(mine) + presetCount(tour);
-        body = `<p class="note ok"><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(t('regDone', { a: personLabel(mine.p1), b: personLabel(mine.p2) }))}
-          ${pos >= r.maxTeams ? `<br>${esc(t('regWaitPos', { n: pos - r.maxTeams + 1 }))}` : ''}</p>
-          <a class="btn" href="#/me">${esc(t('goProfile'))} →</a>`;
-      } else body = regSignupForm(tour, m);
-    }
-    return `<div class="card reg-box">
-      <h2><i class="ti ti-pencil-plus" aria-hidden="true"></i> ${esc(t('regTitle'))}</h2>
-      <p class="muted small">${esc(t('regDeadlineLine', { d: fmtDateTime(r.deadline) }))} · ${esc(t('teamsOfMax', { n: regsOf(tour).length + presetCount(tour), max: r.maxTeams }))}</p>
-      ${body}
-    </div>`;
-  }
-
-  function partnerGender(tour, m) { return tour.gender === 'X' ? (m.gender === 'M' ? 'F' : 'M') : tour.gender; }
-
-  function regSignupForm(tour, m) {
-    if (tour.gender !== 'X' && m.gender !== tour.gender) return `<p class="note warn">${esc(t('regWrongGender'))}</p>`;
-    const g = partnerGender(tour, m);
-    const taken = new Set(regsOf(tour).flatMap(x => [x.p1.uid, x.p2.uid]).filter(Boolean));
-    const opts = (S().members || []).filter(x => x.gender === g && x.uid !== m.uid && !taken.has(x.uid))
-      .sort((a, b) => personLabel(a).localeCompare(personLabel(b)));
-    return `<form class="grid-form" data-form="reg-signup" data-tid="${tour.id}">
-      <p class="span-all"><strong>${esc(t('regYou'))}:</strong> ${esc(personName(m))}</p>
-      <label class="span-all">${esc(t(g === 'F' ? 'regPartnerF' : 'regPartnerM'))}
-        <input name="search" list="dl-members" autocomplete="off" placeholder="${esc(t('regSearchPh'))}" data-change="reg-search">
-        <datalist id="dl-members">${opts.map(x => `<option value="${esc(personLabel(x))}" data-uid="${x.uid}">`).join('')}</datalist>
-        <small class="muted">${esc(t('regSearchHelp'))}</small></label>
-      <input type="hidden" name="puid" value="">
-      <label>${esc(t('lastName'))}<input name="plast" required maxlength="60"></label>
-      <label>${esc(t('firstName'))}<input name="pfirst" required maxlength="60"></label>
-      <p class="muted small span-all" data-reg-who></p>
-      <div class="form-actions span-all"><button class="btn primary"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('regSubmit'))}</button></div>
-    </form>`;
-  }
-
-  function onRegSearch(el) {
-    const f = el.form, m = member();
-    const tour = tourById(f.dataset.tid);
-    const g = partnerGender(tour, m);
-    const hit = (S().members || []).find(x => x.gender === g && x.uid !== m.uid && personLabel(x).toLowerCase() === el.value.trim().toLowerCase());
-    f.puid.value = hit ? hit.uid : '';
-    f.plast.value = hit ? hit.last : f.plast.value;
-    f.pfirst.value = hit ? hit.first : f.pfirst.value;
-    f.plast.readOnly = f.pfirst.readOnly = !!hit;
-    f.querySelector('[data-reg-who]').textContent = hit ? t('regPartnerFound') : el.value ? t('regPartnerNew') : '';
-  }
-
-  function submitSignup(f) {
-    const m = member(), tour = tourById(f.dataset.tid);
-    if (!m || !tour || regPhase(tour) !== 'open') return warn('regClosedMsg');
-    if (needsVerify()) return warn('verifyFirst');
-    if (banOf(m.uid).tour) return warn('banTourMsg');
-    const g = partnerGender(tour, m);
-    const puid = f.puid.value || null;
-    const p2 = { uid: puid, first: f.pfirst.value.trim(), last: f.plast.value.trim(), gender: g };
-    const p1 = { uid: m.uid, first: m.first, last: m.last, gender: m.gender };
-    if (!p2.first || !p2.last) return warn('errRegFields');
-    if (puid === m.uid || (!puid && sameName(p1, p2))) return warn('errSamePlayer');
-    const inEntries = p => tour.entries.some(e => [e.p1, e.p2].some(id => { const x = player(id); return x && ((p.uid && x.uid === p.uid) || (!x.uid && !isHomonym(p) && x.gender === p.gender && L.nameKey(x.last, x.first) === L.nameKey(p.last, p.first))); }));
-    if (personInRegs(tour, p1) || inEntries(p1)) return warn('regAlready');
-    if (personInRegs(tour, p2) || inEntries(p2)) return warn('regPartnerAlready');
-    const btn = f.querySelector('button.primary'); btn.disabled = true;
-    window.Cloud.addRegistration({ tid: tour.id, by: m.uid, uids: puid ? [m.uid, puid] : [m.uid], p1, p2 })
-      .then(() => { ui.flash = { text: t('regSaved') }; render(); })
-      .catch(e => { btn.disabled = false; warn('regError', { code: e.code || e.message }); });
-  }
-
-  // ---------- gestione admin del torneo con iscrizioni ----------
-  function regManagePanel(tour) {
-    const ph = regPhase(tour), r = tour.reg;
-    const btn = (action, label, cls, icon, extra) => `<button class="btn ${cls || ''}" data-action="${action}" data-tid="${tour.id}" ${extra || ''}>${icon ? `<i class="ti ti-${icon}" aria-hidden="true"></i> ` : ''}${esc(label)}</button>`;
-    const steps = ['regStepOpen', 'regStepReview', 'regStepFormula', 'regStepPlay'];
-    const cur = { soon: 1, open: 1, expired: 1, closed: 2, confirmed: 3 }[ph] || 4;
-    const stepper = `<ol class="stepper">${steps.map((k, i) => `<li class="${i + 1 < cur ? 'done' : i + 1 === cur ? 'current' : ''}">${esc(t(k))}</li>`).join('')}</ol>`;
-    if (ph === 'open' || ph === 'expired' || ph === 'soon') {
-      const stv = r.status || 'open';
-      return stepper + `<div class="card">
-        <h2>${esc(t('regStateTitle'))}</h2>
-        <div class="segmented wrap" role="group">
-          ${[['soon', 'flagSoon'], ['open', 'flagOpen'], ['closed', 'flagClosed']].map(([v, k]) => `<button data-action="reg-state" data-tid="${tour.id}" data-v="${v}" aria-pressed="${stv === v}">${esc(t(k))}</button>`).join('')}
-        </div>
-        <p class="muted small">${esc(t(stv === 'open' && ph === 'expired' ? 'regStateExpired' : 'regStateHelp', { d: fmtDateTime(r.deadline) }))}</p>
-      </div><div class="card">
-        <h2>${esc(t('regStepOpen'))} · ${esc(t('teamsOfMax', { n: regsOf(tour).length + presetCount(tour), max: r.maxTeams }))}</h2>
-        ${presetCount(tour) ? `<p class="muted small">${esc(t('regPreset', { n: presetCount(tour) }))}</p>` : ''}
-        <p class="muted">${esc(t(ph === 'open' ? 'regAdminOpenHelp' : ph === 'soon' ? 'regAdminSoonHelp' : stv === 'closed' ? 'regAdminClosedHelp' : 'regAdminExpiredHelp', { d: fmtDateTime(r.deadline) }))}</p>
-        ${regList(tour, { admin: true })}
-        <div class="btn-row">${btn('reg-import', t('regImport'), 'primary', 'download')}</div>
-      </div>`;
-    }
-    if (ph === 'closed') {
-      const gone = tour.entries.filter(e => e.regId && !regsOf(tour).some(x => x.id === e.regId));
-      const wait = (r.waitlist || []);
-      return stepper + (gone.length ? `<div class="card"><p class="note warn"><i class="ti ti-alert-triangle" aria-hidden="true"></i> ${esc(t('regWithdrawn'))}</p>
-          <ul class="reg-list">${gone.map(e => `<li><span class="reg-names">${esc(teamText(tour, e.id))}</span>
-            <button class="btn small danger" data-action="remove-entry" data-tid="${tour.id}" data-id="${e.id}">${esc(t('remove'))}</button></li>`).join('')}</ul></div>` : '')
-        + (wait.length ? `<div class="card"><h2>${esc(t('waitingList'))} (${wait.length})</h2>
-          <ol class="reg-list">${wait.map((x, i) => `<li><span class="reg-names">${esc(personLabel(x.p1))} · ${esc(personLabel(x.p2))}</span>
-            <button class="btn small" data-action="reg-wait-add" data-tid="${tour.id}" data-idx="${i}"><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('regAddToList'))}</button></li>`).join('')}</ol></div>` : '')
-        + entriesEditorCard(tour)
-        + `<div class="card"><div class="btn-row end">
-          ${btn('reg-reopen', t('regReopen'), '', 'lock-open')}
-          ${btn('reg-confirm', t('regConfirm'), 'primary', 'checks', tour.entries.length < 2 ? 'disabled' : '')}</div>
-          <p class="muted small">${esc(t('regConfirmHelp'))}</p></div>`;
-    }
-    if (ph === 'confirmed') {
-      return stepper + `<div class="card">
-        <h2>${esc(t('regStepFormula'))}</h2>
-        <p>${esc(t('regFormulaHelp', { n: tour.entries.length }))}</p>
-        <div class="btn-row">
-          <a class="btn primary" href="#/t/${tour.id}/edit"><i class="ti ti-adjustments" aria-hidden="true"></i> ${esc(t('regChooseFormula'))}</a>
-          ${btn('reg-unconfirm', t('regEditList'), '', 'pencil')}
-        </div>
-      </div>
-      <div class="card"><h2>${esc(t('regOfficialList'))} (${tour.entries.length})</h2>${entryTable(tour, tour.entries.map(e => e.id))}</div>`;
-    }
-    return '';
-  }
-
-  // Elenco squadre modificabile (aggiungi, modifica, cancella).
-  function entriesEditorCard(tour) {
-    const ed = ui.editEntry && entryById(tour, ui.editEntry);
-    const g = teamGenders(tour), lab = teamLabels(tour);
-    const pa = ed && player(ed.p1), pb = ed && player(ed.p2);
-    return `<div class="card">
-      <h2>${esc(t('regTeams'))} (${tour.entries.length})</h2>
-      <p class="muted small">${esc(t('regTeamsHelp'))}</p>
-      ${entryTable(tour, tour.entries.map(e => e.id), { editable: true, editBtn: true })}
-      ${ed ? `<form class="grid-form" data-form="entry-edit" data-tid="${tour.id}" data-id="${ed.id}">
-        <h3 class="span-all">${esc(t('editTeam'))}</h3>
-        ${[1, 2].map(i => { const p = i === 1 ? pa : pb; return `
-          <label>${esc(t('lastName'))} ${esc(lab[i - 1])}<input name="l${i}" required list="dl-last-${g[i - 1]}" value="${esc(p ? p.last : '')}"></label>
-          <label>${esc(t('firstName'))} ${esc(lab[i - 1])}<input name="f${i}" required value="${esc(p ? p.first : '')}"></label>`; }).join('')}
-        <div class="form-actions span-all"><button type="button" class="btn" data-action="entry-edit-cancel">${esc(t('cancel'))}</button><button class="btn primary">${esc(t('save'))}</button></div>
-      </form>` : ''}
-      <details class="sub-form"><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('addTeamManually'))}</summary>
-        <form class="grid-form" data-form="entry-add" data-tid="${tour.id}">
-          ${teamNameFields(tour)}
-          <input type="hidden" name="wc" value="">
-          <div class="form-actions"><button class="btn primary">${esc(t('add'))}</button></div>
-        </form>
-        ${teamDatalists(tour)}
-      </details>
-    </div>`;
-  }
-
-  function importRegistrations(tour) {
-    const list = regsOf(tour), max = Math.max(0, tour.reg.maxTeams - presetCount(tour)), created = { n: 0 };
-    const inList = list.slice(0, max), wait = list.slice(max);
-    inList.forEach(x => {
-      if (tour.entries.some(e => e.regId === x.id)) return;
-      const a = personToPlayer(x.p1, created), b = personToPlayer(x.p2, created);
-      if (tour.entries.some(e => [e.p1, e.p2].some(id => id === a.id || id === b.id))) return;
-      tour.entries.push({ id: Store.uid('e'), p1: a.id, p2: b.id, man1: null, man2: null, wc: false, regId: x.id });
-    });
-    tour.reg.waitlist = wait.map(x => ({ regId: x.id, p1: x.p1, p2: x.p2 }));
-    tour.reg.closed = true;
-    rankCache = {};
-    L.sortEntries(tour, rankMap(tour.gender));
   }
 
   // ====================================================================
@@ -1933,7 +451,7 @@
   const memberByUid = uid => (S().members || []).find(m => m.uid === uid);
   const banOf = uid => (S().bans || {})[uid] || {};
 
-  // Conferma dell'email: senza conferma non ci si iscrive ai tornei.
+  // Conferma dell'email: senza conferma non si iscrive una squadra né si partecipa al gioco libero.
   const needsVerify = () => !!member() && !!window.Cloud && !window.Cloud.verified;
   function verifyNotice() {
     if (!needsVerify()) return '';
@@ -2013,7 +531,6 @@
       presenze: (S().att || []).filter(mine),
       spotERecuperi: (S().spots || []).filter(mine),
       ricevute: (S().receipts || []).filter(mine),
-      iscrizioniTornei: (S().registrations || []).filter(x => x.uids && x.uids.includes(uid)).map(x => ({ torneo: (tourById(x.tid) || {}).name || x.tid, iscritto: x.created ? new Date(x.created).toISOString() : null })),
       giocoLibero: (S().fpreg || []).filter(mine)
     };
     saveBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `manofuori-cup_dati_${latinName(personName(m))}.json`);
@@ -2731,12 +1248,12 @@
         <button class="btn small primary" data-action="pay-open" data-key="${key}"><i class="ti ti-cash" aria-hidden="true"></i> ${esc(t('payRecord'))}</button></p>`;
   }
 
-  // ---------- PDF della ricevuta (jsPDF, già incluso per i referti) ----------
+  // ---------- PDF della ricevuta (jsPDF in vendor/jspdf) ----------
   let jsPdfPromise = null;
   function loadJsPdf() {
     if (!jsPdfPromise) jsPdfPromise = new Promise((resolve, reject) => {
       const sc = document.createElement('script');
-      sc.src = 'referto/vendor/jspdf.umd.min.js'; sc.onload = () => resolve(window.jspdf.jsPDF); sc.onerror = () => { jsPdfPromise = null; reject(new Error('jspdf')); };
+      sc.src = 'vendor/jspdf/jspdf.umd.min.js'; sc.onload = () => resolve(window.jspdf.jsPDF); sc.onerror = () => { jsPdfPromise = null; reject(new Error('jspdf')); };
       document.head.appendChild(sc);
     });
     return jsPdfPromise;
@@ -2788,7 +1305,7 @@
       if (mode === 'zip') {
         if (!zipPromise) zipPromise = new Promise((resolve, reject) => {
           const sc = document.createElement('script');
-          sc.src = 'referto/vendor/jszip.min.js'; sc.onload = () => resolve(window.JSZip); sc.onerror = () => { zipPromise = null; reject(new Error('zip')); };
+          sc.src = 'vendor/jszip/jszip.min.js'; sc.onload = () => resolve(window.JSZip); sc.onerror = () => { zipPromise = null; reject(new Error('zip')); };
           document.head.appendChild(sc);
         });
         const JSZip = await zipPromise, zip = new JSZip();
@@ -3277,13 +1794,13 @@
       <p class="muted small">${esc(t('trBackupHelp'))}</p></div>`;
   }
 
-  // ---------- file Excel (.xlsx) generato nel browser (JSZip, già incluso per le ricevute) ----------
+  // ---------- file Excel (.xlsx) generato nel browser (JSZip in vendor/jszip) ----------
   let xlZipPromise = null;
   function loadZip() {
     if (window.JSZip) return Promise.resolve(window.JSZip);
     if (!xlZipPromise) xlZipPromise = new Promise((resolve, reject) => {
       const sc = document.createElement('script');
-      sc.src = 'referto/vendor/jszip.min.js'; sc.onload = () => resolve(window.JSZip); sc.onerror = () => { xlZipPromise = null; reject(new Error('zip')); };
+      sc.src = 'vendor/jszip/jszip.min.js'; sc.onload = () => resolve(window.JSZip); sc.onerror = () => { xlZipPromise = null; reject(new Error('zip')); };
       document.head.appendChild(sc);
     });
     return xlZipPromise;
@@ -3642,16 +2159,6 @@
   function viewProfile() {
     const m = member();
     if (!m) return `<div class="page-head"><h1>${esc(t('profile'))}</h1></div><div class="card"><p>${esc(t('regLoginFirst'))}</p><a class="btn primary" href="#/settings">${esc(t('loginOrRegister'))}</a></div>`;
-    const pl = memberPlayer(m);
-    const hist = pl ? L.playerHistory(S(), pl.id) : [];
-    const total = hist.reduce((s, h) => s + h.pts, 0);
-    const played = pl ? playedCount(pl.id) : 0;
-    const rw = rewardFor(played);
-    const th = S().rewards || {};
-    const next = REWARDS.find(([k]) => Number(th[k]) > played);
-    const upcoming = (S().registrations || []).filter(x => x.uids && x.uids.includes(m.uid))
-      .map(x => ({ x, tour: tourById(x.tid) })).filter(o => o.tour && !o.tour.closed && msOf(o.tour.reg ? o.tour.reg.startAt : o.tour.start) > nowMs() - 86400000 * 3)
-      .sort((a, b) => msOf(a.tour.reg && a.tour.reg.startAt) - msOf(b.tour.reg && b.tour.reg.startAt));
     const editing = ui.editProfile;
     return `
       ${privacyAlert()}
@@ -3669,40 +2176,11 @@
           <label>${esc(t('gender'))}<select name="gender"><option value="M" ${sel(m.gender, 'M')}>${esc(t('male'))}</option><option value="F" ${sel(m.gender, 'F')}>${esc(t('female'))}</option></select></label>
           <div class="form-actions span-all"><button type="button" class="btn" data-action="profile-cancel">${esc(t('cancel'))}</button><button class="btn primary">${esc(t('save'))}</button></div>
         </form>` : ''}
-      <div class="stats-row">
-        <div class="stat"><span>${esc(t('tournamentsPlayed'))}</span><strong>${played}</strong></div>
-        <div class="stat"><span>${esc(t('totalPoints'))}</span><strong>${fmtPts(total)}</strong></div>
-        <div class="stat"><span>${esc(t('reward'))}</span><strong>${rw ? `${rw.icon} ${esc(t('rw_' + rw.key))}` : '—'}</strong>
-          ${next ? `<small class="muted">${esc(t('rewardNext', { n: Number(th[next[0]]) - played, r: t('rw_' + next[0]) }))} ${next[1]}</small>` : ''}</div>
-      </div>
       ${myTeams().length ? `<section class="feat-block"><h2>${esc(t('navMyMatches'))}</h2>${myMatchesBlocks(5)}</section>` : ''}
       ${myStatsCard()}
       ${myTrainingCard()}
       ${myReceiptsCard()}
       ${privacyCard()}
-      <div class="card">
-        <h2><i class="ti ti-calendar-event" aria-hidden="true"></i> ${esc(t('myRegistrations'))}</h2>
-        ${upcoming.length ? `<ul class="reg-list">${upcoming.map(({ x, tour }) => {
-          const start = msOf(tour.reg ? tour.reg.startAt : tour.start);
-          const canCancel = start - nowMs() > 86400000;
-          const pos = tour.reg ? regsOf(tour).indexOf(x) : -1;
-          return `<li>
-            <span class="reg-names"><a href="#/t/${tour.id}"><strong>${esc(tour.name)}</strong></a><br>
-              <small class="muted">${esc(fmtDateTime(tour.reg ? tour.reg.startAt : tour.start))} · ${esc(personLabel(x.p1))} · ${esc(personLabel(x.p2))}</small>
-              ${tour.reg && pos >= tour.reg.maxTeams ? `<br><span class="badge">${esc(t('waitingList'))}</span>` : `<br><span class="badge st-done">${esc(t('regConfirmedBadge'))}</span>`}</span>
-            ${canCancel ? `<button class="btn small danger" data-action="reg-cancel" data-id="${x.id}">${esc(t('regCancel'))}</button>`
-              : `<small class="note warn">${esc(t('regCancelLate'))}</small>`}
-          </li>`; }).join('')}</ul>` : `<p class="muted">${esc(t('noMyRegs'))} <a href="#/tournaments">${esc(t('tournaments'))} →</a></p>`}
-      </div>
-      <div class="card">
-        <h2><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t('myHistory'))}</h2>
-        ${hist.length ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th>${esc(t('tournament'))}</th><th class="num">${esc(t('place'))}</th><th class="num">${esc(t('points'))}</th></tr></thead>
-          <tbody>${hist.map(h => `<tr><td><a href="#/t/${h.t.id}/final">${esc(h.t.name)}</a><br><small class="muted">${esc(fmtDate(h.t.start))} · ${esc(playerFull(player(h.partner)))}</small></td>
-            <td class="num">${medal(h.place)}</td><td class="num"><strong>${fmtPts(h.pts)}</strong></td></tr>`).join('')}</tbody>
-          <tfoot><tr><td><strong>${esc(t('total'))}</strong></td><td></td><td class="num"><strong>${fmtPts(total)}</strong></td></tr></tfoot>
-        </table></div>` : `<p class="muted">${esc(t('noHistory'))}</p>`}
-      </div>
       <div class="btn-row">
         ${editing ? '' : `<button class="btn" data-action="profile-edit"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t('editProfile'))}</button>`}
         <button class="btn" data-action="logout">${esc(t('logout'))}</button>
@@ -3728,11 +2206,11 @@
 
   function viewMessages() {
     const mem = (S().members || []).slice().sort((a, b) => personName(a).localeCompare(personName(b)));
-    const tours = S().tournaments.filter(tr => tr.reg).sort((a, b) => (b.start || '').localeCompare(a.start || ''));
+    const tours = (S().vtours || []).filter(x => x.status !== 'done').sort((a, b) => a.name.localeCompare(b.name));
     const target = ui.msgTarget || 'users';
-    const f = L.norm(ui.msgFilter || '');
+    const f = norm(ui.msgFilter || '');
     const sent = S().messages || [];
-    const who = x => x.all ? t('msgToAll') : x.tid ? t('msgToTour', { t: (tourById(x.tid) || {}).name || '?', n: (x.to || []).length }) : t('msgToN', { n: (x.to || []).length });
+    const who = x => x.all ? t('msgToAll') : x.tid ? t('msgToTour', { t: (vtById(x.tid) || {}).name || '?', n: (x.to || []).length }) : t('msgToN', { n: (x.to || []).length });
     return `
       <div class="page-head"><a class="back" href="#/settings">← ${esc(t('settings'))}</a><h1><i class="ti ti-mail" aria-hidden="true"></i> ${esc(t('messages'))}</h1>
         <p class="muted">${esc(t('messagesIntro'))}</p></div>
@@ -3742,9 +2220,9 @@
           ${[['users', 'msgTargetUsers'], ['all', 'msgTargetAll'], ['tour', 'msgTargetTour']].map(([v, k]) => `<button type="button" data-action="msg-target" data-v="${v}" aria-pressed="${target === v}">${esc(t(k))}</button>`).join('')}
         </div>
         ${target === 'users' ? `<label class="span-all">${esc(t('search'))}<input type="search" value="${esc(ui.msgFilter || '')}" data-change="msg-filter"></label>
-          <div class="msg-users span-all">${mem.filter(x => !f || L.norm(personName(x)).includes(f)).map(x => `<label class="check"><input type="checkbox" name="to" value="${x.uid}" ${(ui.msgTo || []).includes(x.uid) ? 'checked' : ''} data-change="msg-to"> ${esc(personName(x))}</label>`).join('') || `<p class="muted">${esc(t('noMembers'))}</p>`}</div>` : ''}
+          <div class="msg-users span-all">${mem.filter(x => !f || norm(personName(x)).includes(f)).map(x => `<label class="check"><input type="checkbox" name="to" value="${x.uid}" ${(ui.msgTo || []).includes(x.uid) ? 'checked' : ''} data-change="msg-to"> ${esc(personName(x))}</label>`).join('') || `<p class="muted">${esc(t('noMembers'))}</p>`}</div>` : ''}
         ${target === 'all' ? `<p class="note span-all">${esc(t('msgAllNote', { n: mem.length }))}</p>` : ''}
-        ${target === 'tour' ? `<label class="span-all">${esc(t('tournament'))}<select name="tid">${tours.map(tr => `<option value="${tr.id}">${esc(tr.name)} (${regsOf(tr).length})</option>`).join('')}</select></label>` : ''}
+        ${target === 'tour' ? `<label class="span-all">${esc(t('tournament'))}<select name="tid">${tours.map(tr => `<option value="${tr.id}">${esc(tr.name)} (${tourUids(tr).length})</option>`).join('')}</select></label>` : ''}
         <label class="span-all">${esc(t('edTitle'))}<input name="title" maxlength="120"></label>
         <label class="span-all">${esc(t('edText'))}<textarea name="text" rows="5" maxlength="4000" required></textarea></label>
         <div class="form-actions span-all"><button class="btn primary"><i class="ti ti-send" aria-hidden="true"></i> ${esc(t('msgSend'))}</button></div>
@@ -3756,260 +2234,24 @@
       </div>`;
   }
 
+  // destinatari di un torneo: capitani e giocatori collegati (account app) delle squadre del torneo
+  const tourUids = tour => [...new Set((tour.groups || []).flatMap(g => g.teams).map(teamById).filter(Boolean).flatMap(tm => [tm.captainUid].concat(tm.memberUids || [])).filter(Boolean))];
   function sendMessageForm(f) {
     const target = ui.msgTarget || 'users';
     const msg = { title: f.title.value.trim(), text: f.text.value.trim(), all: false, to: [] };
     if (!msg.text) return warn('errMsgText');
     if (target === 'all') msg.all = true;
     else if (target === 'tour') {
-      const tour = tourById(f.tid.value);
+      const tour = vtById(f.tid.value);
       if (!tour) return warn('errMsgTo');
       msg.tid = tour.id;
-      const uids = new Set(regsOf(tour).flatMap(x => x.uids || []));
-      tour.entries.forEach(e => [e.p1, e.p2].forEach(id => { const p = player(id); if (p && p.uid) uids.add(p.uid); }));
-      msg.to = [...uids];
+      msg.to = tourUids(tour);
     } else msg.to = (ui.msgTo || []).slice();
     if (!msg.all && !msg.to.length) return warn('errMsgTo');
     const btn = f.querySelector('button.primary'); btn.disabled = true;
     window.Cloud.sendMessage(msg).then(() => { ui.msgTo = []; ui.flash = { text: t('msgSentOk', { n: msg.all ? t('msgToAll') : msg.to.length }) }; render(); })
       .catch(e => { btn.disabled = false; warn('regError', { code: e.code || e.message }); });
   }
-
-  // ---------- giocatori ----------
-  function viewPlayers() {
-    const ed = ui.editingPlayer ? player(ui.editingPlayer) : null;
-    const f = L.norm(ui.playerFilter);
-    const list = S().players
-      .filter(p => !f || L.norm(`${p.first} ${p.last} ${p.club || ''}`).includes(f))
-      .sort((a, b) => a.last.localeCompare(b.last) || a.first.localeCompare(b.first));
-    return `
-      <div class="page-head"><h1>${esc(t('players'))}</h1></div>
-      <div class="card">
-        <h2>${esc(t('initialRanking'))}</h2>
-        <p class="muted">${esc(t('initialRankingHelp'))}</p>
-        <div class="btn-row">
-          <button class="btn primary" data-action="import-ranking"><i class="ti ti-upload" aria-hidden="true"></i> ${esc(t('importExcel'))}</button>
-          <button class="btn" data-action="template-ranking"><i class="ti ti-download" aria-hidden="true"></i> ${esc(t('downloadTemplate'))}</button>
-        </div>
-      </div>
-      ${mergeCard()}
-      <form class="card grid-form" data-form="player-save">
-        <h2 class="span-all">${esc(ed ? t('editPlayer') : t('addPlayer'))}</h2>
-        <label>${esc(t('lastName'))}<input name="last" required maxlength="40" value="${esc(ed ? ed.last : '')}"></label>
-        <label>${esc(t('firstName'))}<input name="first" required maxlength="40" value="${esc(ed ? ed.first : '')}"></label>
-        <label>${esc(t('gender'))}<select name="gender">
-          <option value="M" ${ed && ed.gender === 'M' ? 'selected' : ''}>${esc(t('male'))}</option>
-          <option value="F" ${ed && ed.gender === 'F' ? 'selected' : ''}>${esc(t('female'))}</option></select></label>
-        <label>${esc(t('club'))}<input name="club" maxlength="60" value="${esc(ed ? ed.club : '')}"></label>
-        <label>${esc(t('basePoints'))}<input name="base" type="number" step="0.01" min="0" inputmode="decimal" value="${esc(ed ? ed.base || 0 : 0)}"></label>
-        <div class="form-actions">
-          ${ed ? `<button type="button" class="btn" data-action="cancel-edit-player">${esc(t('cancel'))}</button>` : ''}
-          <button class="btn primary">${esc(ed ? t('save') : t('add'))}</button>
-        </div>
-      </form>
-      <div class="card">
-        <div class="card-head">
-          <h2>${esc(t('players'))} (${S().players.length})</h2>
-          <input type="search" class="search" placeholder="${esc(t('search'))}" value="${esc(ui.playerFilter)}" data-change="player-filter" aria-label="${esc(t('search'))}">
-        </div>
-        ${list.length ? `<ul class="player-list">${list.map(p => `
-          <li>
-            <span class="badge g-${p.gender}">${p.gender === 'F' ? '♀' : '♂'}</span>
-            <span class="pl-name"><a href="#/p/${p.id}">${nameHtml(p)}</a> ${rewardBadge(playedCount(p.id))}${p.club ? `<small class="muted"> · ${esc(p.club)}</small>` : ''}</span>
-            <span class="muted small nowrap">${esc(t('basePointsShort'))} ${fmtPts(p.base)}</span>
-            <button class="icon-btn" data-action="edit-player" data-id="${p.id}" title="${esc(t('edit'))}" aria-label="${esc(t('edit'))}"><i class="ti ti-pencil" aria-hidden="true"></i></button>
-            <button class="icon-btn" data-action="delete-player" data-id="${p.id}" title="${esc(t('delete'))}" aria-label="${esc(t('delete'))}">✕</button>
-          </li>`).join('')}</ul>` : `<p class="muted">${esc(t('noPlayers'))}</p>`}
-      </div>`;
-  }
-
-  // Numero minimo di lettere da cambiare per passare da una parola all'altra.
-  function editDistance(a, b) {
-    const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
-    for (let j = 1; j <= b.length; j++) d[0][j] = j;
-    for (let i = 1; i <= a.length; i++) {
-      for (let j = 1; j <= b.length; j++) {
-        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-      }
-    }
-    return d[a.length][b.length];
-  }
-
-  // Possibili doppioni: stesso genere, stesso cognome (anche in alfabeti diversi) e nome simile.
-  function duplicateSuggestions() {
-    const out = [];
-    const list = S().players.map(p => ({ p, last: L.nameSkeleton(p.last), first: L.nameSkeleton(p.first) }));
-    for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length; j++) {
-        const a = list[i], b = list[j];
-        if (a.p.gender !== b.p.gender || a.last !== b.last) continue;
-        if (editDistance(a.first, b.first) <= Math.max(2, Math.floor(Math.min(a.first.length, b.first.length) / 2))) out.push([a.p, b.p]);
-      }
-    }
-    return out.slice(0, 30);
-  }
-
-  function playerOption(p, selected) {
-    return `<option value="${p.id}" ${selected ? 'selected' : ''}>${esc(playerFull(p))} (${p.gender})${p.club ? ' — ' + esc(p.club) : ''}</option>`;
-  }
-
-  function mergeCard() {
-    const players = S().players.slice().sort((a, b) => a.last.localeCompare(b.last) || a.first.localeCompare(b.first));
-    if (players.length < 2) return '';
-    const sugg = duplicateSuggestions();
-    return `
-      <details class="card form-card">
-        <summary><i class="ti ti-users-group" aria-hidden="true"></i> ${esc(t('mergePlayers'))}${sugg.length ? ` <span class="badge wc">${sugg.length}</span>` : ''}</summary>
-        <p class="muted">${esc(t('mergeHelp'))}</p>
-        ${sugg.length ? `<h3>${esc(t('mergeSuggestions'))}</h3>
-          <ul class="player-list">${sugg.map(([a, b]) => `<li>
-            <span class="pl-name"><strong>${esc(playerFull(a))}</strong> ↔ <strong>${esc(playerFull(b))}</strong></span>
-            <button class="btn small" data-action="merge-pair" data-keep="${a.id}" data-dup="${b.id}">${esc(t('merge'))}</button></li>`).join('')}</ul>` : ''}
-        <form class="grid-form" data-form="merge-players">
-          <label>${esc(t('keepPlayer'))}<select name="keep" required>${players.map(p => playerOption(p)).join('')}</select></label>
-          <label>${esc(t('duplicatePlayer'))}<select name="dup" required>${players.map((p, i) => playerOption(p, i === 1)).join('')}</select></label>
-          <div class="form-actions"><button class="btn primary">${esc(t('merge'))}</button></div>
-        </form>
-      </details>`;
-  }
-
-  // Unisce il doppione nel giocatore da mantenere: iscrizioni, punti iniziali e grafie del nome.
-  function mergePlayers(keepId, dupId) {
-    const keep = player(keepId), dup = player(dupId);
-    if (!keep || !dup || keep.id === dup.id) return warn('errMergeSame');
-    if (keep.gender !== dup.gender) return warn('errMergeGender');
-    const both = S().tournaments.find(tr => [keep.id, dup.id].every(id => tr.entries.some(e => e.p1 === id || e.p2 === id)));
-    if (both) return warn('errMergeConflict', { t: both.name });
-    if (!confirmed('confirmMerge', { dup: playerFull(dup), keep: playerFull(keep) })) return;
-    S().tournaments.forEach(tr => tr.entries.forEach(e => {
-      if (e.p1 === dup.id) e.p1 = keep.id;
-      if (e.p2 === dup.id) e.p2 = keep.id;
-    }));
-    keep.base = Math.max(Number(keep.base) || 0, Number(dup.base) || 0);
-    if (!keep.club) keep.club = dup.club;
-    keep.aliases = (keep.aliases || []).concat([{ last: dup.last, first: dup.first }], dup.aliases || []);
-    S().players = S().players.filter(p => p.id !== dup.id);
-    commit(t('merged', { keep: playerFull(keep) }));
-  }
-
-  // Scheda pubblica di un giocatore: solo tornei giocati, piazzamenti e punti conquistati.
-  function viewPlayerPublic(p) {
-    const hist = L.playerHistory(S(), p.id);
-    const won = hist.reduce((x, h) => x + h.pts, 0);
-    return `
-      <div class="page-head">
-        <a class="back" href="#/tournaments">← ${esc(t('navTournaments'))}</a>
-        <h1>${esc(playerFull(p))}</h1>
-      </div>
-      <div class="card">
-        <h2><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t('tournamentsPlayed'))} (${hist.length})</h2>
-        ${hist.length ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th>${esc(t('tournament'))}</th><th class="num">${esc(t('finalPlace'))}</th><th class="num">${esc(t('pointsWon'))}</th></tr></thead>
-          <tbody>${hist.map(h => `<tr><td><a href="#/t/${h.t.id}/final">${esc(h.t.name)}</a><div class="muted small">${esc(fmtDate(h.t.start))}</div></td>
-            <td class="num">${medal(h.place)}</td><td class="num"><strong>${fmtPts(h.pts)}</strong></td></tr>`).join('')}</tbody>
-          <tfoot><tr><td><strong>${esc(t('total'))}</strong></td><td></td><td class="num"><strong>${fmtPts(won)}</strong></td></tr></tfoot>
-        </table></div>` : `<p class="muted">${esc(t('noTournamentsYet'))}</p>`}
-      </div>`;
-  }
-
-  function viewPlayer(p) {
-    if (!tourAdmin()) return viewPlayerPublic(p);
-    const hist = L.playerHistory(S(), p.id);
-    const base = Number(p.base) || 0;
-    const won = hist.reduce((s, h) => s + h.pts, 0);
-    // Tornei non ancora chiusi a cui il giocatore è iscritto: compaiono come "in corso", senza punti.
-    const ongoing = S().tournaments.filter(tr => !tr.closed && tr.entries.some(e => e.p1 === p.id || e.p2 === p.id))
-      .sort((a, b) => (b.start || '').localeCompare(a.start || ''));
-    const partnerIn = tr => { const e = tr.entries.find(x => x.p1 === p.id || x.p2 === p.id); return e.p1 === p.id ? e.p2 : e.p1; };
-    const catLabel = tr => { const c = catById(tr.categoryId); return [c ? c.name : '', '×' + fmtPts(tr.coefficient)].filter(Boolean).join(' '); };
-    return `
-      <div class="page-head">
-        <a class="back" href="#/players">← ${esc(t('navPlayers'))}</a>
-        <h1>${nameHtml(p)} ${rewardBadge(playedCount(p.id))}</h1>
-        <p class="meta"><span class="badge g-${p.gender}">${esc(genderLabel(p.gender))}</span>${p.club ? `<span class="muted">${esc(p.club)}</span>` : ''}
-          <span class="muted">${esc(t('tournamentsPlayedN', { n: playedCount(p.id) }))}</span></p>
-        ${p.aliases && p.aliases.length ? `<p class="muted small">${esc(t('otherSpellings'))}: ${esc(p.aliases.map(a => `${a.last} ${a.first}`).join(', '))}</p>` : ''}
-      </div>
-      <div class="stats-row">
-        <div class="stat"><span>${esc(t('totalPoints'))}</span><strong>${fmtPts(base + won)}</strong></div>
-        <div class="stat"><span>${esc(t('eventsPlayed'))}</span><strong>${hist.length + ongoing.length}</strong></div>
-      </div>
-      <div class="card">
-        <h2><i class="ti ti-flag" aria-hidden="true"></i> ${esc(t('startingPoints'))}</h2>
-        <p class="big-num">${fmtPts(base)} <small class="muted">${esc(t('points'))}</small></p>
-        <p class="muted small">${esc(t('startingPointsHelp'))}</p>
-      </div>
-      <div class="card">
-        <h2><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t('tournamentsPlayed'))} (${hist.length + ongoing.length})</h2>
-        ${hist.length || ongoing.length ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th>${esc(t('tournament'))}</th><th class="hide-sm">${esc(t('partner'))}</th><th class="num">${esc(t('finalPlace'))}</th><th class="num">${esc(t('pointsWon'))}</th></tr></thead>
-          <tbody>
-            ${ongoing.map(tr => `<tr><td><a href="#/t/${tr.id}/info">${esc(tr.name)}</a><div class="muted small">${esc(fmtDate(tr.start))} · ${esc(catLabel(tr))}</div>
-                <div class="muted small show-sm">${esc(t('partner'))}: ${esc(playerFull(player(partnerIn(tr))))}</div></td>
-              <td class="hide-sm">${esc(playerFull(player(partnerIn(tr))))}</td>
-              <td class="num"><span class="badge st-main">${esc(t('inProgress'))}</span></td><td class="num muted">—</td></tr>`).join('')}
-            ${hist.map(h => `<tr><td><a href="#/t/${h.t.id}/final">${esc(h.t.name)}</a><div class="muted small">${esc(fmtDate(h.t.start))} · ${esc(catLabel(h.t))}</div>
-                <div class="muted small show-sm">${esc(t('partner'))}: ${esc(playerFull(player(h.partner)))}</div></td>
-              <td class="hide-sm">${esc(playerFull(player(h.partner)))}</td><td class="num">${medal(h.place)}</td><td class="num"><strong>${fmtPts(h.pts)}</strong></td></tr>`).join('')}
-          </tbody>
-        </table></div>` : `<p class="muted">${esc(t('noTournamentsYet'))}</p>`}
-      </div>
-      <div class="card sum-card">
-        <div class="kv"><span>${esc(t('startingPoints'))}</span><strong>${fmtPts(base)}</strong></div>
-        <div class="kv"><span>${esc(t('pointsFromTournaments', { n: hist.length }))}</span><strong>+ ${fmtPts(won)}</strong></div>
-        <div class="kv total"><span>${esc(t('totalPoints'))}</span><strong>${fmtPts(base + won)}</strong></div>
-      </div>`;
-  }
-
-  // ---------- categorie ----------
-  function tableRowInputs(place, pts) {
-    return `<div class="pt-row">
-      <input type="number" min="1" inputmode="numeric" name="place" value="${place}" aria-label="${esc(t('place'))}" required>
-      <input type="number" min="0" step="0.01" inputmode="decimal" name="pts" value="${pts}" aria-label="${esc(t('points'))}" required>
-      <button type="button" class="icon-btn" data-action="del-row" aria-label="${esc(t('remove'))}">✕</button>
-    </div>`;
-  }
-
-  function pointsTable(rows) {
-    const sorted = rows.slice().sort((a, b) => a[0] - b[0]);
-    return `<div class="table-wrap"><table class="table narrow">
-      <thead><tr><th>${esc(t('place'))}</th><th class="num">${esc(t('basePts'))}</th></tr></thead>
-      <tbody>${sorted.map((r, i) => {
-        const next = sorted[i + 1];
-        const range = next && next[0] - 1 > r[0] ? `${r[0]}°–${next[0] - 1}°` : `${r[0]}°${next ? '' : '+'}`;
-        return `<tr><td>${range}</td><td class="num"><strong>${fmtPts(r[1])}</strong></td></tr>`;
-      }).join('')}</tbody></table></div>`;
-  }
-
-  function viewCategories() {
-    if (!tourAdmin()) {
-      return `
-        <div class="page-head"><h1>${esc(t('categories'))}</h1><p class="muted">${esc(t('categoriesPublicIntro'))}</p></div>
-        ${S().categories.length ? `<div class="pools-grid">${S().categories.map(c => `<div class="card"><h2>${esc(c.name)}</h2>${pointsTable(c.rows)}</div>`).join('')}</div>`
-          : `<div class="empty">${esc(t('noCategories'))}</div>`}`;
-    }
-    const used = id => S().tournaments.some(x => x.categoryId === id);
-    return `
-      <div class="page-head"><h1>${esc(t('categories'))}</h1><p class="muted">${esc(t('categoriesIntro'))}</p></div>
-      <div class="toolbar"><button class="btn primary" data-action="new-category"><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('newCategory'))}</button></div>
-      ${S().categories.map(c => `
-      <details class="card table-card" ${ui.openCat === c.id ? 'open' : ''} data-cat="${c.id}">
-        <summary><strong>${esc(c.name)}</strong> <span class="muted small">${c.rows.slice(0, 4).map(r => `${r[0]}°: ${fmtPts(r[1])}`).join(' · ')}${c.rows.length > 4 ? ' …' : ''}</span></summary>
-        <form data-form="category-save" data-id="${c.id}">
-          <label>${esc(t('categoryName'))}<input name="name" required maxlength="40" value="${esc(c.name)}"></label>
-          <div class="pt-head"><span>${esc(t('fromPlace'))}</span><span>${esc(t('basePts'))}</span><span></span></div>
-          <div class="pt-rows">${c.rows.map(r => tableRowInputs(r[0], r[1])).join('')}</div>
-          <p class="muted small">${esc(t('tableHelp'))}</p>
-          <div class="form-actions">
-            <button type="button" class="btn small" data-action="add-row"><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('addRow'))}</button>
-            ${used(c.id) ? '' : `<button type="button" class="btn small danger" data-action="delete-category" data-id="${c.id}">${esc(t('delete'))}</button>`}
-            <button class="btn primary">${esc(t('save'))}</button>
-          </div>
-        </form>
-      </details>`).join('') || `<div class="empty">${esc(t('noCategories'))}</div>`}`;
-  }
-
-  // ---------- ranking ----------
 
   // ====================================================================
   // TORNEI A SQUADRE (Manofuori Cup): un torneo per livello, uno o più gironi all'italiana (andata e ritorno o
@@ -5001,155 +3243,8 @@
     return o('', t('scorerAllTours')) + list.map(x => o(x.id, `${x.name} · ${x.level}`)).join('');
   }
 
-  // ---------- account del campo: le mie gare ----------
-  // Tornei in corso e futuri; per ogni gara con le due squadre note il pulsante E-scoresheet.
-  function mineTours() {
-    const today = todayStr();
-    const sc = scorer();
-    return S().tournaments.filter(x => !x.closed && (x.end || x.start || '9999') >= today && (x.start || '') <= today + 'z')
-      .filter(x => x.pools || x.bracket || x.qual)
-      .filter(x => !sc || !sc.tid || x.id === sc.tid);
-  }
+  // ---------- nomi di file e archivi ZIP ----------
 
-
-  // ---------- cartella referti del torneo (admin e account dei campi) ----------
-  // Stessa "versione" calcolata dal referto: il PDF archiviato è aggiornato se coincide.
-  function pdfVersion(status, approvedAt, json) {
-    let h = 2166136261;
-    for (let i = 0; i < json.length; i++) { h ^= json.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return `${status}:${approvedAt || ''}:${(h >>> 0).toString(36)}:${json.length}`;
-  }
-  const refVersion = r => pdfVersion(r.status, r.status === 'approved' ? r.approvedAt : null, r.json || '');
-  const refNum = r => { const n = String((r.info || {}).matchNo || ''); return (n[0] === 'Q' ? 0 : 1e6) + (parseInt(n.replace(/\D/g, ''), 10) || 0); };
-  const refFile = r => { const i = r.info || {}; return `${i.matchNo || r.key} – ${(i.A || {}).name || 'A'} vs ${(i.B || {}).name || 'B'}`; };
-  const refStatus = st => st === 'approved' ? `<span class="badge st-done">${esc(t('escoreSt_approved'))}</span>`
-    : st === 'finished' ? `<span class="pending-badge"><i class="ti ti-hourglass" aria-hidden="true"></i> ${esc(t('pendingBadge'))}</span>`
-    : st === 'live' ? `<span class="live-badge"><i class="dot" aria-hidden="true"></i>${esc(t('liveBadge'))}</span>`
-    : `<span class="badge">${esc(t('escoreSt_ready'))}</span>`;
-  const fmtStamp = ms => (ms ? new Date(ms).toLocaleString(I18n.locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '');
-
-  function tabReferti(tour) {
-    if (!S().refLoaded || !S().pdfLoaded) return `<div class="card"><p class="muted"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</p></div>`;
-    const refs = Object.entries(S().referti).map(([id, r]) => Object.assign({ id }, r)).filter(r => r.tid === tour.id).sort((a, b) => refNum(a) - refNum(b));
-    const pdfOf = r => S().refPdf[r.id];
-    const fresh = r => pdfOf(r) && pdfOf(r).version === refVersion(r);
-    const stale = refs.filter(r => r.json && !fresh(r));
-    const pdfs = refs.filter(r => pdfOf(r));
-    // PDF mancanti o non aggiornati: si creano in automatico (una volta per ogni nuova versione dei referti).
-    ui.refAuto = ui.refAuto || {};
-    const staleKey = stale.map(r => r.id + '@' + refVersion(r)).join(',');
-    if (stale.length && !ui.refBuild && ui.refAuto[tour.id] !== staleKey) { ui.refAuto[tour.id] = staleKey; setTimeout(() => buildPdfs(tour.id), 0); }
-    const b = ui.refBuild && ui.refBuild.tid === tour.id ? ui.refBuild : null;
-    const openHref = r => esc(refertoUrl('g=' + encodeURIComponent(r.id)));
-    return `
-      <div class="card folder">
-        <div class="card-head"><h2><i class="ti ti-folder" aria-hidden="true"></i> referti <span class="muted small">(${refs.length})</span></h2></div>
-        <p class="muted small">${esc(t('refFolderHelp'))}</p>
-        ${refs.length ? `<ul class="file-list">${refs.map(r => `<li>
-            <i class="ti ti-file-text file-ic" aria-hidden="true"></i>
-            <div class="file-main">
-              <strong>${esc(refFile(r))}</strong>
-              <small class="muted">${esc([(r.info || {}).phase, r.court ? `${t('court')} ${r.court}` : '', r.updatedBy || r.createdBy || '', fmtStamp(r.updated)].filter(Boolean).join(' · '))}</small>
-              <span class="file-state">${refStatus(r.status)} ${esc((r.sets || []).map(x => `${x.a}-${x.b}`).join('  '))}</span>
-            </div>
-            <div class="file-actions">
-              ${fresh(r) ? `<button class="btn small" data-action="pdf-view" data-id="${esc(r.id)}"><i class="ti ti-file-type-pdf" aria-hidden="true"></i> PDF</button>` : ''}
-              <a class="btn small" href="${openHref(r)}" ${tourAdmin() ? 'target="_blank" rel="noopener"' : ''}><i class="ti ti-external-link" aria-hidden="true"></i> ${esc(t('refOpen'))}</a>
-            </div>
-          </li>`).join('')}</ul>` : `<p class="muted">${esc(t('refEmpty'))}</p>`}
-      </div>
-      <div class="card folder">
-        <div class="card-head"><h2><i class="ti ti-folder" aria-hidden="true"></i> referti / pdf <span class="muted small">(${pdfs.length})</span></h2>
-          <div class="btn-row">
-            ${stale.length && !b ? `<button class="btn small" data-action="pdf-build" data-tid="${tour.id}"><i class="ti ti-refresh" aria-hidden="true"></i> ${esc(t('pdfBuild', { n: stale.length }))}</button>` : ''}
-            <button class="btn small primary" data-action="pdf-zip" data-tid="${tour.id}" ${pdfs.length && !b ? '' : 'disabled'}><i class="ti ti-file-zip" aria-hidden="true"></i> ${esc(t('pdfZip'))}</button>
-          </div></div>
-        ${b ? `<p class="note"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(b.text || t('pdfBuilding', { n: b.progress || 0, t: b.total || '…' }))}</p>` : ''}
-        ${pdfs.length ? `<ul class="file-list">${pdfs.map(r => { const p = pdfOf(r); return `<li>
-            <i class="ti ti-file-type-pdf file-ic pdf" aria-hidden="true"></i>
-            <button class="file-main as-link" data-action="pdf-view" data-id="${esc(r.id)}">
-              <strong>${esc(p.name)}</strong>
-              <small class="muted">${esc(t('pdfSt_' + (p.status === 'approved' ? 'approved' : 'draft')))} · ${esc(fmtStamp(p.updated))}${fresh(r) ? '' : ` · ${t('pdfOld')}`}</small>
-            </button>
-          </li>`; }).join('')}</ul>` : `<p class="muted">${esc(t('pdfEmpty'))}</p>`}
-      </div>`;
-  }
-
-  // PDF creati dal referto stesso, aperto di nascosto (usa gli stessi dati e la stessa grafica).
-  function buildPdfs(tid) {
-    if (ui.refBuild) return;
-    ui.refBuild = { tid, progress: 0, total: 0 };
-    const frame = document.createElement('iframe');
-    frame.hidden = true;
-    frame.src = refertoUrl(`archivio=${encodeURIComponent(tid)}&build=1`);
-    const done = () => { window.removeEventListener('message', onMsg); clearTimeout(timer); frame.remove(); ui.refBuild = null; refresh(); };
-    const onMsg = e => {
-      if (e.origin !== location.origin || !e.data || e.data.source !== 'referto-build' || e.data.tid !== tid) return;
-      if (e.data.done) { if (e.data.error) ui.flash = { type: 'warn', text: t('escoreError', { code: e.data.error }) }; done(); return; }
-      ui.refBuild.progress = e.data.progress; ui.refBuild.total = e.data.total;
-      if (!isTyping()) render();
-    };
-    const timer = setTimeout(done, 5 * 60 * 1000);
-    window.addEventListener('message', onMsg);
-    document.body.appendChild(frame);
-    render();
-  }
-
-  const b64Blob = b64 => new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: 'application/pdf' });
-  let viewerUrl = null;
-  async function viewPdf(id) {
-    const meta = S().refPdf[id];
-    if (!meta) return;
-    $dialog.innerHTML = `<div class="pdf-viewer"><div class="pv-bar"><strong>${esc(meta.name)}</strong></div><p class="muted"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</p></div>`;
-    $dialog.classList.add('wide-dialog');
-    if (!$dialog.open) $dialog.showModal();
-    const pdf = await window.Cloud.loadPdf(id).catch(() => null);
-    if (!pdf) { $dialog.querySelector('p').textContent = t('pdfMissing'); return; }
-    if (viewerUrl) URL.revokeObjectURL(viewerUrl);
-    viewerUrl = URL.createObjectURL(b64Blob(pdf.data));
-    $dialog.innerHTML = `<div class="pdf-viewer">
-      <div class="pv-bar"><strong>${esc(pdf.name)}</strong>
-        <div class="btn-row">
-          <a class="btn small" href="${viewerUrl}" download="${esc(pdf.name)}"><i class="ti ti-download" aria-hidden="true"></i> ${esc(t('pdfDownload'))}</a>
-          <a class="btn small" href="${viewerUrl}" target="_blank" rel="noopener"><i class="ti ti-external-link" aria-hidden="true"></i> ${esc(t('pdfNewTab'))}</a>
-          <button class="btn small primary" data-action="close-dialog">${esc(t('close'))}</button>
-        </div></div>
-      <div class="pv-pages" id="pvPages"><p class="muted"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</p></div>
-    </div>`;
-    // Pagine disegnate con pdf.js: si vedono su tutti i dispositivi (anche dove il browser non mostra i PDF).
-    try {
-      const pdfjs = await loadPdfJs();
-      const docPdf = await pdfjs.getDocument({ data: Uint8Array.from(atob(pdf.data), c => c.charCodeAt(0)) }).promise;
-      const box = document.getElementById('pvPages');
-      if (!box) return;
-      box.innerHTML = '';
-      for (let n = 1; n <= docPdf.numPages; n++) {
-        const page = await docPdf.getPage(n);
-        const vp = page.getViewport({ scale: 2 });
-        const cv = document.createElement('canvas');
-        cv.width = vp.width; cv.height = vp.height;
-        box.appendChild(cv);
-        await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
-      }
-    } catch (err) {
-      console.warn(err);
-      const box = document.getElementById('pvPages');
-      if (box) box.innerHTML = `<iframe class="pv-frame" src="${viewerUrl}" title="${esc(pdf.name)}"></iframe>`;
-    }
-  }
-
-  let pdfJsPromise = null;
-  function loadPdfJs() {
-    const base = 'vendor/pdfjs/';
-    if (!pdfJsPromise) pdfJsPromise = new Promise((resolve, reject) => {
-      const sc = document.createElement('script');
-      sc.src = base + 'pdf.min.js';
-      sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.js'; resolve(window.pdfjsLib); };
-      sc.onerror = () => { pdfJsPromise = null; reject(new Error('pdfjs')); };
-      document.head.appendChild(sc);
-    });
-    return pdfJsPromise;
-  }
   $dialog.addEventListener('close', () => $dialog.classList.remove('wide-dialog'));
 
   // Nome di file con sole lettere latine (il greco viene traslitterato).
@@ -5159,16 +3254,41 @@
     .replace(/[\u0370-\u03ff]/g, c => { const l = GR[c.toLowerCase()] || ''; return c === c.toLowerCase() ? l : l.charAt(0).toUpperCase() + l.slice(1); })
     .replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '');
 
+  // PDF archiviato di un referto: anteprima, download o apertura in una nuova scheda.
+  let pdfUrl = null;
+  async function viewPdf(id) {
+    const meta = (S().refPdf || {})[id];
+    if (!meta) return;
+    $dialog.innerHTML = `<div class="pdf-viewer"><div class="pv-bar"><strong>${esc(meta.name)}</strong></div><p class="muted"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</p></div>`;
+    $dialog.classList.add('wide-dialog');
+    if (!$dialog.open) $dialog.showModal();
+    const pdf = await window.Cloud.loadPdf(id).catch(() => null);
+    if (!pdf) { $dialog.querySelector('p').textContent = t('pdfMissing'); return; }
+    const bin = atob(pdf.data), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    pdfUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    $dialog.innerHTML = `<div class="pdf-viewer">
+      <div class="pv-bar"><strong>${esc(pdf.name)}</strong>
+        <div class="btn-row">
+          <a class="btn small" href="${pdfUrl}" download="${esc(pdf.name)}"><i class="ti ti-download" aria-hidden="true"></i> ${esc(t('pdfDownload'))}</a>
+          <a class="btn small" href="${pdfUrl}" target="_blank" rel="noopener"><i class="ti ti-external-link" aria-hidden="true"></i> ${esc(t('pdfNewTab'))}</a>
+          <button class="btn small primary" data-action="close-dialog">${esc(t('close'))}</button>
+        </div></div>
+      <iframe class="pv-frame" src="${pdfUrl}" title="${esc(pdf.name)}"></iframe>
+    </div>`;
+  }
+
   let zipPromise = null;
   async function zipPdfs(tid) {
-    const tour = tourById(tid) || vtById(tid);
+    const tour = vtById(tid);
     const ids = Object.keys(S().refPdf).filter(id => S().refPdf[id].tid === tid);
     if (!ids.length) return;
     ui.refBuild = { tid, text: t('pdfZipping', { n: 0, t: ids.length }) }; render();
     try {
       if (!zipPromise) zipPromise = new Promise((resolve, reject) => {
         const sc = document.createElement('script');
-        sc.src = 'referto/vendor/jszip.min.js'; sc.onload = () => resolve(window.JSZip); sc.onerror = () => { zipPromise = null; reject(new Error('zip')); };
+        sc.src = 'vendor/jszip/jszip.min.js'; sc.onload = () => resolve(window.JSZip); sc.onerror = () => { zipPromise = null; reject(new Error('zip')); };
         document.head.appendChild(sc);
       });
       const JSZip = await zipPromise;
@@ -5252,563 +3372,25 @@
         <p class="muted small">${esc(t('rpIntro'))}</p><a class="btn primary" href="#/report">${esc(t('rpTitle'))} →</a></div>` : ''}
       ${admin() ? `<div class="card"><h2><i class="ti ti-cash-register" aria-hidden="true"></i> ${esc(t('payAdminTitle'))}</h2>
         <p class="muted small">${esc(t('payAdminIntro'))}</p><a class="btn primary" href="#/payments">${esc(t('payAdminTitle'))} →</a></div>` : ''}
-      ${tourAdmin() ? rewardsCard() : ''}
       ${tourAdmin() ? scorersCard() : ''}
-      ${admin() ? `
-      <div class="card">
-        <h2>${esc(t('backup'))}</h2>
-        <p class="muted">${esc(t('backupHelp'))}</p>
-        <div class="btn-row">
-          <button class="btn" data-action="export"><i class="ti ti-download" aria-hidden="true"></i> ${esc(t('exportData'))}</button>
-          <button class="btn" data-action="import-backup"><i class="ti ti-upload" aria-hidden="true"></i> ${esc(t('importData'))}</button>
-        </div>
-      </div>` : ''}
       ${designCard()}
-      ${themeCard()}
-      ${isOwner() ? `<div class="card danger-zone">
-        <h2>${esc(t('dangerZone'))}</h2>
-        <p class="muted">${esc(t('deleteAllHelp'))}</p>
-        <button class="btn danger" data-action="delete-all">${esc(t('deleteAll'))}</button>
-      </div>` : ''}`;
+      ${themeCard()}`;
   }
 
-  // ---------- finestra partita: calendario, risultato, gara chiusa ----------
-  function openMatch(tid, key) {
-    const tour = tourById(tid);
-    const m = L.plannedMatches(tour).find(x => x.key === key);
-    if (!m || m.bye) return;
-    const known = L.real(m.a) && L.real(m.b);
-    let res = tour.results[key];
-    if (res && (res.a !== m.a || res.b !== m.b)) res = null;
-    res = res || { sets: [], outcome: null, closed: false };
-    // Referto elettronico: il risultato inviato dal refertista precompila i set.
-    const lv = liveFor(tour, m);
-    if (lv && !res.sets.length && !res.outcome) res = { sets: lv.sets || [], outcome: lv.outcome || null, closed: false };
-    const raw = rawLive(tour, m);
-    const sch = tour.schedule[key] || {};
-    // Data proposta: giorno d'inizio della fase (qualifiche o tabellone principale), altrimenti inizio torneo.
-    const phaseStart = ((m.stage === 'qual' ? tour.qualStart : tour.mainStart) || '').slice(0, 10);
-    const defDate = sch.date || phaseStart || tour.start || '';
-    const c = tour.config, nSets = 2 * c.setsToWin - 1;
-    const o = res.outcome;
-    const oVal = o ? o.type + o.team.toUpperCase() : 'normal';
-    ui.matchCtx = { tid, key, a: m.a, b: m.b };
-    const nameA = slotName(tour, m, 0), nameB = slotName(tour, m, 1);
-    const setRows = Array.from({ length: nSets }, (_, i) => `
-      <div class="set-row">
-        <span class="set-label">${esc(t('set'))} ${i + 1} <small class="muted">(${L.setTarget(c, i)})</small></span>
-        <input type="number" min="0" max="99" inputmode="numeric" name="a${i}" value="${res.sets[i] ? res.sets[i][0] : ''}" aria-label="${esc(t('set'))} ${i + 1} A">
-        <span>–</span>
-        <input type="number" min="0" max="99" inputmode="numeric" name="b${i}" value="${res.sets[i] ? res.sets[i][1] : ''}" aria-label="${esc(t('set'))} ${i + 1} B">
-      </div>`).join('');
-    $dialog.innerHTML = `
-      <form data-form="match" method="dialog">
-        <h2>${gNo(tour, m) ? `<b class="gno">${gNo(tour, m)}</b> ` : ''}${esc(phaseLabel(tour, m))} ${res.closed ?`<span class="badge st-done">${esc(t('matchClosed'))}</span>` : ''}</h2>
-        <div class="md-teams"><span>${nameA}</span><span class="vs">vs</span><span>${nameB}</span></div>
-        ${lv ? `<p class="escore-note">${liveTag(lv)} ${esc(t(lv.status === 'finished' ? 'escorePendingNote' : 'escoreLiveNote', { r: liveSummary(lv) }))}</p>` : ''}
-        <fieldset>
-          <legend>${esc(t('schedule'))}</legend>
-          <div class="grid-form tight three">
-            <label>${esc(t('date'))} *<input name="date" type="date" required value="${esc(defDate)}"></label>
-            <label>${esc(t('time'))}<input name="time" type="time" value="${esc(sch.time || '')}"></label>
-            <label>${esc(t('court'))}<input name="court" maxlength="10" value="${esc(sch.court || '')}"></label>
-            ${gsNoEditable(tour, m) ? `<label>${esc(t('matchNo'))}<input name="gno" type="number" min="1" max="${gCount(tour)}" inputmode="numeric" value="${gNo(tour, m).slice(1)}"></label>` : ''}
-          </div>
-          ${gsNoEditable(tour, m) ? `<p class="muted small">${esc(t('matchNoHelp'))}</p>` : ''}
-          <label class="check"><input type="checkbox" name="follow" ${sch.follow ? 'checked' : ''}> ${esc(t('toFollow'))}</label>
-          <label class="check vis-check"><input type="checkbox" name="visible" ${tour.visible[key] ? 'checked' : ''}> <i class="ti ti-eye" aria-hidden="true"></i> ${esc(t('visibleToPublic'))}</label>
-        </fieldset>
-        ${known ? `
-        <fieldset>
-          <legend>${esc(t('result'))}</legend>
-          <label class="outcome">${esc(t('outcome'))}
-            <select name="outcome" data-change="outcome">
-              <option value="normal" ${sel(oVal, 'normal')}>${esc(t('outcomeNormal'))}</option>
-              <option value="injA" ${sel(oVal, 'injA')}>INJ/DSQ — ${nameA}</option>
-              <option value="injB" ${sel(oVal, 'injB')}>INJ/DSQ — ${nameB}</option>
-              <option value="dsqA" ${sel(oVal, 'dsqA')}>DSQ (${esc(t('forfeit'))}) — ${nameA}</option>
-              <option value="dsqB" ${sel(oVal, 'dsqB')}>DSQ (${esc(t('forfeit'))}) — ${nameB}</option>
-            </select>
-          </label>
-          <p class="muted small" data-outcome-help></p>
-          <div class="sets">${setRows}</div>
-        </fieldset>` : `<p class="muted small">${esc(t('teamsNotKnown'))}</p>`}
-        <p class="error" id="mdErr" role="alert"></p>
-        ${known && (!res.closed || (raw && raw.status !== 'ready')) ? `<div class="btn-row escore-row">
-          ${!res.closed ? `<button type="button" class="btn small escore-btn" data-action="escore-open" data-tid="${tid}" data-key="${key}"><i class="ti ti-device-mobile" aria-hidden="true"></i> ${esc(t('escoreBtn'))}</button>` : ''}
-          ${raw ? `<button type="button" class="btn small" data-action="escore-reset" data-tid="${tid}" data-key="${key}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('escoreReset'))}</button>` : ''}
-          ${lv && lv.status === 'finished' ? `<button type="button" class="btn small primary" data-action="escore-approve" data-tid="${tid}" data-key="${key}"><i class="ti ti-rosette-discount-check" aria-hidden="true"></i> ${esc(t('approveResult'))}</button>` : ''}
-          ${raw && (raw.status === 'finished' || raw.status === 'approved') ? `<button type="button" class="btn small" data-action="escore-reopen" data-tid="${tid}" data-key="${key}"><i class="ti ti-lock-open" aria-hidden="true"></i> ${esc(t('reopenScorer'))}</button>` : ''}
-        </div>` : ''}
-        <div class="form-actions">
-          <button type="button" class="btn" data-action="close-dialog">${esc(t('cancel'))}</button>
-          ${known && (res.sets.length || res.outcome) ? `<button type="button" class="btn danger" data-action="match-clear">${esc(t('clearResult'))}</button>` : ''}
-          ${known && res.closed ? `<button type="button" class="btn" data-action="match-reopen">${esc(t('reopenMatch'))}</button>` : ''}
-          <button class="btn" data-submit="save">${esc(res.closed ? t('saveChanges') : t('save'))}</button>
-          ${known && !res.closed ? `<button class="btn primary" data-submit="close"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('closeMatch'))}</button>` : ''}
-        </div>
-      </form>`;
-    const f = $dialog.querySelector('form');
-    if (known) syncOutcome(f);
-    $dialog.showModal();
-  }
-
-  function syncOutcome(f) {
-    const v = f.outcome.value;
-    f.querySelector('[data-outcome-help]').textContent = v === 'normal' ? '' : t(v.startsWith('inj') ? 'injHelp' : 'dsqHelp');
-    f.querySelector('.sets').hidden = v.startsWith('dsq');
-  }
-
-  // mode: 'save' | 'close' | 'reopen' | 'clear'
-  function saveMatch(f, mode) {
-    const ctx = ui.matchCtx, tour = tourById(ctx.tid);
-    const c = tour.config, nSets = 2 * c.setsToWin - 1;
-    const err = document.getElementById('mdErr');
-    if (mode !== 'clear' && !f.date.value) { err.textContent = t('errDateRequired'); f.date.focus(); return; }
-    if (f.gno && f.gno.value.trim() && 'G' + parseInt(f.gno.value, 10) !== nums(tour)[ctx.key]) {
-      if (!L.setMatchNo(tour, ctx.key, parseInt(f.gno.value, 10))) { err.textContent = t('errMatchNo', { n: gCount(tour) }); f.gno.focus(); return; }
-      numCache = {};
-    }
-    tour.schedule[ctx.key] = { date: f.date.value, time: f.time.value, court: f.court.value.trim(), follow: f.follow.checked };
-    setVisible(tour, [ctx.key], f.visible.checked);
-    const prev = tour.results[ctx.key] && tour.results[ctx.key].a === ctx.a && tour.results[ctx.key].b === ctx.b ? tour.results[ctx.key] : null;
-    if (f.outcome && mode !== 'clear') {
-      const v = f.outcome.value;
-      const outcome = v === 'normal' ? null : { type: v.slice(0, 3), team: v.slice(3).toLowerCase() };
-      const sets = [];
-      if (!outcome || outcome.type === 'inj') {
-        for (let i = 0; i < nSets; i++) {
-          const va = f.elements['a' + i].value.trim(), vb = f.elements['b' + i].value.trim();
-          if (va === '' && vb === '') continue;
-          if (va === '' || vb === '') { err.textContent = t('errInvalidSet', { set: i + 1, target: L.setTarget(c, i) }); return; }
-          sets.push([parseInt(va, 10), parseInt(vb, 10)]);
-        }
-      }
-      const closed = mode === 'close' || (mode === 'save' && !!(prev && prev.closed));
-      const hasResult = sets.length || outcome;
-      if (closed && !hasResult) { err.textContent = t('errNoResult'); return; }
-      if (closed || (hasResult && mode === 'save')) {
-        const e = L.validateResult(sets, outcome, c);
-        if (e && closed) { err.textContent = t(e.key, e); return; }
-      }
-      if (mode === 'reopen') {
-        if (prev) prev.closed = false;
-      } else if (hasResult) {
-        tour.results[ctx.key] = { a: ctx.a, b: ctx.b, sets, outcome, closed };
-      } else {
-        delete tour.results[ctx.key];
-      }
-    } else if (mode === 'clear') {
-      delete tour.results[ctx.key];
-    }
-    $dialog.close();
-    const raw = S().live && S().live[liveId(tour, ctx.key)];
-    if (raw && raw.a === ctx.a && raw.b === ctx.b && window.Cloud) {
-      if (mode === 'close' && raw.status !== 'approved') window.Cloud.setLiveStatus(liveId(tour, ctx.key), 'approved');
-      if (mode === 'reopen' && raw.status === 'approved') window.Cloud.setLiveStatus(liveId(tour, ctx.key), 'finished');
-    }
-    commit(t({ save: 'saved', close: 'matchClosedMsg', reopen: 'matchReopened', clear: 'resultCleared' }[mode]));
-  }
-
-  // ---------- E-scoresheet: link del refertista ----------
-  // Dati della gara che il referto elettronico riceve già compilati.
-  function escoreInfo(tour, m) {
-    const sch = tour.schedule[m.key] || {};
-    const c = tour.config;
-    const team = id => {
-      const e = entryById(tour, id);
-      return { name: teamText(tour, id), players: [e.p1, e.p2].map(pid => { const p = player(pid); return p ? (nickOf(p) || `${p.first || ''} ${p.last || ''}`.trim()) : ''; }) };
-    };
-    return {
-      competition: tour.name || '', location: tour.location || '', matchNo: gNo(tour, m), phase: phaseLabel(tour, m), gender: tour.gender,
-      date: sch.date || '', time: sch.follow ? t('toFollow') : sch.time || '', court: sch.court || '',
-      A: team(m.a), B: team(m.b),
-      settings: { bestOf: 2 * c.setsToWin - 1, points: c.setPoints, tiePoints: c.tiebreakPoints }
-    };
-  }
-
-  const refertoUrl = (params) => new URL(`referto/?${params}`, location.href.split('#')[0]).href;
-
-  // Apre il referto elettronico della gara: lo crea nella raccolta "referti" se non esiste ancora.
-  async function openReferto(tid, key) {
-    const tour = tourById(tid);
-    const m = tour && L.plannedMatches(tour).find(x => x.key === key);
-    if (!m || m.bye || !L.real(m.a) || !L.real(m.b) || !window.Cloud) return;
-    if ($dialog.open) $dialog.close();
-    // L'admin lo apre in una nuova scheda (la finestra va aperta subito, prima dell'attesa del database).
-    const win = tourAdmin() ? window.open('', '_blank') : null;
-    ui.flash = { text: t('escoreLoading') }; render();
-    try {
-      const sch = tour.schedule[key] || {};
-      const id = await window.Cloud.openReferto(tid, key, m.a, m.b, sch.court || '', escoreInfo(tour, m));
-      const url = refertoUrl(`g=${encodeURIComponent(id)}`);
-      if (win) { win.location.href = url; render(); } else location.href = url;
-    } catch (err) {
-      if (win) win.close();
-      console.error(err);
-      warn(err.code === 'stale' ? 'escoreStale' : 'escoreError', { code: err.code || err.message });
-    }
-  }
-
-  function approveEscore(tid, key) {
-    const tour = tourById(tid);
-    const m = L.plannedMatches(tour).find(x => x.key === key);
-    const lv = m && liveFor(tour, m);
-    if (!lv || lv.status !== 'finished') return;
-    const outcome = lv.outcome || null;
-    const sets = outcome && outcome.type === 'dsq' ? [] : (lv.sets || []).map(x => [+x[0], +x[1]]);
-    const e = L.validateResult(sets, outcome, tour.config);
-    if (e) {
-      // Risultato non valido per la formula del torneo: si corregge a mano nella finestra della gara.
-      openMatch(tid, key);
-      document.getElementById('mdErr').textContent = t(e.key, e);
-      return;
-    }
-    tour.results[key] = { a: m.a, b: m.b, sets, outcome, closed: true };
-    if ($dialog.open) $dialog.close();
-    window.Cloud.setLiveStatus(liveId(tour, key), 'approved');
-    commit(t('approvedMsg'));
-  }
-
-  async function resetEscore(tid, key) {
-    const tour = tourById(tid);
-    if (!confirmed('escoreResetConfirm')) return;
-    if ($dialog.open) $dialog.close();
-    try { await window.Cloud.resetReferto(liveId(tour, key)); ui.flash = { text: t('escoreResetDone') }; }
-    catch (err) { ui.flash = { type: 'warn', text: t('escoreError', { code: err.code || err.message }) }; }
-    render();
-  }
-
-  function reopenEscore(tid, key) {
-    const tour = tourById(tid);
-    const m = L.plannedMatches(tour).find(x => x.key === key);
-    if (!m || !rawLive(tour, m)) return;
-    const res = tour.results[key];
-    if (res && res.a === m.a && res.b === m.b) res.closed = false;
-    if ($dialog.open) $dialog.close();
-    window.Cloud.setLiveStatus(liveId(tour, key), 'live');
-    commit(t('reopenScorerMsg'));
-  }
-
-  // ---------- Excel ----------
-  let xlsxPromise = null;
-  function loadXlsx() {
-    if (!xlsxPromise) {
-      xlsxPromise = new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = 'vendor/xlsx/xlsx.full.min.js';
-        s.onload = () => resolve(window.XLSX);
-        s.onerror = () => { xlsxPromise = null; reject(new Error('xlsx')); };
-        document.head.appendChild(s);
-      });
-    }
-    return xlsxPromise;
-  }
-
-  function pickFile(accept) {
-    return new Promise(resolve => {
-      const i = document.createElement('input');
-      i.type = 'file'; i.accept = accept;
-      i.onchange = () => resolve(i.files[0] || null);
-      i.click();
-    });
-  }
-
-  async function readRows(file) {
-    const XLSX = await loadXlsx();
-    const wb = XLSX.read(await file.arrayBuffer());
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false })
-      .map(r => r.map(c => String(c).trim()))
-      .filter(r => r.some(Boolean));
-    if (rows.length && rows[0].some(c => /cognome|nome|surname|name|επώνυμο|όνομα|genere|punti/i.test(c))) rows.shift();
-    return rows;
-  }
-
-  async function downloadTemplate(name, header, example) {
-    const XLSX = await loadXlsx();
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, example]), 'Foglio1');
-    XLSX.writeFile(wb, name);
-  }
-
-  // ---------- EOPE UPDATE: rapporto Excel dei risultati per la federazione ----------
-  function teamFullText(tour, id) {
-    if (id === L.BYE) return 'BYE';
-    const e = id && entryById(tour, id);
-    if (!e) return '';
-    const a = player(e.p1), b = player(e.p2);
-    return `${playerFull(a)} / ${playerFull(b)}`;
-  }
-
-  function slotText(tour, m, side) {
-    const id = side ? m.b : m.a;
-    if (id) return teamFullText(tour, id);
-    const ph = L.placeholder(tour, m, side, nums(tour));
-    return ph ? (ph.text || t(ph.kind, { g: ph.no || '?' })) : t('tbd');
-  }
-
-  function eopeMatchRow(tour, m) {
-    const s = tour.schedule[m.key] || {};
-    const st = m.stats;
-    const status = m.bye ? 'BYE' : st ? t('matchClosed') : m.draft ? t('notClosed') : t('toBePlayed');
-    const res = st ? m.res : null;
-    return [
-      gNo(tour, m), phaseLabel(tour, m), s.date ? fmtDate(s.date) : '', s.follow ? t('toFollow') : (s.time || ''), s.court || '',
-      slotText(tour, m, 0), slotText(tour, m, 1),
-      st ? st.a.sw : '', st ? st.b.sw : '', res ? res.sets.map(([a, b]) => `${a}-${b}`).join(' ') : '',
-      st ? teamFullText(tour, m.winner) : '', st ? (st.tag || t('outcomeNormal')) : '', status
-    ];
-  }
-
-  async function buildEope(tour) {
-    const XLSX = await loadXlsx();
-    const wb = XLSX.utils.book_new();
-    const add = (name, rows, widths) => {
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      if (widths) ws['!cols'] = widths.map(w => ({ wch: w }));
-      XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
-    };
-    const now = new Date();
-    const cat = catById(tour.categoryId);
-    add(t('sheetInfo'), [
-      ['EOPE UPDATE', tour.name],
-      [t('generatedAt'), now.toLocaleString(I18n.locale())],
-      [t('category'), cat ? cat.name : ''], [t('gender'), genderLabel(tour.gender)], [t('coefficient'), tour.coefficient],
-      [t('location'), tour.location || ''], [t('tournamentDates'), fmtRange(tour.start, tour.end)],
-      [t('inquiry'), fmtDateTime(tour.inquiry)], [t('format'), formatSummary(tour)], [t('statusLabel'), t('st_' + L.status(tour))]
-    ], [28, 60]);
-    const head = [t('colNo'), t('colPhase'), t('date'), t('time'), t('court'), t('colTeamA'), t('colTeamB'), t('colSetsA'), t('colSetsB'), t('colScores'), t('colWinner'), t('outcome'), t('colStatus')];
-    const widths = [8, 26, 14, 10, 8, 40, 40, 7, 7, 18, 40, 12, 14];
-    const noOf = m => parseInt(String(gNo(tour, m)).slice(1), 10) || 9999;
-    const planned = L.plannedMatches(tour).sort((x, y) => noOf(x) - noOf(y));
-    const qual = planned.filter(m => m.stage === 'qual');
-    const main = planned.filter(m => m.stage !== 'qual');
-    if (qual.length) add(t('sheetQual'), [head, ...qual.map(m => eopeMatchRow(tour, m))], widths);
-    if (main.length) add(t('sheetMain'), [head, ...main.map(m => eopeMatchRow(tour, m))], widths);
-    if (tour.pools) {
-      const rows = [[t('pool'), t('place'), t('team'), t('winsShort'), t('lossesShort'), t('ptsShort'), t('setsShort'), t('pointsRatio')]];
-      tour.pools.forEach((p, pi) => L.poolStandings(tour, pi).forEach((r, i) => rows.push([
-        p.name || t('singlePool'), i + 1, teamFullText(tour, r.id), r.w, r.l, r.mp, `${r.sw}:${r.sl}`, r.pl ? +(r.pw / r.pl).toFixed(3) : ''
-      ])));
-      add(t('sheetPools'), rows, [10, 6, 44, 5, 5, 6, 8, 8]);
-    }
-    const pl = L.placements(tour);
-    if (pl) {
-      const rows = [[t('place'), t('team'), t('teamPts'), t('perPlayer')]];
-      tour.entries.filter(e => pl[e.id] != null).sort((a, b) => pl[a.id] - pl[b.id]).forEach(e => {
-        const tp = L.teamPoints(S(), tour, pl[e.id]);
-        rows.push([pl[e.id], teamFullText(tour, e.id), tp, tp / 2]);
-      });
-      add(t('sheetFinal'), rows, [6, 50, 12, 12]);
-    }
-    const map = rankMap(tour.gender);
-    const where = id => {
-      const sp = tour.split;
-      if (!sp) return '';
-      if (sp.wc.includes(id)) return 'WC';
-      if ((sp.qualWc || []).includes(id)) return 'WC-Q';
-      if (sp.main.includes(id)) return t('entryMain');
-      if (sp.qual.includes(id)) return t('entryQual');
-      return t('reserves');
-    };
-    add(t('sheetEntries'), [['#', t('player1'), t('points'), t('player2'), t('points'), t('total'), t('entry')],
-      ...tour.entries.map((e, i) => { const [a, b] = L.entryPts(tour, e, map); return [i + 1, playerFull(player(e.p1)), a, playerFull(player(e.p2)), b, L.round2(a + b), where(e.id)]; })],
-      [5, 32, 9, 32, 9, 9, 14]);
-    const stamp = now.toLocaleDateString('sv').replace(/-/g, '') + '_' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
-    const filename = `EOPE_UPDATE_${tour.name.replace(/[^\p{L}\p{N}]+/gu, '_')}_${stamp}.xlsx`;
-    return { XLSX, wb, filename };
-  }
-
-  async function eopeDownload(tour) {
-    try {
-      const { XLSX, wb, filename } = await buildEope(tour);
-      XLSX.writeFile(wb, filename);
-      ui.flash = { text: t('eopeGenerated', { f: filename }) };
-      render();
-    } catch (e) { warn('excelError'); }
-  }
-
-  function eopeCard(tour) {
-    return `<div class="card eope-card">
-      <h2><i class="ti ti-file-spreadsheet" aria-hidden="true"></i> EOPE UPDATE</h2>
-      <p class="muted small">${esc(t('eopeHelp'))}</p>
-      <div class="btn-row">
-        <button class="btn primary" data-action="eope-download" data-tid="${tour.id}"><i class="ti ti-download" aria-hidden="true"></i> ${esc(t('eopeDownload'))}</button>
-        <button class="btn" data-action="eope-send" data-tid="${tour.id}"><i class="ti ti-mail-forward" aria-hidden="true"></i> ${esc(t('eopeSend'))}</button>
-      </div>
-    </div>`;
-  }
-
-  const validEmail = s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-
-  function openEopeSend(tour) {
-    const list = S().eopeRecipients || [];
-    ui.eopeTid = tour.id;
-    loadXlsx().catch(() => {});   // pronto in anticipo: la condivisione deve partire subito dopo il tocco
-    $dialog.innerHTML = `
-      <form data-form="eope-send" method="dialog">
-        <h2><i class="ti ti-mail-forward" aria-hidden="true"></i> EOPE UPDATE · ${esc(tour.name)}</h2>
-        <fieldset><legend>${esc(t('eopeRecipients'))}</legend>
-          ${list.length ? `<div class="rcpt-list">${list.map((r, i) => `<div class="rcpt">
-              <label class="check"><input type="checkbox" name="to" value="${esc(r.email)}" ${r.default !== false ? 'checked' : ''}> ${esc(r.name ? `${r.name} <${r.email}>` : r.email)}</label>
-              <button type="button" class="icon-btn" data-action="eope-remove" data-idx="${i}" aria-label="${esc(t('remove'))}"><i class="ti ti-x" aria-hidden="true"></i></button>
-            </div>`).join('')}</div>` : `<p class="muted small">${esc(t('eopeNoRecipients'))}</p>`}
-          <div class="rcpt-add">
-            <input name="newName" placeholder="${esc(t('eopeName'))}" maxlength="60">
-            <input name="newEmail" type="email" placeholder="nome@esempio.gr" autocapitalize="off" spellcheck="false">
-            <button type="button" class="btn small" data-action="eope-add"><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('add'))}</button>
-          </div>
-        </fieldset>
-        <p class="muted small">${esc(t('eopeSendHelp'))}</p>
-        <p class="error" id="mdErr" role="alert"></p>
-        <div class="form-actions">
-          <button type="button" class="btn" data-action="close-dialog">${esc(t('cancel'))}</button>
-          <button class="btn primary"><i class="ti ti-send" aria-hidden="true"></i> ${esc(t('eopeSendBtn'))}</button>
-        </div>
-      </form>`;
-    if (!$dialog.open) $dialog.showModal();
-  }
-
-  async function eopeSend(f) {
-    const tour = tourById(ui.eopeTid);
-    const to = [...f.querySelectorAll('input[name=to]:checked')].map(i => i.value);
-    const err = document.getElementById('mdErr');
-    if (!to.length) { err.textContent = t('errNoRecipient'); return; }
-    let built;
-    try { built = await buildEope(tour); } catch (e) { err.textContent = t('excelError'); return; }
-    const { XLSX, wb, filename } = built;
-    const subject = t('eopeSubject', { t: tour.name });
-    const body = t('eopeBody', { t: tour.name });
-    const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const file = new File([data], filename, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    $dialog.close();
-    // Telefono: condivisione con il file già allegato (gli indirizzi vanno negli appunti, la condivisione non li accetta).
-    // PC: scarica il file e apre la posta con destinatari e oggetto già compilati.
-    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
-    if (mobile && navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        try { await navigator.clipboard.writeText(to.join(', ')); } catch (e) { /* appunti non disponibili */ }
-        await navigator.share({ files: [file], title: subject, text: body });
-        ui.flash = { text: t('eopeShared') }; render();
-        return;
-      } catch (e) { if (e && e.name === 'AbortError') return; }
-    }
-    XLSX.writeFile(wb, filename);
-    location.href = `mailto:${to.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + '\n\n' + t('eopeAttachNote', { f: filename }))}`;
-    ui.flash = { text: t('eopeMailOpened', { f: filename }) }; render();
-  }
-
-  function findOrCreatePlayer(last, first, gender, created) {
-    const key = L.nameKey(last, first);
-    // Riconosce anche le grafie memorizzate quando due giocatori sono stati uniti.
-    let p = S().players.find(x => x.gender === gender &&
-      [{ last: x.last, first: x.first }].concat(x.aliases || []).some(n => L.nameKey(n.last, n.first) === key));
-    if (!p) {
-      p = { id: Store.uid('p'), first, last, gender, club: '', base: 0 };
-      S().players.push(p);
-      created.n++;
-    }
-    return p;
-  }
-
-  // Colonna WC del file: "Q" / "WC-Q" / "qualifiche" = wild card qualifiche; "x", "sì", "WC", "M" = wild card main draw.
-  const parseWc = v => {
-    const s = String(v).trim();
-    if (/^(q|wc-?q|qual.*|προκρ.*)$/i.test(s)) return 'qual';
-    return /^(x|s|si|sì|y|yes|1|wc|m|main.*|ναι|true|v)$/i.test(s) ? 'main' : false;
-  };
-  const parseNum = v => { const n = parseFloat(String(v).replace(/\s/g, '').replace(',', '.')); return isNaN(n) ? null : n; };
-
-  async function importEntries(tour) {
-    const file = await pickFile('.xlsx,.xls,.csv');
-    if (!file) return;
-    let rows;
-    try { rows = await readRows(file); } catch (e) { return warn('excelError'); }
-    if (tour.entries.length && !confirm(t('confirmReplaceEntries'))) return;
-    applyEntryRows(tour, rows);
-  }
-
-  function applyEntryRows(tour, rows) {
-    const created = { n: 0 }, entries = [], used = new Set();
-    let skipped = 0;
-    rows.forEach(r => {
-      const [l1, f1, l2, f2, wc] = r;
-      if (!l1 || !f1 || !l2 || !f2) { skipped++; return; }
-      const [g1, g2] = teamGenders(tour);
-      const p1 = findOrCreatePlayer(l1, f1, g1, created);
-      const p2 = findOrCreatePlayer(l2, f2, g2, created);
-      if (p1.id === p2.id || used.has(p1.id) || used.has(p2.id)) { skipped++; return; }
-      used.add(p1.id); used.add(p2.id);
-      entries.push({ id: Store.uid('e'), p1: p1.id, p2: p2.id, man1: null, man2: null, wc: parseWc(wc) });
-    });
-    // Le wild card già assegnate restano: si segnano nella nuova lista o vi vengono aggiunte.
-    tour.entries.filter(e => e.wc).forEach(w => {
-      const same = entries.find(e => [e.p1, e.p2].sort().join() === [w.p1, w.p2].sort().join());
-      if (same) same.wc = w.wc;
-      else if (!used.has(w.p1) && !used.has(w.p2)) entries.push(w);
-    });
-    tour.entries = entries;
-    rankCache = {};
-    L.sortEntries(tour, rankMap(tour.gender));
-    commit({ text: t('entriesImported', { n: entries.length, c: created.n, s: skipped }), type: skipped ? 'warn' : 'ok' });
-  }
-
-  async function importRanking() {
-    const file = await pickFile('.xlsx,.xls,.csv');
-    if (!file) return;
-    let rows;
-    try { rows = await readRows(file); } catch (e) { return warn('excelError'); }
-    applyRankingRows(rows);
-  }
-
-  function applyRankingRows(rows) {
-    const created = { n: 0 };
-    let updated = 0, skipped = 0;
-    rows.forEach(r => {
-      const [last, first, g, pts, club] = r;
-      const gender = /^(m|u|uomo|maschile|male|a|α|άνδρας|ανδρ)/i.test(g) ? 'M' : /^(f|d|donna|femminile|female|γ|γυν)/i.test(g) ? 'F' : null;
-      const n = parseNum(pts);
-      if (!last || !first || !gender || n == null) { skipped++; return; }
-      const p = findOrCreatePlayer(last, first, gender, created);
-      p.base = n;
-      if (club) p.club = club;
-      updated++;
-    });
-    commit({ text: t('rankingImported', { n: updated, c: created.n, s: skipped }), type: skipped ? 'warn' : 'ok' });
-  }
-
-  // Assegna o toglie la wild card (kind: '' | 'main' | 'qual'), rispettando il numero previsto.
-  function setWc(tour, id, kind) {
-    const e = entryById(tour, id);
-    if (kind && e.wc !== kind && tour.entries.filter(x => x.wc === kind).length >= wcLimit(tour, kind)) {
-      return warn('errWcFull', { n: wcLimit(tour, kind) });
-    }
-    e.wc = kind || false;
-    commit();
-  }
+  // ---------- avviso della prima pagina ----------
 
   function setNotice(scope, text) {
     if (scope === 'home') { S().notice = text; if (!text) S().noticeUntil = ''; }
-    else { const tour = tourById(scope); if (tour) tour.notice = text; }
     ui.editNotice = null;
     commit(t(text ? 'noticeSaved' : 'noticeRemoved'));
   }
 
-  const compositionOk = c =>c.directSpots + c.qualSpots + c.wcSpots === c.mainSize;
-  const compositionParams = c => ({ n: c.mainSize, s: c.directSpots + c.qualSpots + c.wcSpots });
-
   // ---------- azioni ----------
   const confirmed =(key, p) => confirm(t(key, p));
-  const tourOf = el => tourById(el.dataset.tid);
-
-  function move(list, id, dir) {
-    const i = list.indexOf(id), j = i + dir;
-    if (i < 0 || j < 0 || j >= list.length) return;
-    [list[i], list[j]] = [list[j], list[i]];
-  }
 
   const actions = Object.assign({}, vtActions, teamActions, trActions, occActions, payActions, privacyActions, reportActions, cassaActions, {
+    'pdf-view': el => viewPdf(el.dataset.id),
+    'pdf-zip': el => zipPdfs(el.dataset.tid),
     'fp-leave': el => {
       const fp = fpById(el.dataset.id), m = member();
       if (!fp || !m) return;
@@ -5857,89 +3439,8 @@
     'notice-dismiss': el => { S().notices = (S().notices || []).filter(n => n.id !== el.dataset.id); window.Cloud.dismissNotice(el.dataset.id); render(); },
     'set-theme': el => setTheme(el.dataset.themeId),
     'set-design': el => setDesign(el.dataset.designId),
-    'cal-view': el => { ui.calView = el.dataset.view; render(); },
-    'eope-download': el => eopeDownload(tourOf(el)),
-    'eope-send': el => openEopeSend(tourOf(el)),
-    'eope-add': el => {
-      const f = el.closest('form'), email = f.newEmail.value.trim(), name = f.newName.value.trim();
-      const err = document.getElementById('mdErr');
-      if (!validEmail(email)) { err.textContent = t('errEmail'); return; }
-      const list = S().eopeRecipients = S().eopeRecipients || [];
-      if (!list.some(r => r.email.toLowerCase() === email.toLowerCase())) list.push({ email, name });
-      Store.save();
-      openEopeSend(tourById(ui.eopeTid));
-    },
-    'eope-remove': el => {
-      S().eopeRecipients.splice(+el.dataset.idx, 1);
-      Store.save();
-      openEopeSend(tourById(ui.eopeTid));
-    },
-    'toggle-visible': el => {
-      const tour = tourOf(el), key = el.dataset.key, vis = !tour.visible[key];
-      setVisible(tour, [key], vis);
-      commit(t(vis ? 'matchPublished' : 'matchHiddenMsg'));
-    },
-    'vis-group': el => {
-      const tour = tourOf(el), keys = el.dataset.keys.split(',').filter(Boolean), v = el.dataset.value === '1';
-      setVisible(tour, keys, v);
-      commit(t(v ? 'matchesPublished' : 'matchesHidden', { n: keys.length }));
-    },
-    'vis-all': el => {
-      const tour = tourOf(el), v = el.dataset.value === '1';
-      const keys = L.plannedMatches(tour).filter(m => !(m.bye && m.a === L.BYE && m.b === L.BYE)).map(m => m.key);
-      setVisible(tour, keys, v);
-      commit(t(v ? 'matchesPublished' : 'matchesHidden', { n: keys.length }));
-    },
-    'gs-nums-reset': el => {
-      if (!confirmed('confirmGsNumsReset')) return;
-      tourOf(el).gsNums = null;
-      commit(t('saved'));
-    },
-    'toggle-past': () =>{ ui.showPast = !ui.showPast; if (ui.showPast) needPast(); render(); },
     'notice-edit': el => { ui.editNotice = el.dataset.scope; render(); },
     // iscrizioni online
-    'reg-import': el => {
-      const tour = tourOf(el);
-      if ((regPhase(tour) === 'open' || regPhase(tour) === 'soon') && !confirmed('confirmRegImportEarly')) return;
-      importRegistrations(tour);
-      commit(t('regImported', { n: tour.entries.length }));
-    },
-    'reg-reopen': el => {
-      const tour = tourOf(el);
-      if (!confirmed('confirmRegReopen')) return;
-      tour.entries = tour.entries.filter(e => !e.regId);
-      tour.reg.closed = false; tour.reg.waitlist = [];
-      commit();
-    },
-    'reg-state': el => { const tour = tourOf(el); tour.reg.status = el.dataset.v; commit(t('saved')); },
-    'reg-confirm': el => { const tour = tourOf(el); if (!confirmed('confirmRegConfirm')) return; tour.reg.confirmed = true; ui.editEntry = null; commit(t('regConfirmedMsg')); },
-    'reg-open-start': el => { ui.openRegFor = el.dataset.tid; render(); },
-    'reg-unconfirm': el => { tourOf(el).reg.confirmed = false; commit(); },
-    'reg-remove': el => {
-      if (!confirmed('confirmRegRemove')) return;
-      window.Cloud.removeRegistration(el.dataset.id).catch(e => warn('regError', { code: e.code || e.message }));
-    },
-    'reg-wait-add': el => {
-      const tour = tourOf(el), w = tour.reg.waitlist[+el.dataset.idx];
-      if (!w) return;
-      const created = { n: 0 };
-      const a = personToPlayer(w.p1, created), b = personToPlayer(w.p2, created);
-      if (tour.entries.some(e => [e.p1, e.p2].some(id => id === a.id || id === b.id))) return warn('errAlreadyEntered');
-      tour.entries.push({ id: Store.uid('e'), p1: a.id, p2: b.id, man1: null, man2: null, wc: false, regId: w.regId });
-      tour.reg.waitlist.splice(+el.dataset.idx, 1);
-      commit(t('teamAdded'));
-    },
-    'entry-edit-open': el => { ui.editEntry = el.dataset.id; render(); },
-    'entry-edit-cancel': () => { ui.editEntry = null; render(); },
-    'reg-cancel': el => {
-      const x = (S().registrations || []).find(r => r.id === el.dataset.id);
-      const tour = x && tourById(x.tid);
-      if (!x || !tour) return;
-      if (msOf(tour.reg ? tour.reg.startAt : tour.start) - nowMs() <= 86400000) return warn('regCancelLate');
-      if (!confirmed('confirmRegCancel', { t: tour.name })) return;
-      window.Cloud.removeRegistration(x.id).then(() => { ui.flash = { text: t('regCancelled') }; render(); })
-        .catch(e => warn(e.code === 'permission-denied' ? 'regCancelLate' : 'regError', { code: e.code || e.message }));
-    },
     'profile-edit': () => { ui.editProfile = true; render(); },
     'profile-cancel': () => { ui.editProfile = false; render(); },
     'msg-read': el => { window.Cloud.markRead(el.dataset.id); S().inbox = (S().inbox || []).concat(el.dataset.id); render(); },
@@ -5971,181 +3472,11 @@
     'close-dialog': () => $dialog.close(),
 
     // lista d'ingresso
-    'import-entries': el => importEntries(tourOf(el)),
-    'template-entries': el => {
-      const mixed = (tourOf(el) || {}).gender === 'X';
-      downloadTemplate(mixed ? 'modello-iscritti-misto.xlsx' : 'modello-iscritti.xlsx',
-        mixed ? ['Cognome uomo', 'Nome uomo', 'Cognome donna', 'Nome donna', 'WC (M = main draw, Q = qualifiche)'] : ['Cognome 1', 'Nome 1', 'Cognome 2', 'Nome 2', 'WC (M = main draw, Q = qualifiche)'],
-        mixed ? ['Papadopoulos', 'Giorgos', 'Georgiou', 'Maria', ''] : ['Papadopoulos', 'Giorgos', 'Georgiou', 'Nikos', '']).catch(() => warn('excelError'));
-    },
-    'sort-entries': el => { const tour = tourOf(el); L.sortEntries(tour, rankMap(tour.gender)); commit(t('sorted')); },
-    'entry-move': el => {
-      const tour = tourOf(el);
-      const ids = tour.entries.map(e => e.id);
-      move(ids, el.dataset.id, +el.dataset.dir);
-      tour.entries = ids.map(id => entryById(tour, id));
-      commit();
-    },
-    'set-wc': el => setWc(tourOf(el), el.dataset.id, el.dataset.kind),
-    'remove-entry': el => {
-      const tour = tourOf(el);
-      tour.entries = tour.entries.filter(e => e.id !== el.dataset.id);
-      commit();
-    },
-    'lock-entries': el => {
-      const tour = tourOf(el), c = tour.config;
-      if (!compositionOk(c)) return warn('errComposition', compositionParams(c));
-      L.lockEntries(tour, rankMap(tour.gender));
-      commit(t('listLockedMsg'));
-    },
-    'unlock-entries': el => { L.unlockEntries(tourOf(el)); commit(); },
-    'gen-qual': el => { L.generateQual(tourOf(el)); location.hash = `#/t/${el.dataset.tid}/calendar`; commit(t('qualGenerated')); },
-    'skip-qual': el => { L.closeQual(tourOf(el)); commit(); },
-    'reset-qual': el => { if (!confirmed('confirmResetQual')) return; L.resetQual(tourOf(el)); commit(); },
-    'close-qual': el => { L.closeQual(tourOf(el)); commit(t('qualClosedMsg')); },
-    'reopen-qual': el => { if (!confirmed('confirmReopenQual')) return; L.reopenQual(tourOf(el)); commit(); },
-
-    // lista del tabellone principale
-    'main-move': el => { move(tourOf(el).mainList, el.dataset.id, +el.dataset.dir); commit(); },
-    'sort-main': el => {
-      const tour = tourOf(el);
-      const total = id => L.entryTotal(tour, entryById(tour, id));
-      tour.mainList.sort((x, y) => total(y) - total(x));
-      commit(t('sorted'));
-    },
-    'lock-main': el => { tourOf(el).mainLocked = true; commit(t('listLockedMsg')); },
-    'unlock-main': el => { tourOf(el).mainLocked = false; commit(); },
-    'start-main': el => {
-      const tour = tourOf(el);
-      L.startMainDraw(tour);
-      location.hash = `#/t/${tour.id}/${tour.pools ? 'pools' : 'bracket'}`;
-      commit(t('mainGenerated'));
-    },
-    'gen-bracket': el => {
-      const tour = tourOf(el);
-      L.generateBracket(tour);
-      location.hash = `#/t/${tour.id}/bracket`;
-      commit(t(tour.bracket.manual ? 'bracketGeneratedManual' : 'bracketGenerated'));
-    },
-    'auto-fill-bracket': el => {
-      const tour = tourOf(el);
-      if (tour.bracket.slots.some(Boolean) && !confirmed('confirmAutoFill')) return;
-      L.autoFillBracket(tour);
-      commit(t('bracketAutoFilled'));
-    },
-    'clear-bracket-slots': el => {
-      const tour = tourOf(el);
-      if (!confirmed('confirmClearSlots')) return;
-      tour.bracket.slots = tour.bracket.slots.map(() => null);
-      commit();
-    },
-    'reset-main': el => { if (!confirmed('confirmResetMain')) return; L.resetMain(tourOf(el)); commit(); },
-    'close-tournament': el => {
-      if (!confirmed('confirmCloseTournament')) return;
-      tourOf(el).closed = true;
-      location.hash = `#/t/${el.dataset.tid}/final`;
-      commit(t('tournamentClosedMsg'));
-    },
-    'reopen-tournament': el => { if (!confirmed('confirmReopenTournament')) return; tourOf(el).closed = false; commit(t('tournamentReopenedMsg')); },
-    'delete-tournament': el => {
-      if (!confirmed('confirmDeleteTournament')) return;
-      S().tournaments = S().tournaments.filter(x => x.id !== el.dataset.tid);
-      location.hash = '#/tournaments';
-      commit(t('tournamentDeleted'));
-    },
-
-    // partite
-    'edit-match': el => openMatch(el.dataset.tid, el.dataset.key),
-    'escore-open': el => openReferto(el.dataset.tid, el.dataset.key),
-    'escore-reset': el => resetEscore(el.dataset.tid, el.dataset.key),
-    'mine-all': () => { ui.mineAll = !ui.mineAll; render(); },
-    'pdf-view': el => viewPdf(el.dataset.id),
-    'pdf-build': el => buildPdfs(el.dataset.tid),
-    'pdf-zip': el => zipPdfs(el.dataset.tid),
     'scorer-remove': el => {
       if (!confirmed('scorerRemoveConfirm', { e: el.dataset.email })) return;
       window.Cloud.removeScorer(el.dataset.email).then(() => { ui.scorers = null; ui.flash = { text: t('scorerRemoved') }; render(); })
         .catch(err => warn('scorerErr', { code: err.code || err.message }));
     },
-    'escore-approve': el => approveEscore(el.dataset.tid, el.dataset.key),
-    'escore-reopen': el => reopenEscore(el.dataset.tid, el.dataset.key),
-    'match-clear': el => { if (confirmed('confirmClearResult')) saveMatch(el.closest('form'), 'clear'); },
-    'match-reopen': el => saveMatch(el.closest('form'), 'reopen'),
-
-    // giocatori
-    'import-ranking': () => importRanking(),
-    'template-ranking': () => downloadTemplate('modello-ranking.xlsx', ['Cognome', 'Nome', 'Genere (M/F)', 'Punti', 'Società'], ['Papadopoulos', 'Giorgos', 'M', '250', '']).catch(() => warn('excelError')),
-    'merge-pair': el => mergePlayers(el.dataset.keep, el.dataset.dup),
-    'edit-player': el => { ui.editingPlayer = el.dataset.id; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
-    'cancel-edit-player': () => { ui.editingPlayer = null; render(); },
-    'delete-player': el => {
-      const id = el.dataset.id;
-      if (S().tournaments.some(x => x.entries.some(e => e.p1 === id || e.p2 === id))) return warn('playerInUse');
-      if (!confirmed('confirmDeletePlayer')) return;
-      S().players = S().players.filter(p => p.id !== id);
-      if (ui.editingPlayer === id) ui.editingPlayer = null;
-      commit();
-    },
-
-    // categorie
-    'new-category': () => {
-      const c = { id: Store.uid('cat'), name: t('newCategory'), rows: [[1, 100], [2, 90], [3, 80], [4, 70], [5, 60], [9, 45], [13, 35], [17, 25]] };
-      S().categories.push(c);
-      ui.openCat = c.id;
-      commit();
-    },
-    'delete-category': el => {
-      if (!confirmed('confirmDeleteCategory')) return;
-      S().categories = S().categories.filter(x => x.id !== el.dataset.id);
-      commit();
-    },
-    'add-row': el => {
-      const rows = el.closest('form').querySelector('.pt-rows');
-      const last = rows.lastElementChild;
-      const next = last ? (parseInt(last.querySelector('[name=place]').value, 10) || 0) + 1 : 1;
-      rows.insertAdjacentHTML('beforeend', tableRowInputs(next, 0));
-      rows.lastElementChild.querySelector('[name=place]').focus();
-    },
-    'del-row': el => el.closest('.pt-row').remove(),
-    'gs-add-row': el => {
-      const which = el.dataset.which;
-      const rows = el.closest('.gs-table').querySelector('.pt-rows');
-      const last = rows.lastElementChild;
-      const next = last ? (parseInt(last.querySelector(`[name=${which}Place]`).value, 10) || 0) + 1 : 1;
-      rows.insertAdjacentHTML('beforeend', gsRowInputs(which, next, 0));
-      rows.lastElementChild.querySelector(`[name=${which}Place]`).focus();
-    },
-
-    // dati
-    'export': () => {
-      const blob = new Blob([JSON.stringify(Object.assign({}, S(), { live: undefined, referti: undefined, refPdf: undefined, refLoaded: undefined, pdfLoaded: undefined }), null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `manofuori-cup-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    },
-    'import-backup': async () => {
-      const file = await pickFile('application/json,.json');
-      if (!file) return;
-      try {
-        const data = JSON.parse(await file.text());
-        if (!Store.isValid(data)) throw new Error('invalid');
-        if (!confirmed('confirmImport')) return;
-        Store.replace(data);
-        location.hash = '#/';
-        commit(t('importDone'));
-      } catch (e) { warn('importError'); }
-    },
-    'delete-all': () => {
-      if (!isOwner()) return;
-      if (!confirmed('confirmDeleteAll')) return;
-      const word = prompt(t('typeDelete'));
-      if (!word || word.trim().toUpperCase() !== t('deleteWord').toUpperCase()) return warn('deleteAborted');
-      Store.replace(Store.empty());
-      location.hash = '#/';
-      commit(t('allDeleted'));
-    }
   });
 
   const forms = Object.assign({}, vtForms, teamForms, trForms, occForms, payForms, cassaForms, {
@@ -6176,40 +3507,6 @@
         .then(() => { (ui.keep || {})['user-create'] = false; ui.flash = { text: t(cap ? 'userCreatedCaptain' : 'userCreated', { e: d.email }) }; render(); })
         .catch(e => { btn.disabled = false; warn(e.code === 'auth/email-already-in-use' ? 'userCreateExists' : e.code === 'auth/weak-password' ? 'registerWeak' : 'regError', { code: e.code || e.message }); });
     },
-    'tour-create': f => {
-      const d = readRegForm(f);
-      if (d.err) return warn(d.err);
-      const tour = L.normalize({ id: Store.uid('t'), name: d.name, gender: d.gender || 'M', start: d.startAt.slice(0, 10), end: '', categoryId: null, coefficient: 1,
-        format: 'single_elim', entries: [], reg: { startAt: d.startAt, deadline: d.deadline, maxTeams: d.maxTeams, status: d.status, closed: false, confirmed: false, formulaSet: false } });
-      S().tournaments.push(tour);
-      location.hash = `#/t/${tour.id}/manage`;
-      commit(t('tournamentCreated'));
-    },
-    'tour-reg-edit': f => {
-      const tour = tourById(f.dataset.tid), d = readRegForm(f);
-      if (d.err) return warn(d.err);
-      tour.name = d.name; if (d.gender) tour.gender = d.gender;
-      tour.start = d.startAt.slice(0, 10);
-      Object.assign(tour.reg, { startAt: d.startAt, deadline: d.deadline, maxTeams: d.maxTeams, status: d.status });
-      commit(t('saved'));
-    },
-    'entry-edit': f => {
-      const tour = tourById(f.dataset.tid), e = entryById(tour, f.dataset.id);
-      const created = { n: 0 }, [g1, g2] = teamGenders(tour);
-      const p1 = findOrCreatePlayer(f.l1.value.trim(), f.f1.value.trim(), g1, created);
-      const p2 = findOrCreatePlayer(f.l2.value.trim(), f.f2.value.trim(), g2, created);
-      if (p1.id === p2.id) return warn('errSamePlayer');
-      if (tour.entries.some(x => x.id !== e.id && [x.p1, x.p2].some(id => id === p1.id || id === p2.id))) return warn('errAlreadyEntered');
-      Object.assign(e, { p1: p1.id, p2: p2.id, man1: null, man2: null });
-      ui.editEntry = null;
-      commit(t('saved'));
-    },
-    'rewards-save': f => {
-      const r = {};
-      REWARDS.forEach(([k]) => { const v = parseInt(f[k].value, 10); r[k] = v > 0 ? v : null; });
-      S().rewards = r;
-      commit(t('saved'));
-    },
     'msg-send': f => sendMessageForm(f),
     'nick-save': f => {
       const uid = f.dataset.uid, nick = f.nick.value.trim();
@@ -6217,103 +3514,12 @@
       if (nick && taken) return warn('nickTaken');
       S().nicks = Object.assign({}, S().nicks || {});
       if (nick) S().nicks[uid] = nick; else delete S().nicks[uid];
-      if (f.link) {
-        S().players.forEach(p => { if (p.uid === uid && p.id !== f.link.value) delete p.uid; });
-        const p = player(f.link.value);
-        if (p) p.uid = uid;
-      }
       commit(t('saved'));
-    },
-    'reg-open-legacy': f => {
-      const tour = tourById(f.dataset.tid);
-      const d = { startAt: f.startAt.value, deadline: f.deadline.value, maxTeams: Math.max(2, parseInt(f.maxTeams.value, 10) || 2), status: f.status.value };
-      if (!d.startAt || !d.deadline) return warn('errRegFields');
-      if (msOf(d.deadline) >= msOf(d.startAt)) return warn('errRegDeadline');
-      tour.reg = Object.assign(d, { closed: false, confirmed: false, formulaSet: true });
-      tour.start = d.startAt.slice(0, 10);
-      ui.openRegFor = null;
-      commit(t('regOpenedMsg'));
-    },
-    'tournament-new': f => {
-      const data = readTournamentForm(f, null);
-      if (!compositionOk(data.config)) return warn('errComposition', compositionParams(data.config));
-      if (data.format === 'gold_silver' && (!data.goldRows.length || !data.silverRows.length)) return warn('errGsTables');
-      const tour =L.normalize(Object.assign({ id: Store.uid('t'), entries: [] }, data));
-      S().tournaments.push(tour);
-      location.hash = `#/t/${tour.id}/manage`;
-      commit(t('tournamentCreated'));
-    },
-    'tournament-edit': f => {
-      const tour = tourById(f.dataset.tid);
-      const data = readTournamentForm(f, tour);
-      if (!compositionOk(data.config)) return warn('errComposition', compositionParams(data.config));
-      if ((data.format || tour.format) === 'gold_silver' && (!data.goldRows.length || !data.silverRows.length)) return warn('errGsTables');
-      Object.assign(tour, data);
-      if (tour.format === 'gold_silver') L.normalize(tour);
-      if (tour.reg && tour.reg.confirmed && !tour.reg.formulaSet) { tour.reg.formulaSet = true; location.hash = `#/t/${tour.id}/manage`; }
-      commit(t('saved'));
-    },
-    'entry-add': f => {
-      const tour = tourById(f.dataset.tid);
-      const created = { n: 0 };
-      const [g1, g2] = teamGenders(tour);
-      const p1 = findOrCreatePlayer(f.l1.value.trim(), f.f1.value.trim(), g1, created);
-      const p2 = findOrCreatePlayer(f.l2.value.trim(), f.f2.value.trim(), g2, created);
-      if (p1.id === p2.id) return warn('errSamePlayer');
-      if (tour.entries.some(e => [e.p1, e.p2].some(id => id === p1.id || id === p2.id))) return warn('errAlreadyEntered');
-      const kind = f.wc.value;
-      if (kind && tour.entries.filter(x => x.wc === kind).length >= wcLimit(tour, kind)) return warn('errWcFull', { n: wcLimit(tour, kind) });
-      tour.entries.push({ id: Store.uid('e'), p1: p1.id, p2: p2.id, man1: null, man2: null, wc: kind || false });
-      commit(t('teamAdded'));
     },
     'editorial-save': f => { saveEditorialForm(f); },
     'notice-save': f => {
       if (f.dataset.scope === 'home') S().noticeUntil = f.until ? f.until.value : '';
       setNotice(f.dataset.scope, f.text.value.trim());
-    },
-    'wc-add': f => {
-      const tour = tourById(f.dataset.tid), kind = f.dataset.kind;
-      if (tour.entries.filter(x => x.wc === kind).length >= wcLimit(tour, kind)) return warn('errWcFull', { n: wcLimit(tour, kind) });
-      const created = { n: 0 };
-      const [g1, g2] = teamGenders(tour);
-      const p1 = findOrCreatePlayer(f.l1.value.trim(), f.f1.value.trim(), g1, created);
-      const p2 = findOrCreatePlayer(f.l2.value.trim(), f.f2.value.trim(), g2, created);
-      if (p1.id === p2.id) return warn('errSamePlayer');
-      // Squadra già iscritta: diventa wild card. Altrimenti viene aggiunta alla lista come wild card.
-      const same = tour.entries.find(e => (e.p1 === p1.id && e.p2 === p2.id) || (e.p1 === p2.id && e.p2 === p1.id));
-      if (same) {
-        same.wc = kind;
-      } else {
-        if (tour.entries.some(e => [e.p1, e.p2].some(id => id === p1.id || id === p2.id))) return warn('errAlreadyEntered');
-        tour.entries.push({ id: Store.uid('e'), p1: p1.id, p2: p2.id, man1: null, man2: null, wc: kind });
-      }
-      commit(t('wcAdded'));
-    },
-    'player-save': f => {
-      const data = { first: f.first.value.trim(), last: f.last.value.trim(), gender: f.gender.value, club: f.club.value.trim(), base: parseNum(f.base.value) || 0 };
-      if (ui.editingPlayer) {
-        const p = player(ui.editingPlayer);
-        const inUse = S().tournaments.some(x => x.entries.some(e => e.p1 === p.id || e.p2 === p.id));
-        if (inUse && data.gender !== p.gender) return warn('playerInUse');
-        Object.assign(p, data);
-        ui.editingPlayer = null;
-      } else {
-        S().players.push(Object.assign({ id: Store.uid('p') }, data));
-      }
-      commit(t('saved'));
-    },
-    'merge-players': f => mergePlayers(f.keep.value, f.dup.value),
-    'category-save': f => {
-      const c = catById(f.dataset.id);
-      const places = [...f.querySelectorAll('[name=place]')].map(x => parseInt(x.value, 10));
-      const pts = [...f.querySelectorAll('[name=pts]')].map(x => parseNum(x.value));
-      const rows = places.map((p, i) => [p, pts[i]]).filter(r => r[0] > 0 && r[1] != null && r[1] >= 0);
-      if (!rows.length) return warn('errTableEmpty');
-      if (new Set(rows.map(r => r[0])).size !== rows.length) return warn('errTableDup');
-      c.name = f.name.value.trim();
-      c.rows = rows.sort((x, y) => x[0] - y[0]);
-      ui.openCat = c.id;
-      commit(t('saved'));
     },
     'scorer-add': f => {
       const btn = f.querySelector('button.primary');
@@ -6340,7 +3546,6 @@
       })
         .catch(e => { btn.disabled = false; ui.showRegister = true; warn(e.code === 'auth/email-already-in-use' ? 'registerExists' : e.code === 'auth/weak-password' ? 'registerWeak' : e.code === 'auth/too-many-requests' ? 'tooManyTries' : 'registerErr', { code: e.code || e.message }); });
     },
-    'reg-signup': f => submitSignup(f),
     'profile-save': f => {
       const d = { first: f.first.value.trim(), last: f.last.value.trim(), gender: f.gender.value };
       if (!d.first || !d.last) return warn('errRegFields');
@@ -6369,18 +3574,18 @@
   });
 
   // Azioni consentite a tutti; le altre solo agli amministratori.
-  const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'cal-view', 'toggle-past', 'logout', 'reset-password', 'close-dialog', 'vt-group']);
+  const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['eope-download', 'eope-send', 'eope-add', 'eope-remove', 'toggle-visible', 'vis-group', 'vis-all', 'gs-nums-reset', 'notice-edit', 'notice-cancel', 'notice-clear', 'reg-import', 'reg-reopen', 'reg-state', 'reg-confirm', 'reg-open-start', 'reg-unconfirm', 'reg-remove', 'reg-wait-add', 'entry-edit-open', 'entry-edit-cancel', 'import-entries', 'template-entries', 'sort-entries', 'entry-move', 'set-wc', 'remove-entry', 'lock-entries', 'unlock-entries', 'gen-qual', 'skip-qual', 'reset-qual', 'close-qual', 'reopen-qual', 'main-move', 'sort-main', 'lock-main', 'unlock-main', 'start-main', 'gen-bracket', 'auto-fill-bracket', 'clear-bracket-slots', 'reset-main', 'close-tournament', 'reopen-tournament', 'delete-tournament', 'edit-match', 'escore-open', 'escore-reset', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'scorer-remove', 'escore-approve', 'escore-reopen', 'match-clear', 'match-reopen', 'import-ranking', 'template-ranking', 'merge-pair', 'edit-player', 'cancel-edit-player', 'delete-player', 'new-category', 'delete-category', 'add-row', 'del-row', 'gs-add-row', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen']);
-  const TOUR_FORMS = new Set(['tour-create', 'tour-reg-edit', 'reg-open-legacy', 'tournament-new', 'tournament-edit', 'entry-edit', 'entry-add', 'wc-add', 'player-save', 'merge-players', 'category-save', 'scorer-add', 'rewards-save', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
+  const TOUR_ACTIONS = new Set(['notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
+  const TOUR_FORMS = new Set(['scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
-  const SCORER_ACTIONS = new Set(['escore-open', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref']);
+  const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'pdf-view', 'pdf-zip']);
   const PUBLIC_FORMS = new Set(['login', 'register']);
   const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
-  const MEMBER_ACTIONS = new Set(['reg-cancel', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
-  const MEMBER_FORMS = new Set(['reg-signup', 'profile-save', 'fp-join', 'fp-blocks', 'team-save']);
+  const MEMBER_ACTIONS = new Set(['profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
+  const MEMBER_FORMS = new Set(['profile-save', 'fp-join', 'fp-blocks', 'team-save']);
   let submitMode = 'save';
 
   // reminder delle prenotazioni: la prima pagina si aggiorna ogni minuto (compaiono e spariscono da soli)
@@ -6405,8 +3610,6 @@
     const f = e.target.closest('form[data-form]');
     if (!f) return;
     e.preventDefault();
-    if (f.dataset.form === 'match') { if (tourAdmin()) saveMatch(f, submitMode); submitMode = 'save'; return; }
-    if (f.dataset.form === 'eope-send') { if (tourAdmin()) eopeSend(f); return; }
     const fn = forms[f.dataset.form];
     if (fn && (admin() || (tourAdmin() && TOUR_FORMS.has(f.dataset.form)) || (cashier() && CASH_FORMS.has(f.dataset.form)) || PUBLIC_FORMS.has(f.dataset.form) || (scorer() && SCORER_FORMS.has(f.dataset.form)) || (member() && MEMBER_FORMS.has(f.dataset.form)))) fn(f);
     submitMode = 'save';
@@ -6414,10 +3617,7 @@
 
   document.addEventListener('change', e => {
     const el = e.target;
-    const form = el.closest('form[data-form^="tournament-"]');
-    if (form) syncTournamentForm(form);
     switch (el.dataset.change) {
-      case 'reg-search': onRegSearch(el); break;
       case 'grp-pick': {   // scheda già esistente: precompila tesseramento e certificato
         const a = athleteOf(el.value), f = el.form;
         f.tess.checked = !!(a && a.tess && a.tess[seasonOf(todayStr())]); f.certExp.value = (a && a.certExp) || '';
@@ -6457,66 +3657,19 @@
         ui.msgTo = [...set];
         break;
       }
-      case 'main-pos': {
-        if (!tourAdmin()) return;
-        const tour = tourById(el.dataset.tid), list = tour.mainList;
-        if (!list || tour.mainLocked) return;
-        const from = list.indexOf(el.dataset.id), to = Math.max(0, Math.min(list.length - 1, (parseInt(el.value, 10) || from + 1) - 1));
-        if (from < 0 || from === to) { render(); return; }
-        list.splice(to, 0, list.splice(from, 1)[0]);
-        commit();
-        break;
-      }
-      case 'slot-assign': {
-        if (!tourAdmin()) return;
-        const tour = tourById(el.dataset.tid), br = tour.bracket, idx = +el.dataset.idx, v = el.value || null;
-        if (v && v !== L.BYE && br.slots.some((id, i) => id === v && i !== idx)) { warn('errTeamPlaced'); return; }
-        if (v === L.BYE && br.slots.filter((id, i) => id === L.BYE && i !== idx).length >= br.size - br.qualified) {
-          warn('errTooManyByes', { n: br.size - br.qualified }); return;
-        }
-        br.slots[idx] = v;
-        commit();
-        break;
-      }
-      case 'entry-wc':
-        if (tourAdmin()) setWc(tourById(el.dataset.tid), el.dataset.id, el.value);
-        break;
-      case 'entry-pts': {
-        if (!tourAdmin()) return;
-        const entry = entryById(tourById(el.dataset.tid), el.dataset.id);
-        const v = parseNum(el.value);
-        entry['man' + el.dataset.which] = v;
-        commit();
-        break;
-      }
       case 'scorer-tour':
         if (!tourAdmin()) return;
         window.Cloud.setScorerTournament(el.dataset.email, el.value)
           .then(() => { ui.scorers = null; ui.flash = { text: t('saved') }; render(); })
           .catch(err => warn('scorerErr', { code: err.code || err.message }));
         break;
-      case 'outcome': syncOutcome(el.form); break;
     }
   });
 
   document.addEventListener('toggle', e => {
     const d = e.target;
-    if (d.dataset && d.dataset.cat && d.open) ui.openCat = d.dataset.cat;
     if (d.dataset && d.dataset.keep) { ui.keep = ui.keep || {}; ui.keep[d.dataset.keep] = d.open; }
   }, true);
-
-  document.addEventListener('input', e => {
-    const el = e.target;
-    const tf = el.closest('form[data-form^="tournament-"]');
-    if (tf) syncTournamentForm(tf);
-    if (el.dataset.change === 'player-filter') {
-      ui.playerFilter = el.value;
-      const pos = el.selectionStart;
-      render();
-      const s = document.querySelector('[data-change=player-filter]');
-      s.focus(); s.setSelectionRange(pos, pos);
-    }
-  });
 
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
   applyTheme(currentTheme());
@@ -6524,7 +3677,6 @@
 
   window.App = {
     refresh,
-    readRows, applyEntryRows, applyRankingRows,
     error(code) {
       ui.flash = { type: 'warn', text: t(code === 'permission-denied' ? 'errPermission' : 'errCloud', { code }) };
       render();

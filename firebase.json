@@ -7,8 +7,6 @@
       ".firebaserc",
       "README.md",
       "pubblica-manofuori.bat",
-      "referto/README.md",
-      "referto/tests/**",
       "referto-indoor/tests/**",
       "referto-indoor/README.md",
       "tests/**",

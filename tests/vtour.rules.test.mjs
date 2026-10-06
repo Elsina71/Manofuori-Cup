@@ -46,6 +46,9 @@ await t('scorer aggiorna punteggio in diretta e referto', assertSucceeds((() => 
   b.set(doc(sc1, 'live', id), Object.assign({}, live, { updated: 2 }), { merge: true });
   b.set(doc(sc1, 'referti', id), Object.assign({}, live, { json: '{}', updated: 2, updatedBy: 'campo1@x.it' }), { merge: true });
   return b.commit(); })()));
+await t('admin tornei legge il proprio ruolo (serve al referto)', assertSucceeds(getDoc(doc(org, 'roles', 'org'))));
+await t('admin tornei apre il referto', assertSucceeds(openRef(org, 'T2', 'org@x.it')));
+await t('admin tornei legge il referto', assertSucceeds(getDoc(doc(org, 'referti', 'T2_g-A-d1-0'))));
 await t('tutti leggono il punteggio in diretta', assertSucceeds(getDoc(doc(anon, 'live', 'T1_g-A-d1-0'))));
 await t('il referto completo non è pubblico', assertFails(getDoc(doc(anon, 'referti', 'T1_g-A-d1-0'))));
 console.log(`\n${ok} ok, ${ko} falliti`);

@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Tutti possono leggere tornei, giocatori, tabelle e classifiche.
+// Tutti possono leggere tornei, squadre (senza rose), calendari e risultati.
 // Solo gli utenti presenti nella raccolta "admins" (ID documento = UID) possono modificare.
 // La raccolta "admins" si gestisce solo dalla console Firebase.
 service cloud.firestore {
@@ -20,20 +20,15 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/roles/$(request.auth.uid))
         && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.get(r, false) == true;
     }
-    // ADMIN TORNEI: tornei, categorie e punti, giocatori e ranking, iscrizioni, referti e refertisti. Nient'altro.
+    // ADMIN TORNEI: tornei a squadre, squadre e livelli, referti e scorer. Nient'altro.
     function isTourAdmin() { return isAdmin() || hasRole('tour'); }
     // CASSA: registra incassi ed emette ricevute.
     function isCash() { return isAdmin() || hasRole('cash'); }
 
     match /data/{docId} {
       allow read: if true;
-      allow write: if (isAdmin() && docId in ['players', 'settings', 'tour', 'editorial1', 'editorial2'])
-        || (isTourAdmin() && docId in ['players', 'tour']);
-    }
-
-    match /tournaments/{tournamentId} {
-      allow read: if true;
-      allow write: if isTourAdmin();
+      allow write: if (isAdmin() && docId in ['settings', 'tour', 'editorial1', 'editorial2'])
+        || (isTourAdmin() && docId == 'tour');
     }
 
     match /roles/{uid} {
@@ -101,13 +96,6 @@ service cloud.firestore {
     function isMember() {
       return request.auth != null && exists(/databases/$(database)/documents/members/$(request.auth.uid));
     }
-    function person(p) {
-      return p is map && p.keys().hasOnly(['uid', 'first', 'last', 'gender'])
-        && p.first is string && p.first.size() > 0 && p.first.size() <= 60
-        && p.last is string && p.last.size() > 0 && p.last.size() <= 60
-        && p.gender in ['M', 'F'];
-    }
-    function tour(tid) { return get(/databases/$(database)/documents/tournaments/$(tid)).data; }
     // Email dell'account confermata (link ricevuto dopo la registrazione): serve per iscriversi.
     // ... oppure confermato a mano dall'admin (verified/{uid}), per chi non riceve l'email o è registrato dall'admin.
     function verified() {
@@ -139,25 +127,6 @@ service cloud.firestore {
     match /verified/{uid} {
       allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
       allow write: if isAdmin();
-    }
-
-    // Iscrizione di una squadra: l'utente iscrive sé stesso (p1) e il compagno (p2, registrato o no),
-    // solo con le iscrizioni aperte e prima della scadenza. Si cancella fino a 24 ore dall'inizio.
-    match /registrations/{id} {
-      allow read: if true;
-      allow create: if isTourAdmin() || (isMember() && verified() && !banned(request.auth.uid, 'tour')
-        && (request.resource.data.p2.get('uid', null) == null || !banned(request.resource.data.p2.uid, 'tour'))
-        && request.resource.data.keys().hasOnly(['tid', 'by', 'uids', 'p1', 'p2', 'created'])
-        && request.resource.data.by == request.auth.uid
-        && person(request.resource.data.p1) && person(request.resource.data.p2)
-        && request.resource.data.p1.uid == request.auth.uid
-        && request.resource.data.uids == (request.resource.data.p2.get('uid', null) == null
-              ? [request.auth.uid] : [request.auth.uid, request.resource.data.p2.uid])
-        && tour(request.resource.data.tid).get('regOpen', false) == true
-        && request.time.toMillis() < tour(request.resource.data.tid).get('regClose', 0));
-      allow delete: if isTourAdmin() || (request.auth != null && request.auth.uid in resource.data.uids
-        && request.time.toMillis() < tour(resource.data.tid).get('startMs', 0) - 86400000);
-      allow update: if isTourAdmin();
     }
 
     // ---------- tornei a squadre (pallavolo) ----------
