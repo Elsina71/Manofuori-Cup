@@ -75,6 +75,35 @@ la foto si carica dal telefono o dal computer e viene ridimensionata automaticam
 - Database: `members/{uid}`, `accounts/{uid}` (email), `registrations/{id}`, `messages/{id}`, `inbox/{uid}`; alias in
   `data/settings`.
 
+## Tornei a squadre (Manofuori Cup)
+
+Campionato amatoriale misto per adulti: un torneo per **livello** (DINOS, MASTER, SUPER MASTER, SUPER 10), con le
+squadre ammesse a quel livello (pagina *Squadre*). Voce **Tornei** nel menu (`#/tornei`), pagina del torneo `#/vt/{id}`
+con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore in `js/volley.js` (test:
+`node --test tests/volley.test.js`).
+
+- **Formula** (admin tornei, *Nuovo torneo*): gironi all'italiana con **andata e ritorno** o **sola andata**, uno o più
+  gironi, e facoltativamente **playoff** a eliminazione diretta.
+- **Gironi**: si sceglie il girone di ogni squadra ammessa al livello (o si usa il **sorteggio**), poi **Genera il
+  calendario** (metodo di Berger: casa e trasferta alternate, al massimo una gara in casa di differenza). Il calendario
+  si annulla e si rifà finché nessuna gara è giocata.
+- **Calendario**: data, ora e palestra gara per gara oppure per tutta la giornata (*Applica a tutta la giornata*).
+- **Risultati**: li inseriscono l'**admin tornei** o lo **scorer** (account del campo in *Impostazioni → Account dei
+  campi*, legato a un torneo o a tutti; lo scorer inserisce solo i set, da *Le mie gare* o dal calendario). Nei gironi
+  si giocano sempre **3 set a 25** (due punti di scarto; oltre il 25 scarto esatto di 2).
+- **Classifica**: 1 punto per ogni set vinto. A parità di punti: 1) gare vinte, 2) quoziente set, 3) quoziente punti,
+  4) incontri diretti tra le squadre ancora pari.
+- **Playoff**: l'admin sceglie quante squadre per girone vanno ai playoff (**Gold**) e, se vuole, quante al **Silver**.
+  Teste di serie per posizione nel girone, poi punti per gara, quoziente set e quoziente punti (ordine modificabile
+  prima delle gare). Turno per turno l'admin sceglie **3 set** o **al meglio dei 5** (quinto set a 15) e **andata e
+  ritorno** o **gara secca**; la **finale è sempre gara secca**. Andata e ritorno: passa chi vince più set nelle due
+  gare; a parità di set conta il **quoziente punti** (a parità perfetta passa la testa di serie migliore). Con un numero
+  di squadre che non è una potenza di 2, le prime teste di serie passano il primo turno.
+- Database: `vtours/{id}` (torneo, pubblico) e `vmatches/{torneo_gara}` (gare, pubbliche; lo scorer scrive solo set e
+  stato). Test delle regole: `tests/vtour.rules.test.mjs`.
+- I vecchi tornei beach (coppie, categorie, giocatori) non sono più nel menu; il loro codice verrà tolto più avanti.
+  Il referto elettronico per la pallavolo arriverà da un progetto separato: per ora i risultati si inseriscono a mano.
+
 ## Squadre
 
 - Voce **Squadre** nel menu (`#/teams`). Il **capitano** (utente registrato con email confermata, non in

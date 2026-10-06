@@ -869,6 +869,37 @@ function deleteUser(uid, groups, planIds, packIds) {
 }
 function setCoach(uid, data) { return data ? setDoc(doc(db, 'coaches', uid), data) : deleteDoc(doc(db, 'coaches', uid)); }
 
+// ---------- tornei a squadre (pallavolo) ----------
+// vtours/{id}: torneo (nome, livello, girone all'italiana "ar"/"a", gironi, playoff, stato) — pubblico.
+// vmatches/{tid_key}: gare (squadre, giornata, data, ora, palestra, set {h, a}, stato sched/done) — pubbliche.
+onSnapshot(collection(db, 'vtours'), snap => {
+  Store.applyRemote('vtours', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
+  refresh();
+}, onError);
+onSnapshot(collection(db, 'vmatches'), snap => {
+  Store.applyRemote('vmatches', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
+  refresh();
+}, onError);
+function saveVTour(id, data) {
+  const ref = id ? doc(db, 'vtours', id) : doc(collection(db, 'vtours'));
+  return (id ? updateDoc(ref, Object.assign({}, data, { updated: Date.now() })) : setDoc(ref, Object.assign({ created: Date.now(), updated: Date.now() }, data))).then(() => ref.id);
+}
+// Scritture a blocchi (al massimo 450 per invio): set = { id: dati } da scrivere, del = id da cancellare.
+async function writeVMatches(set, del) {
+  const ops = Object.entries(set || {}).map(([id, d]) => b => b.set(doc(db, 'vmatches', id), d))
+    .concat((del || []).map(id => b => b.delete(doc(db, 'vmatches', id))));
+  for (let i = 0; i < ops.length; i += 450) {
+    const b = writeBatch(db);
+    ops.slice(i, i + 450).forEach(f => f(b));
+    await b.commit();
+  }
+}
+function updateVMatch(id, patch) { return updateDoc(doc(db, 'vmatches', id), Object.assign({}, patch, { updated: Date.now() })); }
+async function deleteVTour(id, matchIds) {
+  await writeVMatches({}, matchIds);
+  await deleteDoc(doc(db, 'vtours', id));
+}
+
 // ---------- squadre ----------
 // teams/{id}: pubblico (nome, livello, tipo X/M/F, capitano, stato pending/ok). Lo crea il capitano (utente
 //   registrato) in attesa; l'ammissione al livello (stato ok) la decide l'admin tornei.
@@ -1208,6 +1239,10 @@ window.Cloud = {
   deleteMessage,
   markRead,
   setBan,
+  saveVTour,
+  writeVMatches,
+  updateVMatch,
+  deleteVTour,
   saveTeam,
   setTeamStatus,
   deleteTeam,

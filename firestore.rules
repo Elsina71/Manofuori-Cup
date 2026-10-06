@@ -160,6 +160,24 @@ service cloud.firestore {
       allow update: if isTourAdmin();
     }
 
+    // ---------- tornei a squadre (pallavolo) ----------
+    // vtours/{id}: torneo (livello, gironi, playoff): pubblico, lo scrive l'admin tornei.
+    // vmatches/{torneo_gara}: gara (squadre, data, ora, palestra, set): pubblica. L'admin tornei scrive tutto;
+    //   lo scorer (account del campo, legato al torneo o a tutti) inserisce solo i set e lo stato della gara.
+    match /vtours/{id} {
+      allow read: if true;
+      allow write: if isTourAdmin();
+    }
+    match /vmatches/{id} {
+      allow read: if true;
+      allow write: if isTourAdmin();
+      allow update: if scorerFor(resource.data.tid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sets', 'status', 'by', 'updated'])
+        && request.resource.data.status in ['sched', 'done']
+        && request.resource.data.sets is list && request.resource.data.sets.size() <= 5
+        && request.resource.data.by == request.auth.token.email.lower();
+    }
+
     // ---------- squadre ----------
     // teams/{id}: pubblico. Il capitano (utente registrato, email confermata, non in lista nera) la crea in attesa
     //   (status "pending"); può cambiare nome e tipo sempre, il livello solo finché è in attesa; può ritirarla solo

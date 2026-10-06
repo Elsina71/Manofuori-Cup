@@ -985,3 +985,34 @@ li.is-void { opacity: .6; }
 .roster-table td, .roster-table th { padding-top: 4px; padding-bottom: 4px; }
 .team-card.mine { border-color: var(--primary); }
 .ch-grid > .team-card.editing { grid-column: 1 / -1; }
+
+/* ---------- tornei a squadre: calendario, risultati, classifiche, playoff ---------- */
+.vm-day { margin-top: 14px; }
+.vm-day h3 { margin: 0 0 6px; font-size: 1rem; }
+.vm-dayform { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.vm-dayform input { flex: 1 1 140px; min-width: 0; }
+.vm-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.vm-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.vm-row.done { background: var(--surface-2); }
+.vm-teams { font-weight: 600; overflow-wrap: anywhere; }
+.vm-score { text-align: right; white-space: nowrap; }
+.vm-when { grid-column: 1; }
+.vm-row > .btn { grid-column: 2; grid-row: 2; justify-self: end; }
+.vm-win { color: var(--ok); }
+.vm-form { grid-column: 1 / -1; display: grid; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+.vm-sets { display: grid; gap: 6px; max-width: 420px; }
+.vm-set { display: grid; grid-template-columns: 5.5em minmax(0, 1fr) minmax(0, 1fr); gap: 6px; align-items: center; }
+.vm-set input { width: 100%; min-width: 0; text-align: center; }
+.vm-set-head span { font-size: .75rem; font-weight: 600; color: var(--muted); text-align: center; overflow-wrap: anywhere; }
+.vt-assign li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.vt-assign select { max-width: 50%; }
+.vt-teams { margin: 0; padding-left: 1.4em; }
+.vt-table tr.qualified-silver td:first-child { box-shadow: inset 3px 0 0 var(--silver); }
+.vt-round { margin-top: 16px; }
+.vt-round h3 { margin: 0 0 8px; font-size: 1.05rem; }
+.vt-roundform { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+.vt-ties { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.vt-tie { border: 1px solid var(--border); border-radius: 12px; padding: 10px; }
+.vt-tie.bye { color: var(--muted); }
+.vt-tie-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 600; margin-bottom: 6px; }
+.vt-seeds li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 0; }
