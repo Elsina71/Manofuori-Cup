@@ -240,3 +240,10 @@ test('libero espulso: esce e rientra il giocatore sostituito', () => {
   assert.deepEqual(R.visibleCourt(st.cur, 'B'), LB);
   assert.deepEqual(st.alerts.map(a => a.type), ['liberoOut']);
 });
+
+test('donne in campo: minimo anche diverso per squadra', () => {
+  assert.equal(R.minWomenOf(R.settingsOf({}), 'A'), 2);
+  const S = R.settingsOf({ settings: { minWomen: { A: 2, B: 0 } } });
+  assert.equal(R.minWomenOf(S, 'A'), 2);
+  assert.equal(R.minWomenOf(S, 'B'), 0);
+});

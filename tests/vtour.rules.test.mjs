@@ -30,6 +30,7 @@ await t('scorer del torneo inserisce i set', assertSucceeds(updateDoc(doc(sc1, '
 await t('scorer di un altro torneo no', assertFails(updateDoc(doc(sc2, 'vmatches', 'T1_g-A-d1-0'), { sets, status: 'done', by: 'campo2@x.it', updated: 2 })));
 await t('scorer di tutti i tornei sì', assertSucceeds(updateDoc(doc(scAll, 'vmatches', 'T1_g-A-d1-0'), { sets, status: 'done', by: 'tutti@x.it', updated: 3 })));
 await t('scorer inserisce il golden set', assertSucceeds(updateDoc(doc(sc1, 'vmatches', 'T1_g-A-d1-0'), { golden: { h: 15, a: 13 }, by: 'campo1@x.it', updated: 31 })));
+await t('referto chiuso: lo scorer invia il risultato (playoff, golden azzerato)', assertSucceeds(updateDoc(doc(sc1, 'vmatches', 'T1_g-A-d1-0'), { sets, status: 'done', by: 'campo1@x.it', updated: 32, golden: null })));
 await t('scorer non cambia squadre o data', assertFails(updateDoc(doc(sc1, 'vmatches', 'T1_g-A-d1-0'), { home: 'z', by: 'campo1@x.it', updated: 4 })));
 await t('scorer non firma a nome di altri', assertFails(updateDoc(doc(sc1, 'vmatches', 'T1_g-A-d1-0'), { sets, status: 'done', by: 'org@x.it', updated: 5 })));
 await t('utente registrato non inserisce risultati', assertFails(updateDoc(doc(user, 'vmatches', 'T1_g-A-d1-0'), { sets, status: 'done', by: 'u1@x.it', updated: 6 })));

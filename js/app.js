@@ -2380,7 +2380,8 @@
   const vLive = m => (S().live || {})[m.id] || null;
   const vCanEscore = tour => (tourAdmin() || (!!scorer() && vCanScore(tour))) && tour.status !== 'done';
   function vLiveText(lv) {
-    const sets = (lv.sets || []).map(([a, b]) => `${a}-${b}`);
+    // il referto mette in "sets" anche il set in corso (che è anche "cur"): qui contano solo i set finiti
+    const sets = (lv.sets || []).slice(0, lv.cur && lv.cur.set ? lv.cur.set - 1 : undefined).map(([a, b]) => `${a}-${b}`);
     if (lv.cur) sets.push(`${lv.cur.a}-${lv.cur.b}`);
     return `${(lv.setsWon || {}).a || 0}-${(lv.setsWon || {}).b || 0}${sets.length ? ` (${sets.join(', ')})` : ''}`;
   }
@@ -2747,15 +2748,18 @@
       .map(x => ({ no: x.num === '' ? '' : Number(x.num), name: `${x.first} ${x.last}`, gender: x.g === 'F' ? 'F' : 'M', libero: false, captain: false })) });
     const phase = m.stage === 'g' ? `${t('vtGroup', { g: m.group })} · ${t('vmDay', { n: m.day })}`
       : `${((tour.brackets || []).find(b => b.id === m.bracket) || {}).name || t('vtTab_playoff')} · ${t('vmLeg', { n: m.leg })}`;
+    // minimo 2 donne in campo solo per le squadre miste
+    const minWomen = { A: (teamById(m.home) || {}).kind === 'X' ? 2 : 0, B: (teamById(m.away) || {}).kind === 'X' ? 2 : 0 };
     return { competition: tour.name, phase, matchNo: m.key, date: m.date || '', time: m.time || '', venue: m.place || '', court: (scorer() && scorer().court) || '',
-      settings: m.mode === 'bo5' ? { mode: 'best', sets: 5, points: 25, lastPoints: 15, minWomen: 2 } : { mode: 'fixed', sets: 3, points: 25, lastPoints: 25, minWomen: 2 },
-      A: team(m.home), B: team(m.away) };
+      settings: m.mode === 'bo5' ? { mode: 'best', sets: 5, points: 25, lastPoints: 15, minWomen } : { mode: 'fixed', sets: 3, points: 25, lastPoints: 25, minWomen },
+      // alla chiusura il referto scrive il risultato nella gara (vmatches); stage "p" = playoff
+      vmatch: true, stage: m.stage, A: team(m.home), B: team(m.away) };
   }
   async function vEscoreOpen(id) {
     const m = vmById(id), tour = m && vtById(m.tid);
     if (!m || !vCanEscore(tour) || !window.Cloud) return;
     // l'admin lo apre in una nuova scheda (aperta subito, prima dell'attesa del database); lo scorer nella stessa
-    const win = admin() ? window.open('', '_blank') : null;
+    const win = tourAdmin() ? window.open('', '_blank') : null;
     ui.flash = { text: t('escoreLoading') }; render();
     try {
       const rid = await window.Cloud.openReferto(tour.id, m.key, m.home, m.away, (scorer() && scorer().court) || '', vEscoreInfo(tour, m));

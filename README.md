@@ -89,8 +89,9 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 - **Referto elettronico** (`referto-indoor/`, 6 contro 6 con rotazioni, libero, minimo 2 donne in campo): pulsante
   **E-scoresheet** sulla gara (admin generale, admin tornei e scorer del torneo). La prima volta crea `referti/{torneo}_{gara}` con
   torneo, fase, data, ora, palestra, squadre (A = casa) con le rose e la formula (gironi: 3 set fissi a 25; playoff:
-  come il turno). Il punteggio va in diretta nel calendario (`live/{id}`, pubblico); a referto chiuso compare
-  **Riporta il risultato del referto**, che lo porta in classifica. Il referto è facoltativo: i set si possono sempre
+  come il turno; minimo 2 donne in campo solo per le squadre miste). Il punteggio va in diretta nel calendario
+  (`live/{id}`, pubblico); alla **chiusura del referto** il risultato entra da solo nella gara e quindi in classifica (se
+  l'invio non riesce resta il pulsante **Riporta il risultato del referto**); il PDF si archivia in `refertiPdf`. Il referto è facoltativo: i set si possono sempre
   inserire a mano. Gli scorer leggono le rose (servono al referto); per tutti gli altri restano private.
 - **Le mie gare** (menu e profilo): calendario e risultati delle squadre di cui si è capitano o giocatore. Il capitano
   collega i giocatori della rosa al loro account dell'app (colonna *Account app*; l'app propone l'utente con lo stesso

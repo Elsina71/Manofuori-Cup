@@ -50,7 +50,7 @@ function onError(err) {
 }
 
 onSnapshot(doc(db, 'data', 'settings'), snap => {
-  if (snap.exists()) {
+  if (snap.exists() && typeof snap.data().json === 'string') {
     const json = snap.data().json;
     if (json !== last.settings) {
       last.settings = json;
@@ -63,7 +63,7 @@ onSnapshot(doc(db, 'data', 'settings'), snap => {
 // Livelli delle squadre in un documento a parte (data/tour), che scrive l'admin tornei.
 const tourJson = st => JSON.stringify({ levels: st.levels || null });
 onSnapshot(doc(db, 'data', 'tour'), snap => {
-  if (snap.exists()) {
+  if (snap.exists() && typeof snap.data().json === 'string') {
     const json = snap.data().json;
     if (json !== last.tour) { last.tour = json; Store.applyRemote('tour', JSON.parse(json)); }
   }
@@ -967,15 +967,15 @@ function watchLive(tids) {
 const EMPTY = { status: 'ready', sets: [], setsWon: { a: 0, b: 0 }, cur: null, serving: null, winner: null, outcome: null, approvedAt: null };
 
 async function openReferto(tid, key, a, b, court, info) {
-  if (!isAdmin && !scorer) throw Object.assign(new Error('permission-denied'), { code: 'permission-denied' });
+  if (!canTour() && !scorer) throw Object.assign(new Error('permission-denied'), { code: 'permission-denied' });
   const id = `${tid}_${key}`;
   const ref = await getDoc(doc(db, 'referti', id));
   const now = Date.now();
   if (ref.exists()) {
     const r = ref.data();
-    // Referto di un sorteggio precedente (squadre diverse): lo azzera solo l'admin.
+    // Referto di un sorteggio precedente (squadre diverse): lo azzera solo l'admin (generale o dei tornei).
     if (r.a !== a || r.b !== b) {
-      if (!isAdmin) throw Object.assign(new Error('stale'), { code: 'stale' });
+      if (!canTour()) throw Object.assign(new Error('stale'), { code: 'stale' });
       await resetReferto(id);
     } else {
       // dati della gara aggiornati (orario, campo...) finché non è omologata
@@ -990,9 +990,9 @@ async function openReferto(tid, key, a, b, court, info) {
   return id;
 }
 
-// Solo admin: cancella referto, punteggio pubblico e PDF archiviati di una gara.
+// Solo admin (generale o dei tornei): cancella referto, punteggio pubblico e PDF archiviati di una gara.
 async function resetReferto(id) {
-  if (!isAdmin) return;
+  if (!canTour()) return;
   const pdfs = await getDocs(query(collection(db, 'refertiPdf'), where('ref', '==', id)));
   const batch = writeBatch(db);
   batch.delete(doc(db, 'referti', id));
