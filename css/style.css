@@ -1021,3 +1021,16 @@ li.is-void { opacity: .6; }
 .badge.live-b { background: var(--danger); color: #fff; border-color: var(--danger); }
 .vm-actions { grid-column: 1 / -1; justify-content: flex-end; }
 .vm-row > .vm-actions { grid-row: auto; }
+
+/* scheda Referti dei tornei a squadre: elenco dei referti e presenze dei giocatori */
+.ref-row .vm-actions { grid-column: 1 / -1; }
+.pres-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.pres-cards .card h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pres-table td.num, .pres-table th.num { text-align: center; width: 4em; }
+.pres-table tr.pres-under td { color: var(--danger); }
+.pres-min { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pres-min label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.pres-min input { width: 5em; text-align: center; }
+.pdf-viewer { display: grid; gap: 8px; }
+.pdf-viewer .pv-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.pdf-viewer .pv-frame { width: 100%; height: 70vh; border: 1px solid var(--border); border-radius: 8px; background: #fff; }

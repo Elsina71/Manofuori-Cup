@@ -973,7 +973,7 @@ async function openReferto(tid, key, a, b, court, info) {
   const now = Date.now();
   if (ref.exists()) {
     const r = ref.data();
-    // Referto di un sorteggio precedente (squadre diverse): lo azzera solo l'admin (generale o dei tornei).
+    // Referto di un sorteggio precedente (squadre diverse): lo azzera solo l'admin (generale o tornei).
     if (r.a !== a || r.b !== b) {
       if (!canTour()) throw Object.assign(new Error('stale'), { code: 'stale' });
       await resetReferto(id);
@@ -999,6 +999,42 @@ async function resetReferto(id) {
   batch.delete(doc(db, 'live', id));
   pdfs.docs.forEach(d => batch.delete(d.ref));
   await batch.commit();
+}
+
+// ---------- cartella referti di un torneo (solo admin e account dei campi) ----------
+// referti: un documento per gara; refertiPdf (part 0): i file PDF archiviati, senza contenuto.
+let refUnsub = [], refTid = null;
+function watchReferti(tid) {
+  if (!(canTour() || scorer)) tid = null;
+  if (tid === refTid) return;
+  refUnsub.forEach(u => u()); refUnsub = [];
+  refTid = tid;
+  Store.applyRemote('ref-reset');
+  if (!tid) return;
+  refUnsub.push(onSnapshot(query(collection(db, 'referti'), where('tid', '==', tid)), snap => {
+    snap.docChanges().forEach(ch => Store.applyRemote(ch.type === 'removed' ? 'ref-removed' : 'ref', { id: ch.doc.id, data: ch.doc.data() }));
+    Store.applyRemote('ref-loaded');
+    refresh();
+  }, onError));
+  refUnsub.push(onSnapshot(query(collection(db, 'refertiPdf'), where('tid', '==', tid), where('part', '==', 0)), snap => {
+    snap.docChanges().forEach(ch => Store.applyRemote(ch.type === 'removed' ? 'pdf-removed' : 'pdf', { id: ch.doc.id, data: ch.doc.data() }));
+    Store.applyRemote('pdf-loaded');
+    refresh();
+  }, onError));
+}
+
+// Contenuto di un PDF archiviato (base64), ricomposto dalle sue parti.
+async function loadPdf(id) {
+  const first = await getDoc(doc(db, 'refertiPdf', id));
+  if (!first.exists()) return null;
+  const f = first.data();
+  let data = '';
+  for (let i = 1; i <= f.parts; i++) {
+    const p = await getDoc(doc(db, 'refertiPdf', `${id}_${i}`));
+    if (!p.exists() || p.data().version !== f.version) return null;
+    data += p.data().data;
+  }
+  return { name: f.name, version: f.version, data };
 }
 
 // ---------- account dei campi (solo admin) ----------
@@ -1048,6 +1084,8 @@ function removeScorer(email) {
 
 window.Cloud = {
   watchLive,
+  watchReferti,
+  loadPdf,
   openReferto,
   listScorers,
   addScorer,

@@ -101,6 +101,14 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 - **Chiusura a fine stagione** (*Impostazioni del torneo → Chiudi il torneo*): il torneo passa tra i *Tornei conclusi*
   e lo scorer non inserisce più risultati; si può riaprire.
 
+- **Scheda Referti** nella pagina del torneo (admin tornei e account dei campi del torneo): l'elenco dei referti
+  elettronici delle gare (stato: da iniziare, LIVE, referto chiuso, risultato riportato; risultato del referto; chi
+  l'ha compilato), **Apri referto**, il **PDF** archiviato e **Scarica tutti i PDF (ZIP)**.
+- **Presenze dei giocatori** (stessa scheda): per ogni squadra e giocatore il numero di gare concluse con il referto in
+  cui è **entrato davvero in campo** (sestetto iniziale, sostituzione o libero); le gare con il risultato inserito a mano
+  non contano. L'admin tornei fissa le **gare giocate minime per i playoff** (`vtours.minPlayed`): chi è sotto il
+  minimo è in rosso e la squadra mostra quanti sono. Il referto lo aprono anche gli **admin tornei**.
+
 ## Squadre
 
 - Voce **Squadre** nel menu (`#/teams`). Il **capitano** iscrive la squadra: è un utente registrato **abilitato

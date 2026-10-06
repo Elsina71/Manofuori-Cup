@@ -36,6 +36,21 @@ const Store = (() => {
       delete state.live[value.id];
     } else if (kind === 'live-reset') {
       state.live = {};
+    // referti e PDF archiviati del torneo aperto nella scheda Referti (solo admin tornei e account dei campi)
+    } else if (kind === 'ref') {
+      state.referti = Object.assign({}, state.referti, { [value.id]: value.data });
+    } else if (kind === 'ref-removed') {
+      if (state.referti) delete state.referti[value.id];
+    } else if (kind === 'ref-loaded') {
+      state.refLoaded = true;
+    } else if (kind === 'pdf') {
+      state.refPdf = Object.assign({}, state.refPdf, { [value.data.ref]: value.data });
+    } else if (kind === 'pdf-removed') {
+      if (state.refPdf) delete state.refPdf[value.id];
+    } else if (kind === 'pdf-loaded') {
+      state.pdfLoaded = true;
+    } else if (kind === 'ref-reset') {
+      state.referti = {}; state.refPdf = {}; state.refLoaded = false; state.pdfLoaded = false;
     } else if (kind === 'editorial') {
       state.editorial = (state.editorial || [null, null]).slice();
       state.editorial[value.i] = value.data;
