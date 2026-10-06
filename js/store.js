@@ -5,7 +5,7 @@ const Store = (() => {
   }
 
   function empty() {
-    return { version: 3, players: [], categories: [], tournaments: [], notice: '', editorial: [null, null], registrations: [], members: [], messages: [], inbox: [], rewards: null, nicks: {}, accounts: {}, courts: [], booking: null, bookRewards: null, bookings: [], bookingsMine: [], weekly: [], recurring: [], challenges: [], chapps: [], psearch: [], papps: [], manualVerified: {}, emailVerified: {}, freeplay: [], fpreg: [], fpanon: [], trainings: [], coaches: [], athletes: [], groups: [], plans: [], packs: [], occ: [], att: [], spots: [], receipts: [], roles: {}, incassi: [], bkpaid: {}, tesserati: [], occfree: {}, bkplayers: [], prices: null, bans: {}, notices: [], live: {}, referti: {}, refPdf: {}, refLoaded: false };
+    return { version: 3, players: [], categories: [], tournaments: [], notice: '', editorial: [null, null], registrations: [], members: [], messages: [], inbox: [], rewards: null, nicks: {}, accounts: {}, psearch: [], papps: [], manualVerified: {}, emailVerified: {}, freeplay: [], fpreg: [], fpanon: [], trainings: [], coaches: [], athletes: [], groups: [], plans: [], packs: [], occ: [], att: [], spots: [], receipts: [], roles: {}, incassi: [], tesserati: [], occfree: {}, prices: null, bans: {}, notices: [], live: {}, referti: {}, refPdf: {}, refLoaded: false };
   }
 
   function isValid(s) {
@@ -22,16 +22,6 @@ const Store = (() => {
     return cats;
   }
 
-  // Campo: nome, visibile (prenotabile) e orari di apertura per giorno della settimana (1 = lunedì … 7 = domenica).
-  function defaultHours() {
-    return Object.fromEntries([1, 2, 3, 4, 5, 6, 7].map(d => [d, { open: true, from: '08:00', to: '23:00' }]));
-  }
-  function normCourt(c) {
-    const hours = defaultHours();
-    Object.keys(c.hours || {}).forEach(d => { hours[d] = Object.assign(hours[d], c.hours[d]); });
-    return { id: c.id, name: c.name || 'Campo', visible: c.visible !== false, hours };
-  }
-
   let state = empty();
   let ready = false;
   let tourLoaded = false;   // categorie, premi ed EOPE arrivano dal documento dei tornei (data/tour)
@@ -46,9 +36,6 @@ const Store = (() => {
       if (!tourLoaded) { state.categories = migrateSettings(value); state.eopeRecipients = value.eopeRecipients || []; state.rewards = value.rewards || null; }
       state.notice = value.notice || ''; state.noticeUntil = value.noticeUntil || '';
       state.nicks = value.nicks || {};
-      state.courts = (value.courts || []).map(normCourt);
-      state.booking = value.booking || null;
-      state.bookRewards = value.bookRewards || null;
       state.prices = value.prices || null;
     }
     else if (kind === 'tour') {
@@ -59,14 +46,6 @@ const Store = (() => {
     else if (kind === 'incassi') state.incassi = value;
     else if (kind === 'tesserati') state.tesserati = value;
     else if (kind === 'occfree') state.occfree = value;
-    else if (kind === 'bkplayers') state.bkplayers = value;
-    else if (kind === 'bkpaid') state.bkpaid = value;
-    else if (kind === 'bookings') state.bookings = value;
-    else if (kind === 'bookingsMine') state.bookingsMine = value;
-    else if (kind === 'weekly') state.weekly = value;
-    else if (kind === 'recurring') state.recurring = value;
-    else if (kind === 'challenges') state.challenges = value;
-    else if (kind === 'chapps') state.chapps = value;
     else if (kind === 'psearch') state.psearch = value;
     else if (kind === 'papps') state.papps = value;
     else if (kind === 'manualVerified') state.manualVerified = value;
@@ -126,9 +105,8 @@ const Store = (() => {
     isValid,
     empty,
     applyRemote,
-    normCourt,
     replace(s) {
-      state = { live: state.live || {}, referti: state.referti || {}, refPdf: state.refPdf || {}, refLoaded: state.refLoaded, editorial: state.editorial || [null, null], registrations: state.registrations || [], members: state.members || [], messages: state.messages || [], inbox: state.inbox || [], rewards: s.rewards || state.rewards || null, nicks: s.nicks || state.nicks || {}, courts: (s.courts || state.courts || []).map(normCourt), booking: s.booking || state.booking || null, bookRewards: s.bookRewards || state.bookRewards || null, bookings: state.bookings || [], bookingsMine: state.bookingsMine || [], weekly: state.weekly || [], recurring: state.recurring || [], challenges: state.challenges || [], chapps: state.chapps || [], psearch: state.psearch || [], papps: state.papps || [], manualVerified: state.manualVerified || {}, emailVerified: state.emailVerified || {}, freeplay: state.freeplay || [], fpreg: state.fpreg || [], fpanon: state.fpanon || [], trainings: state.trainings || [], coaches: state.coaches || [], athletes: state.athletes || [], groups: state.groups || [], plans: state.plans || [], packs: state.packs || [], occ: state.occ || [], att: state.att || [], spots: state.spots || [], receipts: state.receipts || [], roles: state.roles || {}, incassi: state.incassi || [], bkpaid: state.bkpaid || {}, tesserati: state.tesserati || [], occfree: state.occfree || {}, bkplayers: state.bkplayers || [], prices: s.prices || state.prices || null, bans: state.bans || {}, notices: state.notices || [], accounts: state.accounts || {}, version: 3, players: s.players, categories: migrateSettings(s), tournaments: s.tournaments.map(Logic.normalize), notice: s.notice || '', noticeUntil: s.noticeUntil || '', eopeRecipients: s.eopeRecipients || [] };
+      state = { live: state.live || {}, referti: state.referti || {}, refPdf: state.refPdf || {}, refLoaded: state.refLoaded, editorial: state.editorial || [null, null], registrations: state.registrations || [], members: state.members || [], messages: state.messages || [], inbox: state.inbox || [], rewards: s.rewards || state.rewards || null, nicks: s.nicks || state.nicks || {}, psearch: state.psearch || [], papps: state.papps || [], manualVerified: state.manualVerified || {}, emailVerified: state.emailVerified || {}, freeplay: state.freeplay || [], fpreg: state.fpreg || [], fpanon: state.fpanon || [], trainings: state.trainings || [], coaches: state.coaches || [], athletes: state.athletes || [], groups: state.groups || [], plans: state.plans || [], packs: state.packs || [], occ: state.occ || [], att: state.att || [], spots: state.spots || [], receipts: state.receipts || [], roles: state.roles || {}, incassi: state.incassi || [], tesserati: state.tesserati || [], occfree: state.occfree || {}, prices: s.prices || state.prices || null, bans: state.bans || {}, notices: state.notices || [], accounts: state.accounts || {}, version: 3, players: s.players, categories: migrateSettings(s), tournaments: s.tournaments.map(Logic.normalize), notice: s.notice || '', noticeUntil: s.noticeUntil || '', eopeRecipients: s.eopeRecipients || [] };
       save();
     }
   };

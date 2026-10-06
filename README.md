@@ -1,13 +1,15 @@
 # Manofuori Cup 🏐
 
-Web app responsive (telefono, tablet, PC) per gestire tornei ed eventi di beach volley.
-Interfaccia in **italiano, sardo (campidanese), greco e inglese**: si cambia lingua in un tocco dai pulsanti IT / SRD / ΕΛ / EN
-(anche nel referto elettronico). Le traduzioni in sardo sono da far rivedere a un madrelingua; una frase non tradotta resta
-in italiano.
+Web app responsive (telefono, tablet, PC) per gestire tornei, gioco libero, allenamenti e cassa.
+Interfaccia **solo in italiano** (anche nel referto elettronico).
 
 È un'app **indipendente**: ha il suo progetto Firebase (database, account, sito web) e non condivide nulla
 con altre app. Nasce come copia di Beach+ Arena Event Manager (repository `Elsina71/Repository-principale`,
-cartella `beach-plus-arena`), con tutte le stesse funzioni; per ora ha un solo **tema neutro** (vedi *Temi grafici e colori*).
+cartella `beach-plus-arena`); per ora ha un solo **tema neutro** (vedi *Temi grafici e colori*).
+
+**Differenze da Beach+ Arena**: niente prenotazione dei campi, niente sfide e niente ranking (le classifiche saranno
+rifatte per le squadre di pallavolo). Gioco libero e allenamenti non occupano campi: hanno un **luogo** scritto a mano.
+Categorie, tabelle punti e anagrafica giocatori restano per ora, finché i tornei non vengono rifatti per le squadre.
 
 ## Da completare prima di pubblicare
 
@@ -37,7 +39,7 @@ La prima pagina (`#/`, icona della casetta nel menu) contiene:
 - **due spazi editoriali** con foto, titolo e testo, a dimensione fissa e identica: se il testo non ci sta finisce con
   "…" e compare **Visualizza l'articolo**, che apre la pagina autonoma dell'articolo (`#/a/1`, `#/a/2`);
 - i **tornei attivi** (in corso e in arrivo), con il link a *Tutti i tornei* (`#/tournaments`);
-- i **primi 20 del ranking** maschile e femminile, con il link *Vedi tutta la classifica*.
+- le prossime sessioni di **gioco libero**.
 
 L'admin compila gli spazi direttamente in pagina (*Aggiungi articolo · spazio 1/2*, *Modifica*, *Svuota spazio*);
 la foto si carica dal telefono o dal computer e viene ridimensionata automaticamente. Sono salvati in
@@ -65,43 +67,13 @@ la foto si carica dal telefono o dal computer e viene ridimensionata automaticam
   riceve un avviso (prima pagina e *Impostazioni → Utenti registrati*) e assegna un **alias**, modificabile, che
   sostituisce il nome in liste, iscrizioni e classifiche. Per gli omonimi il collegamento con il giocatore in anagrafica
   lo sceglie l'admin.
-- **Privacy**: l'email la vedono solo l'utente e l'admin. Cliccando un nome in classifica gli altri vedono solo i tornei
+- **Privacy**: l'email la vedono solo l'utente e l'admin. Cliccando un nome gli altri vedono solo i tornei
   giocati, i piazzamenti e i punti. L'elenco degli iscritti è pubblico. I reward compaiono nel profilo dell'utente e,
   per l'admin, nelle liste.
 - **Tornei già creati**: in Gestione si possono aprire le iscrizioni online (data e ora, termine, massimo squadre); le
   squadre già inserite dall'admin restano in lista e occupano i primi posti.
 - Database: `members/{uid}`, `accounts/{uid}` (email), `registrations/{id}`, `messages/{id}`, `inbox/{uid}`; alias in
   `data/settings`.
-
-## Prenotazione dei campi
-
-- Voce **Campi** nel menu (`#/book`): griglia giorno per giorno, un riquadro per campo con gli orari in orizzontale a
-  mezz'ore (verde libero, rosso occupato, giallo selezione). Si tocca uno slot libero e poi i successivi dello stesso
-  campo per allungare la prenotazione; fasce Mattina / Pomeriggio / Sera quando gli orari sono molti.
-- **Privacy**: gli utenti vedono solo gli slot occupati (rossi, "Occupato"), senza sapere chi ha prenotato né il motivo
-  dei blocchi; l'admin vede tutto e modifica qualsiasi prenotazione. Nel database la parte pubblica (`busy`) contiene
-  solo campo e orari; chi ha prenotato e il motivo sono in `bookings`, leggibile solo dal titolare e dall'admin.
-- Prenotano gli utenti registrati **con email confermata**, rispettando le regole decise dall'admin: durata minima e massima,
-  prenotazioni al giorno per utente, giorni di anticipo. Ognuno modifica o cancella solo le proprie prenotazioni
-  (anche dal Profilo).
-- L'admin (*Campi → Gestisci campi*, `#/courts`) crea i campi con nome, visibilità e orari di apertura per ogni giorno
-  della settimana; può prenotare per un utente o **bloccare** slot con un motivo (manutenzione, eventi) e modificare
-  o cancellare qualsiasi prenotazione.
-- **Blocchi ricorrenti** (allenamenti fissi), in *Gestisci campi*: campo, giorno della settimana, dalle … alle … e motivo
-  (es. Campo 3, mercoledì 18:00–19:30, allenamento Busonera). Valgono ogni settimana finché l'admin non li toglie; gli
-  utenti vedono il campo occupato senza il motivo e non possono prenotarlo (bloccato anche dalle regole del database).
-  Se in quegli orari ci sono già prenotazioni, l'app le elenca all'admin prima di aggiungere il blocco.
-- **Avvisi**: se l'admin modifica o cancella la prenotazione di un utente, l'utente riceve un ALERT in cima alla prima
-  pagina; se un utente modifica o cancella la propria, l'ALERT arriva agli admin. Restano finché non si preme *Ho letto*.
-- **Reward dei campi**, separato da quello dei tornei: stessi livelli (Stellina … Galassia) in base alle prenotazioni
-  giocate, con soglie decise dall'admin in *Gestisci campi*. Contano anche le **sfide giocate**: per il proponente
-  come sua prenotazione, per gli altri partecipanti accettati solo se, a orario finito, la prenotazione esiste
-  ancora (se l'admin o il proponente cancellano la sfida o la sua prenotazione non vale; la sfida torna aperta). Si vede nel profilo dell'utente.
-- Database: per ogni mezz'ora prenotata `busy/{giorno_campo_ora}` (pubblico) e `bookings/{giorno_campo_ora}` (privato),
-  scritti insieme (lo stesso slot non si può prenotare due volte); `recurring/{id}` (blocchi ricorrenti con motivo, solo
-  admin) e `weekly/{campo_giorno_ora}` (orari settimanali bloccati, pubblici); `notices/{id}` (avvisi); campi e regole
-  in `data/settings`. Le prenotazioni fatte prima di questa versione ricevono la parte pubblica in automatico alla
-  prima apertura dell'app da parte dell'admin.
 
 ## Cerco compagno/a (tornei)
 
@@ -125,11 +97,8 @@ la foto si carica dal telefono o dal computer e viene ridimensionata automaticam
 - Voce **Gioco libero** nel menu (`#/free`) e le prossime sessioni anche in prima pagina. L'admin crea una sessione con
   nome, data, orario di inizio e di fine e le categorie: **Aperto a tutti** oppure uno o più livelli (Start, Intermedio,
   Intermedio avanzato, Pro).
-- L'admin indica anche **quanti campi** impegna la sessione: l'app sceglie i campi con più tempo libero nella fascia e
-  li blocca nella griglia delle prenotazioni (gli utenti li vedono occupati, l'admin "Gioco libero · nome"). Se un campo
-  apre più tardi o ha già una prenotazione, la prenotazione resta e il gioco libero occupa solo gli orari liberi (sulla
-  scheda: "Campo 1 (10:30–15:00)"). La sessione
-  si può **modificare** (nome, data, orari, categorie, campi): i partecipanti restano, i campi bloccati si aggiornano.
+- L'admin può indicare il **luogo** (testo libero, es. "Palestra comunale, campo 2"). La sessione si può **modificare**
+  (nome, data, orari, luogo, categorie): i partecipanti restano.
 - **Blocchi da 1 ora** (opzione dell'admin, es. 10–18 → 10–11, 11–12, …): chi partecipa sceglie i blocchi in cui c'è
   (es. 12–15) e li può cambiare. Tutti vedono una tabella con quanti uomini e quante donne ci sono in ogni blocco
   (dalle presenze anonime `fpanon`: solo sesso e blocchi, senza nome né uid); l'admin vede anche i nomi per blocco.
@@ -144,8 +113,7 @@ la foto si carica dal telefono o dal computer e viene ridimensionata automaticam
 
 - Sezione **Allenamenti** (`#/train`), visibile all'admin e ai coach.
 - **Allenamenti settimanali** (admin): nome facoltativo, giorno, orari (ogni 15 minuti), livello (Start, Intermedio,
-  Intermedio avanzato, Pro), massimo persone, coach e campi occupati. I campi risultano occupati ogni settimana
-  nella griglia delle prenotazioni (blocchi ricorrenti legati all'allenamento: si modificano dall'allenamento).
+  Intermedio avanzato, Pro), massimo persone, coach e luogo (testo libero).
 - **Coach**: utenti registrati indicati dall'admin; per ognuno l'admin sceglie se vede tutti gli allenamenti o solo i suoi.
   Il coach vede solo i nomi del gruppo (non i dati personali, il certificato o i pagamenti).
 - **Gruppi del mese**: l'admin compone a mano il gruppo di ogni allenamento, mese per mese (con "Copia i gruppi del
@@ -203,17 +171,17 @@ la foto si carica dal telefono o dal computer e viene ridimensionata automaticam
 - **Ruoli** (pagina Utenti → "Ruoli e accessi"):
   - *Admin generale*: tutto. Sono gli account con email confermata pierpaolomurgioni@gmail.com
     (nelle regole del database), l'account principale e la raccolta `admins`.
-  - *Admin tornei* (`roles/{uid}.tour`): tornei, categorie e tabelle punti, giocatori e ranking, iscrizioni, referti e
+  - *Admin tornei* (`roles/{uid}.tour`): tornei, categorie e tabelle punti, giocatori, iscrizioni, referti e
     refertisti. Categorie, premi ed EOPE stanno in `data/tour` (separati da `data/settings`, che resta dell'admin generale).
   - *Cassa* (`roles/{uid}.cash`): registra incassi ed emette ricevute; non vede schede atleti né il resto dell'amministrazione.
   - *Coach* e *refertisti* come prima. I ruoli si assegnano con le caselle accanto a ogni utente (solo admin generale).
 - **Cassa** (`#/cassa`, admin generale e cassa): ogni incasso (`incassi`) ha una o più righe: quote sociali (corsi di
-  allenamento, prenotazione campi per allenamento con scelta della prenotazione, torneo sociale) e commerciale
+  allenamento, torneo sociale) e commerciale
   (bevande, altro). Ricevute separate: serie Q `n/Q/anno` (contatore `receipts-AAAA`, che prosegue la numerazione delle
   ricevute precedenti) e serie C `n/C/anno` (`receiptsC-AAAA`); ripartono ogni anno. Carta e bonifico: ricevuta sempre;
   contanti: a scelta. Intestatario facoltativo (ricevuta senza nome con spazi da compilare) e assegnabile dopo dall'admin
   (persona registrata o nome scritto a mano; le modifiche restano registrate). Inserimento con numero e data scelti: le
-  ricevute successive della stessa serie scalano di uno. Annullamento dell'incasso (ricevute ANNULLATE, prenotazioni,
+  ricevute successive della stessa serie scalano di uno. Annullamento dell'incasso (ricevute ANNULLATE,
   piani, spot e pacchetti di nuovo da pagare). Resoconto mensile (totali Q/C, per voce e modalità) e prospetto Excel.
   I pagamenti degli allenamenti registrati dalla scheda corsista sono anche incassi della cassa.
 - **Report presenze** (`#/report`, solo admin): settimana, mese o trimestre solare; tabelle per allenamento, livello,
@@ -233,9 +201,6 @@ la foto si carica dal telefono o dal computer e viene ridimensionata automaticam
 
 ## Profilo: le mie attività (parte 4)
 
-- Nel profilo dell'utente registrato: prenotazioni fatte (e ore), già giocate, grafico delle prenotazioni per giorno
-  della settimana (settimana o mese, con frecce per scorrere i periodi), grafico per mese (ultimi 12 mesi), elenco
-  di dettaglio del periodo; ogni grafico si può vedere anche come tabella.
 - Allenamenti della stagione: presenze, assenze, spot e recuperi.
 - Tornei disputati, punti, reward e risultati dei tornei conclusi restano come prima.
 
@@ -256,35 +221,17 @@ la foto si carica dal telefono o dal computer e viene ridimensionata automaticam
   (`js/boot.js`). Se si aggiunge un servizio esterno va aggiunto alla CSP.
 - **Limite tentativi** di registrazione (20 secondi tra un tentativo e l'altro, oltre ai limiti di Firebase).
 
-## Sfide
-
-- Voce **Sfide** nel menu (`#/challenges`, solo utenti registrati con email confermata e admin). Un utente (o l'admin,
-  che compare come "Manofuori Cup") lancia una
-  sfida: tipo (maschile, femminile, misto), livello (Start, Intermedio, Medio alto, Pro), data, ora, durata (nei limiti
-  delle prenotazioni) e quanti uomini e quante donne cerca. Può aggiungere giocatori non registrati.
-- Gli altri si candidano (solo per il genere cercato) e vedono **Da confermare** finché il proponente non accetta;
-  se declina vedono **Non confermata**. Il proponente trova le candidature da valutare anche in prima pagina.
-- **Fai partire la sfida** si attiva solo a sfida completa: il sistema cerca un campo libero per tutta la durata e lo
-  prenota a nome del proponente. Se l'orario è occupato propone l'orario libero più vicino nello stesso giorno, che
-  deve essere confermato da tutti i partecipanti registrati (avviso in prima pagina) prima della prenotazione.
-- Una candidatura si può **revocare**: il proponente riceve un avviso in prima pagina e la sfida si riapre. Se il campo
-  era già prenotato ha **un'ora** per mantenere o cancellare la prenotazione; scaduta l'ora la prenotazione si cancella
-  al primo accesso di un partecipante o dell'admin.
-- Database: `challenges/{id}` e `chapps/{sfida_utente}` (candidature), leggibili solo dagli utenti registrati e
-  dall'admin; la prenotazione della sfida è una normale prenotazione (`bookings` + `busy`) con il riferimento alla sfida.
-
 ## Conferma dell'email e lista nera
 
 - Alla registrazione arriva un'email con il link di conferma. Finché l'indirizzo non è confermato l'utente **non può
-  iscriversi ai tornei né prenotare i campi** (bloccato anche dalle regole del database); l'app mostra un avviso con
+  iscriversi ai tornei né partecipare al gioco libero** (bloccato anche dalle regole del database); l'app mostra un avviso con
   *Ho confermato* e *Invia di nuovo*. Vale anche per chi si era registrato prima.
 - **Conferma a mano** (*Impostazioni → Utenti registrati*): accanto a ogni utente si vede se l'email è confermata,
   confermata dall'admin o da confermare; l'admin può **confermare a mano** chi non riceve l'email (`verified/{uid}`,
   vale anche nelle regole del database) e annullare la conferma.
 - **Registrazione da parte dell'admin** (stessa pagina): l'admin crea l'account con nome, cognome, sesso, email e
   password; l'utente è già confermato e può cambiare la password con "Password dimenticata?".
-- **Lista nera** (*Impostazioni → Utenti registrati*): per ogni utente l'admin può bloccare le **iscrizioni ai tornei**,
-  la **prenotazione dei campi** o entrambe. L'utente bloccato vede l'invito a contattare l'organizzatore; un utente
+- **Lista nera** (*Impostazioni → Utenti registrati*): per ogni utente l'admin può bloccare le **iscrizioni ai tornei**. L'utente bloccato vede l'invito a contattare l'organizzatore; un utente
   bloccato per i tornei non può nemmeno essere iscritto come compagno. Database: `bans/{uid}` (lo legge solo
   l'interessato e l'admin).
 
@@ -317,7 +264,7 @@ I temi di Beach+ Arena (cartella `beach-plus-arena` del repository principale) s
     tutti contro tutti o formula FIVB). L'admin sceglie quante squadre vanno nel **Gold** (prima tutte le 1ª, poi le 2ª,
     poi le migliori 3ª per quoziente punti, massimo 16): tabellone da 16 con bye alle teste di serie e senza squadre
     dello stesso girone al primo turno. Tutte le altre giocano il **Silver** (tabellone da 16). Finale 3°/4° posto
-    a scelta nel Gold e nel Silver. Punti ranking con **due tabelle del torneo** (Gold e Silver), al posto di quella
+    a scelta nel Gold e nel Silver. Punti con **due tabelle del torneo** (Gold e Silver), al posto di quella
     della categoria. In Gestione, spostando le squadre nella lista si vede subito l'anteprima dei gironi
     (serpentina). Teste di serie e bye nei tabelloni: prima le 1ª, poi le 2ª, ecc.; a parità di posizione
     punti in classifica (2 vittoria, 1 sconfitta; FIVB: percorso vincenti/perdenti), poi quoziente punti; squadre dello stesso girone mai contro nei
@@ -338,8 +285,7 @@ I temi di Beach+ Arena (cartella `beach-plus-arena` del repository principale) s
 - **Classifica dei gironi** con i criteri di spareggio del regolamento
   (2 squadre: quoziente punti nel girone, poi scontro diretto; 3+: quoziente punti negli scontri tra loro,
   poi nel girone; infine testa di serie).
-- **Classifica finale** e **ranking** per genere e categoria (punti tabella × coefficiente). I punti dei tornei misti
-  vanno a ciascun giocatore nella classifica del proprio genere (uomo → maschile, donna → femminile).
+- **Classifica finale** del torneo e punti per giocatore (punti tabella × coefficiente), visibili nella scheda del giocatore.
 - **E-scoresheet** (referto elettronico collegato):
   - **Account dei campi**: in *Impostazioni → Account dei campi* l'admin crea un account (email e password) per ogni
     campo. Il tablet del campo accede una volta e trova **Le mie gare** (le gare del suo campo, oppure tutti i campi).
@@ -351,7 +297,7 @@ I temi di Beach+ Arena (cartella `beach-plus-arena` del repository principale) s
     (un documento per gara, firme comprese, visibile solo ad admin e campi).
   - Mentre il refertista segna i punti, il punteggio compare in diretta (**LIVE**) nel calendario, nei gironi e nel
     tabellone. Quando chiude la gara il risultato resta **in attesa di omologa**: visibile a tutti ma non conteggiato.
-  - Con **Omologa il risultato** l'admin lo rende ufficiale (classifiche dei gironi, passaggi di turno, ranking).
+  - Con **Omologa il risultato** l'admin lo rende ufficiale (classifiche dei gironi, passaggi di turno, punti).
     L'admin può sempre correggere il punteggio, riaprire la gara, **riaprirla al refertista** o **azzerare il referto**.
   - Scheda **Referti** nella pagina del torneo (admin e account dei campi): la cartella **referti** con un file per
     ogni gara (stato, punteggio, chi l'ha compilato, *Apri referto*) e la cartella **referti / pdf** con tutti i PDF,
@@ -374,7 +320,7 @@ index.html        pagina principale
 css/style.css     grafica (chiaro/scuro, mobile-first)
 js/i18n.js        traduzioni IT / EL / EN
 js/store.js       salvataggio dati nel browser
-js/logic.js       regole: formule, gironi, tabelloni, piazzamenti, ranking
+js/logic.js       regole: formule, gironi, tabelloni, piazzamenti, punti
 js/demo.js        dati di esempio
 js/app.js         interfaccia
 referto/          referto elettronico di gara (scoresheet) → /referto/

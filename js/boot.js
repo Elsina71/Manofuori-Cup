@@ -1,6 +1,6 @@
 // Consenso per la memoria del browser (art. 122 Codice privacy, Linee guida Garante 2021).
 // "Necessari": accesso all'account e la scelta stessa sui cookie (sempre attivi).
-// "Preferenze": lingua, tema, colori e copia offline del database: salvati solo con il consenso.
+// "Preferenze": tema, colori e copia offline del database: salvati solo con il consenso.
 // Senza consenso le funzioni si possono usare durante la visita, ma non resta salvato nulla.
 window.Consent = (function () {
   var K = 'bpa-consent', PREF_KEYS = ['pcm-lang', 'pcm-theme', 'pcm-design', 'bpa-cookie-ok'];

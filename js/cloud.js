@@ -2,7 +2,7 @@
 import { initializeApp } from '../vendor/firebase/firebase-app.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, collection, onSnapshot, writeBatch, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, connectFirestoreEmulator, arrayUnion, getCountFromServer, updateDoc, runTransaction, deleteField
+  doc, collection, onSnapshot, writeBatch, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, connectFirestoreEmulator, arrayUnion, updateDoc, runTransaction, deleteField
 } from '../vendor/firebase/firebase-firestore.js';
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, connectAuthEmulator,
@@ -226,15 +226,12 @@ onAuthStateChanged(auth, async u => {
   listenTournaments(canTour());
   listenRoles();
   listenAccount();
-  listenBookings();
-  listenChallenges();
   listenPartner();
   listenVerified();
   listenFreeplay();
   listenTraining();
   listenAttendance();
   listenOccFree();
-  listenBkPlayers();
   listenReceipts();
   refresh();
 });
@@ -329,8 +326,6 @@ async function register(data) {
   let mailErr = '';
   try { await sendVerifyMail(cred.user); } catch (e) { console.error(e); mailErr = e.code || e.message || 'error'; }
   listenAccount();
-  listenBookings();
-  listenChallenges();
   listenPartner();
   listenVerified();
   listenFreeplay();
@@ -444,158 +439,11 @@ function setBan(uid, data) {
   return data.tour || data.book ? setDoc(ref, { tour: !!data.tour, book: !!data.book, updated: Date.now() }) : deleteDoc(ref);
 }
 
-// ---------- prenotazione dei campi ----------
-// Per la privacy ogni mezz'ora prenotata ha due documenti con lo stesso ID (giorno_campo_ora):
-//   busy/{id}      pubblico: solo "occupato" (campo, giorno, orari, gid = prenotazione di appartenenza);
-//   bookings/{id}  privato: chi ha prenotato o il motivo del blocco (lo leggono solo il titolare e l'admin).
-// Blocchi ricorrenti (allenamenti fissi): recurring/{rid} con il motivo (solo admin) e
-// weekly/{campo_giorno_ora} pubblico, una mezz'ora della settimana occupata (giorno 1 = lunedì … 7 = domenica).
-const addMin = (hm, n) => { const [h, m] = hm.split(':').map(Number), x = h * 60 + m + n; return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); };
-const slotId = (date, courtId, start) => `${date}_${courtId}_${start}`;
-const weeklyId = (courtId, dow, start) => `${courtId}_${dow}_${start}`;
+// Data di ieri (AAAA-MM-GG, ora locale): si leggono solo i documenti da ieri in poi.
 const yesterday = () => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toLocaleDateString('sv'); };
 
-// Riunisce le mezz'ore della stessa prenotazione (gid) in un'unica prenotazione dalle "from" alle "to".
-function groupSlots(docs) {
-  const groups = {};
-  docs.forEach(d => {
-    const b = d.data(), gid = b.gid || d.id;
-    groups[gid] = groups[gid] || { id: gid, courtId: b.courtId, date: b.date, from: b.from || b.start, to: b.to || addMin(b.start, 30), userId: b.userId || null, blocked: b.blocked || '', ch: b.ch || '', fp: b.fp || '', guest: b.guest || '' };
-  });
-  return groups;
-}
-
-const bk = { busy: {}, full: {}, mine: {}, busyIds: new Set(), fullIds: new Set() };
-function mergeBookings() {
-  // pubblico (solo occupato) + dettagli visibili (proprie prenotazioni, oppure tutte per l'admin)
-  const all = Object.assign({}, bk.busy, bk.mine, bk.full);
-  Store.applyRemote('bookings', Object.values(all).filter(b => b.date >= yesterday()));
-  Store.applyRemote('bookingsMine', Object.values(bk.mine));
-  if (isAdmin) repairBusy();
-  refresh();
-}
-onSnapshot(query(collection(db, 'busy'), where('date', '>=', yesterday())), snap => {
-  bk.busy = groupSlots(snap.docs);
-  bk.busyIds = new Set(snap.docs.map(d => d.id));
-  bk.busyLoaded = true;
-  mergeBookings();
-}, onError);
-onSnapshot(collection(db, 'weekly'), snap => {
-  Store.applyRemote('weekly', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
-  refresh();
-}, onError);
-
-let bkUnsubs = [];
-function listenBookings() {
-  bkUnsubs.forEach(f => f()); bkUnsubs = [];
-  bk.full = {}; bk.mine = {}; bk.fullIds = new Set(); bk.fullLoaded = false;
-  Store.applyRemote('recurring', []);
-  mergeBookings();
-  if (!user) return;
-  if (!isAdmin && roles.cash) {
-    // cassa: le prenotazioni (da ieri) servono per incassare le quote dei campi
-    bkUnsubs.push(onSnapshot(query(collection(db, 'bookings'), where('date', '>=', yesterday())), snap => { bk.full = groupSlots(snap.docs); mergeBookings(); }, onError));
-  }
-  if (isAdmin) {
-    bkUnsubs.push(onSnapshot(query(collection(db, 'bookings'), where('date', '>=', yesterday())), snap => {
-      bk.full = groupSlots(snap.docs);
-      bk.fullIds = new Set(snap.docs.map(d => d.id));
-      bk.fullLoaded = true;
-      mergeBookings();
-    }, onError));
-    bkUnsubs.push(onSnapshot(collection(db, 'recurring'), snap => {
-      Store.applyRemote('recurring', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
-      refresh();
-    }, onError));
-  } else if (member) {
-    // solo le proprie prenotazioni (tutte: servono anche per il profilo)
-    bkUnsubs.push(onSnapshot(query(collection(db, 'bookings'), where('userId', '==', user.uid)), snap => {
-      bk.mine = groupSlots(snap.docs);
-      mergeBookings();
-    }, onError));
-  }
-}
-
-// Prenotazioni fatte prima della separazione pubblico/privato: l'admin crea una volta per sessione le "busy"
-// mancanti, ricontrollando ogni slot sul server (così una prenotazione appena fatta o cancellata non si tocca).
-let repaired = false;
-function repairBusy() {
-  if (repaired || !bk.fullLoaded || !bk.busyLoaded) return;
-  repaired = true;
-  setTimeout(async () => {
-    const cand = [...bk.fullIds].filter(id => !bk.busyIds.has(id)).slice(0, 200);
-    if (!cand.length) return;
-    const batch = writeBatch(db);
-    let n = 0;
-    for (const id of cand) {
-      try {
-        const [p, q] = await Promise.all([getDoc(doc(db, 'bookings', id)), getDoc(doc(db, 'busy', id))]);
-        if (p.exists() && !q.exists()) { const x = p.data(); batch.set(doc(db, 'busy', id), { courtId: x.courtId, date: x.date, start: x.start, from: x.from, to: x.to, gid: x.gid }); n++; }
-      } catch (e) { /* riprova alla prossima sessione */ }
-    }
-    if (n) batch.commit().catch(onError);
-  }, 4000);
-}
-
-function slotDocs(b) {
-  const out = {};
-  for (let t = b.from; t < b.to; t = addMin(t, 30)) {
-    out[slotId(b.date, b.courtId, t)] = Object.assign({ courtId: b.courtId, date: b.date, start: t, from: b.from, to: b.to, gid: b.id, userId: b.userId || null, blocked: b.blocked || '', first: t === b.from }, b.ch ? { ch: b.ch } : {}, b.fp ? { fp: b.fp } : {}, b.guest ? { guest: b.guest } : {});
-  }
-  return out;
-}
-const busyOf = x => ({ courtId: x.courtId, date: x.date, start: x.start, from: x.from, to: x.to, gid: x.gid });
-
-// Nuova prenotazione o modifica (prev = com'era prima): un solo invio, tutto o niente.
-function saveBooking(b, prev) {
-  if (!user) return Promise.reject(Object.assign(new Error('auth'), { code: 'permission-denied' }));
-  const next = slotDocs(b), old = prev ? slotDocs(prev) : {};
-  const batch = writeBatch(db);
-  Object.keys(old).forEach(id => { if (!(id in next)) { batch.delete(doc(db, 'bookings', id)); batch.delete(doc(db, 'busy', id)); } });
-  Object.entries(next).forEach(([id, data]) => { batch.set(doc(db, 'bookings', id), data); batch.set(doc(db, 'busy', id), busyOf(data)); });
-  return batch.commit();
-}
-
-function deleteBooking(b) {
-  const batch = writeBatch(db);
-  Object.keys(slotDocs(b)).forEach(id => { batch.delete(doc(db, 'bookings', id)); batch.delete(doc(db, 'busy', id)); });
-  return batch.commit().then(() => deleteDoc(doc(db, 'bkplayers', b.id)).catch(() => {}));
-}
-// Giocatori della prenotazione e reminder (bkplayers/{gid}); senza giocatori il documento resta per il reminder.
-function saveBkPlayers(d) { return setDoc(doc(db, 'bkplayers', d.gid), Object.assign({}, d, { updated: Date.now() })); }
-// Ascolto: le prenotazioni in cui gioco (invitato) e le mie (per il reminder di chi ha prenotato).
-let bpUnsubs = [];
-function listenBkPlayers() {
-  bpUnsubs.forEach(f => f()); bpUnsubs = [];
-  Store.applyRemote('bkplayers', []);
-  if (!user || !(isAdmin || member || adminMember)) return;
-  const parts = {};
-  const merge = () => { const all = {}; Object.values(parts).forEach(l => l.forEach(x => { all[x.id] = x; })); Store.applyRemote('bkplayers', Object.values(all)); refresh(); };
-  const on = (k, q) => bpUnsubs.push(onSnapshot(q, snap => { parts[k] = snap.docs.map(d => Object.assign({ id: d.id }, d.data())); merge(); }, onError));
-  on('by', query(collection(db, 'bkplayers'), where('by', '==', user.uid)));
-  on('in', query(collection(db, 'bkplayers'), where('uids', 'array-contains', user.uid)));
-}
-
-// Blocco ricorrente (solo admin): ogni settimana, quel giorno, dalle "from" alle "to".
-function addRecurring(r) {
-  if (!isAdmin) return Promise.resolve();
-  const rid = 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const batch = writeBatch(db);
-  batch.set(doc(db, 'recurring', rid), { courtId: r.courtId, dow: r.dow, from: r.from, to: r.to, reason: r.reason || '', created: Date.now() });
-  for (let t = r.from; t < r.to; t = addMin(t, 30)) batch.set(doc(db, 'weekly', weeklyId(r.courtId, r.dow, t)), { courtId: r.courtId, dow: r.dow, start: t, from: r.from, to: r.to, rid });
-  return batch.commit();
-}
-function deleteRecurring(r) {
-  if (!isAdmin) return Promise.resolve();
-  const batch = writeBatch(db);
-  batch.delete(doc(db, 'recurring', r.id));
-  for (let t = r.from; t < r.to; t = addMin(t, 30)) batch.delete(doc(db, 'weekly', weeklyId(r.courtId, r.dow, t)));
-  return batch.commit();
-}
-
 // ---------- allenamenti ----------
-// trainings/{id}: allenamento settimanale (pubblico): giorno (dow 1 = lunedì), orari, coach, livello, massimo, campi.
-//   I campi si bloccano con i blocchi ricorrenti (recurring con trid + weekly), come gli allenamenti fissi.
+// trainings/{id}: allenamento settimanale (pubblico): giorno (dow 1 = lunedì), orari, coach, livello, massimo, luogo.
 // coaches/{uid}: coach (utente registrato) con all = vede tutti gli allenamenti, altrimenti solo i suoi.
 // athletes/{uid}: scheda corsista (anagrafica, tesseramento, certificato): la leggono solo l'admin e l'interessato.
 // groups/{tid_YYYY-MM}: gruppo del mese di un allenamento (nomi): solo admin e coach.
@@ -662,32 +510,17 @@ function syncTess() {
   batch.commit().catch(onError).finally(() => { tessSyncing = false; });
 }
 
-// Blocchi dei campi di un allenamento: un blocco ricorrente per campo (motivo = nome dell'allenamento).
-function trainingBlocks(batch, tr, del) {
-  (tr.courts || []).forEach(courtId => {
-    const rid = `t_${tr.id}_${courtId}`;
-    if (del) batch.delete(doc(db, 'recurring', rid));
-    else batch.set(doc(db, 'recurring', rid), { courtId, dow: tr.dow, from: tr.from, to: tr.to, reason: tr.reason, trid: tr.id, created: Date.now() });
-    for (let t = tr.from; t < tr.to; t = addMin(t, 30)) {
-      const ref = doc(db, 'weekly', weeklyId(courtId, tr.dow, t));
-      if (del) batch.delete(ref); else batch.set(ref, { courtId, dow: tr.dow, start: t, from: tr.from, to: tr.to, rid });
-    }
-  });
-}
 // Crea o modifica un allenamento; groups = gruppi dell'allenamento (se cambia il coach si aggiorna coachUid).
 function saveTraining(old, d, groups) {
   const ref = old ? doc(db, 'trainings', old.id) : doc(collection(db, 'trainings'));
   const batch = writeBatch(db);
-  if (old) trainingBlocks(batch, old, true);
-  trainingBlocks(batch, Object.assign({ id: ref.id }, d), false);
   if (old) batch.update(ref, d); else batch.set(ref, Object.assign({}, d, { created: Date.now() }));
   if (old && old.coachUid !== d.coachUid) (groups || []).forEach(g => batch.update(doc(db, 'groups', g.id), { coachUid: d.coachUid || '' }));
   return batch.commit().then(() => ref.id);
 }
-// Elimina un allenamento: campi liberati, gruppi tolti, piani ricalcolati (plans = piani aggiornati da scrivere).
+// Elimina un allenamento: gruppi tolti, piani ricalcolati (plans = piani aggiornati da scrivere).
 function deleteTraining(tr, groups, plans) {
   const batch = writeBatch(db);
-  trainingBlocks(batch, tr, true);
   groups.forEach(g => batch.delete(doc(db, 'groups', g.id)));
   plans.forEach(p => batch.set(doc(db, 'plans', p.id), stripId(p)));
   batch.delete(doc(db, 'trainings', tr.id));
@@ -858,7 +691,7 @@ function listenReceipts() {
   if (rcUnsub) { rcUnsub(); rcUnsub = null; }
   Store.applyRemote('receipts', []);
   if (caUnsubs.length) { caUnsubs.forEach(f => f()); caUnsubs = []; }
-  Store.applyRemote('incassi', []); Store.applyRemote('bkpaid', {});
+  Store.applyRemote('incassi', []);
   const cash = isAdmin || !!roles.cash;
   if (!user || !(cash || member)) return;
   rcUnsub = onSnapshot(cash ? collection(db, 'receipts') : query(collection(db, 'receipts'), where('uid', '==', user.uid)), snap => {
@@ -870,17 +703,12 @@ function listenReceipts() {
     Store.applyRemote('incassi', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
     refresh();
   }, onError));
-  caUnsubs.push(onSnapshot(collection(db, 'bkpaid'), snap => {
-    Store.applyRemote('bkpaid', Object.fromEntries(snap.docs.map(d => [d.id, d.data()])));
-    refresh();
-  }, onError));
 }
 let caUnsubs = [];
 
 // ---------- CASSA: incassi e ricevute Q (quote sociali) / C (commerciali) ----------
 // incassi/{id}: ogni incasso (data, modalità, righe con categoria e importo, ricevute emesse): cassa e admin.
 // Ricevute: serie Q e C con numerazione autonoma per anno (counters/receipts-AAAA per Q, receiptsC-AAAA per C).
-// bkpaid/{gid}: prenotazione di un campo pagata (incasso, numero di ricevuta).
 const ctrRef = (series, year) => doc(db, 'counters', (series === 'C' ? 'receiptsC-' : 'receipts-') + year);
 const rnOf = (series, n, year) => `${n}/${series}/${year}`;
 // p = { date, method, lines: [{ cat, series, desc, amount, ref? }], receipt: { Q, C } (quali ricevute emettere),
@@ -904,7 +732,6 @@ function recordIncasso(p) {
       rec[s] = { id: rref.id, rn: rnOf(s, n, year) };
     });
     tr.set(iref, incassoDoc(p, rec));
-    p.lines.filter(l => l.ref && l.ref.kind === 'booking').forEach(l => tr.set(doc(db, 'bkpaid', l.ref.id), { incasso: iref.id, date: p.date, method: p.method, amount: l.amount, rn: rec.Q ? rec.Q.rn : '', at: Date.now() }));
   });
 }
 const sumOf = (lines, s) => Math.round(lines.filter(l => !s || l.series === s).reduce((a, l) => a + l.amount, 0) * 100) / 100;
@@ -925,7 +752,6 @@ function insertIncasso(p, series, n, shifts, last) {
     uid: p.uid || '', person: p.person || null, causale: p.causale[series], lines: lines.map(l => ({ cat: l.cat, desc: l.desc, amount: l.amount })), void: false, created: Date.now(), by: user.uid, inserted: true });
   const rec = { [series]: { id: rref.id, rn: rnOf(series, n, year) } };
   batch.set(iref, incassoDoc(p, rec));
-  p.lines.filter(l => l.ref && l.ref.kind === 'booking').forEach(l => batch.set(doc(db, 'bkpaid', l.ref.id), { incasso: iref.id, date: p.date, method: p.method, amount: l.amount, rn: rec.Q ? rec.Q.rn : '', at: Date.now() }));
   batch.set(ctrRef(series, year), { last, updated: Date.now() });
   return batch.commit();
 }
@@ -936,8 +762,7 @@ function voidIncasso(inc) {
   Object.values(inc.receipts || {}).forEach(r => batch.update(doc(db, 'receipts', r.id), { void: true, voidAt: Date.now() }));
   (inc.lines || []).forEach(l => {
     if (!l.ref) return;
-    if (l.ref.kind === 'booking') batch.delete(doc(db, 'bkpaid', l.ref.id));
-    else if (l.ref.kind === 'quarter') {
+    if (l.ref.kind === 'quarter') {
       (l.ref.planIds || []).forEach(id => batch.update(doc(db, 'plans', id), { paid: deleteField() }));
       batch.update(doc(db, 'athletes', l.ref.uid), Object.fromEntries((l.ref.months || []).map(m => [`prepaid.${m}`, deleteField()])));
     } else batch.update(doc(db, payCol(l.ref.kind), l.ref.id), { paid: deleteField() });
@@ -1044,94 +869,6 @@ function deleteUser(uid, groups, planIds, packIds) {
 }
 function setCoach(uid, data) { return data ? setDoc(doc(db, 'coaches', uid), data) : deleteDoc(doc(db, 'coaches', uid)); }
 
-// ---------- sfide ----------
-// challenges/{cid}: la sfida (proponente, tipo, livello, data, ora, durata, giocatori cercati, ospiti non registrati,
-//   stato open/started, campo prenotato "book", alternativa "alt", scadenza "holdUntil" dopo una revoca).
-// chapps/{cid_uid}: candidature (pending → accepted / declined; revoked se il candidato si ritira).
-// Le leggono solo gli utenti registrati e l'admin.
-let chUnsubs = [];
-function listenChallenges() {
-  chUnsubs.forEach(f => f()); chUnsubs = [];
-  Store.applyRemote('challenges', []);
-  Store.applyRemote('chapps', []);
-  if (!user || !(isAdmin || member)) return;
-  chUnsubs.push(onSnapshot(query(collection(db, 'challenges'), where('date', '>=', yesterday())), snap => {
-    Store.applyRemote('challenges', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
-    refresh();
-  }, onError));
-  chUnsubs.push(onSnapshot(query(collection(db, 'chapps'), where('date', '>=', yesterday())), snap => {
-    Store.applyRemote('chapps', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
-    refresh();
-  }, onError));
-}
-
-function createChallenge(c) {
-  return addDoc(collection(db, 'challenges'), Object.assign({}, c, { by: user.uid, status: 'open', book: null, alt: null, holdUntil: 0, created: Date.now() }));
-}
-function updateChallenge(id, patch) { return updateDoc(doc(db, 'challenges', id), patch); }
-
-// Candidatura (id = sfida_utente).
-function applyChallenge(c, name, gender) {
-  return setDoc(doc(db, 'chapps', `${c.id}_${user.uid}`), { cid: c.id, uid: user.uid, name, gender, status: 'pending', at: Date.now(), date: c.date });
-}
-function setAppStatus(id, status) { return updateDoc(doc(db, 'chapps', id), { status }); }
-function deleteApp(id) { return deleteDoc(doc(db, 'chapps', id)); }
-
-// Revoca: la candidatura resta come "revoked" (avviso al proponente); se il campo era già prenotato
-// il proponente ha un'ora per confermare la prenotazione.
-function revokeApp(app, c, hold) {
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'chapps', app.id), { status: 'revoked', revokedAt: Date.now() });
-  if (hold) batch.update(doc(db, 'challenges', c.id), { holdUntil: Date.now() + 3600000 });
-  return batch.commit();
-}
-
-// Prenotazione del campo della sfida (a nome del proponente) e sfida "started", tutto in un invio.
-function startChallenge(c, b, patch) {
-  const next = slotDocs(Object.assign({}, b, { userId: user.uid, blocked: '', ch: c.id }));
-  const batch = writeBatch(db);
-  Object.entries(next).forEach(([id, data]) => { batch.set(doc(db, 'bookings', id), data); batch.set(doc(db, 'busy', id), busyOf(data)); });
-  batch.update(doc(db, 'challenges', c.id), Object.assign({ status: 'started', book: { courtId: b.courtId, date: b.date, from: b.from, to: b.to, gid: b.id }, alt: null, holdUntil: 0 }, patch || {}));
-  return batch.commit();
-}
-
-// Cancella la prenotazione della sfida e la riapre (proponente, o chiunque partecipi a tempo scaduto).
-function releaseChallenge(c) {
-  const batch = writeBatch(db);
-  if (c.book) Object.keys(slotDocs({ id: c.book.gid, courtId: c.book.courtId, date: c.book.date, from: c.book.from, to: c.book.to })).forEach(id => { batch.delete(doc(db, 'bookings', id)); batch.delete(doc(db, 'busy', id)); });
-  batch.update(doc(db, 'challenges', c.id), { status: 'open', book: null, holdUntil: 0 });
-  return batch.commit();
-}
-
-// Elimina la sfida con le candidature e l'eventuale prenotazione (proponente o admin).
-function deleteChallenge(c, apps) {
-  const batch = writeBatch(db);
-  if (c.book) Object.keys(slotDocs({ id: c.book.gid, courtId: c.book.courtId, date: c.book.date, from: c.book.from, to: c.book.to })).forEach(id => { batch.delete(doc(db, 'bookings', id)); batch.delete(doc(db, 'busy', id)); });
-  apps.forEach(a => batch.delete(doc(db, 'chapps', a.id)));
-  batch.delete(doc(db, 'challenges', c.id));
-  return batch.commit();
-}
-
-// Sfide giocate da un partecipante (accettato): la sfida è partita, la sua prenotazione esiste ancora
-// (non cancellata dall'admin o dal proponente) e l'orario è finito.
-// Il proponente non si conta qui: la sfida è già una sua prenotazione.
-async function countChallenges(uid) {
-  const now = new Date(), today = now.toLocaleDateString('sv');
-  const hm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-  const apps = await getDocs(query(collection(db, 'chapps'), where('uid', '==', uid), where('status', '==', 'accepted')));
-  let n = 0;
-  for (const d of apps.docs) {
-    if (d.data().date > today) continue;
-    const c = await getDoc(doc(db, 'challenges', d.data().cid));
-    const x = c.exists() && c.data();
-    if (!(x && x.status === 'started' && x.book && (x.book.date < today || (x.book.date === today && x.book.to <= hm)))) continue;
-    // la prenotazione c'è ancora? (parte pubblica del primo slot, stessa prenotazione)
-    const z = await getDoc(doc(db, 'busy', slotId(x.book.date, x.book.courtId, x.book.from)));
-    if (z.exists() && z.data().gid === x.book.gid && z.data().to === x.book.to) n++;
-  }
-  return n;
-}
-
 // ---------- cerco compagno/a (tornei con iscrizioni aperte) ----------
 // psearch/{tid_uid}: chi cerca (pubblico: nome, livello e ruolo cercati; "act" = candidature attive, cioè in attesa
 //   o accettata; "n" = numero progressivo dell'ultima candidatura).
@@ -1228,30 +965,15 @@ function listenFreeplay() {
     refresh();
   }, onError);
 }
-// Campi impegnati dalla sessione: prenotazioni bloccate dall'admin (motivo "Gioco libero · nome", campo fp).
-const fpBooking = (fid, d, c) => ({ id: c.gid, courtId: c.courtId, date: d.date, from: c.from || d.from, to: c.to || d.to, userId: null, blocked: `Gioco libero · ${d.name}`, fp: fid });
-function fpBookingWrites(batch, fid, d, courts, del) {
-  courts.forEach(c => Object.entries(slotDocs(fpBooking(fid, d, c))).forEach(([id, data]) => {
-    if (del) { batch.delete(doc(db, 'bookings', id)); batch.delete(doc(db, 'busy', id)); }
-    else { batch.set(doc(db, 'bookings', id), data); batch.set(doc(db, 'busy', id), busyOf(data)); }
-  }));
-}
-// Crea o modifica una sessione (solo admin): sessione e campi bloccati in un unico invio.
-// old = sessione com'era prima (per liberare i campi che occupava).
+// Crea o modifica una sessione (solo admin).
 function saveFreeplay(old, d) {
   const ref = old ? doc(db, 'freeplay', old.id) : doc(collection(db, 'freeplay'));
-  const batch = writeBatch(db);
-  if (old && old.courts && old.courts.length) fpBookingWrites(batch, old.id, old, old.courts, true);
-  if (d.courts.length) fpBookingWrites(batch, ref.id, d, d.courts, false);
-  if (old) batch.update(ref, d);
-  else batch.set(ref, Object.assign({}, d, { m: 0, f: 0, by: user.uid, created: Date.now() }));
-  return batch.commit().then(() => ref.id);
+  return (old ? updateDoc(ref, d) : setDoc(ref, Object.assign({}, d, { m: 0, f: 0, by: user.uid, created: Date.now() }))).then(() => ref.id);
 }
 function deleteFreeplay(fp, regs, anons) {
   const batch = writeBatch(db);
   regs.forEach(r => batch.delete(doc(db, 'fpreg', r.id)));
   (anons || []).forEach(a => batch.delete(doc(db, 'fpanon', a.id)));
-  if (fp.courts && fp.courts.length) fpBookingWrites(batch, fp.id, fp, fp.courts, true);
   batch.delete(doc(db, 'freeplay', fp.id));
   return batch.commit();
 }
@@ -1294,12 +1016,6 @@ function setFreeplayBlocks(fpId, bl) {
   });
 }
 
-// Prenotazioni di un utente (tutte, anche future): si conta solo il primo slot di ciascuna.
-async function countBookings(uid) {
-  const snap = await getCountFromServer(query(collection(db, 'bookings'), where('userId', '==', uid), where('first', '==', true)));
-  return snap.data().count;
-}
-
 // Avviso per un utente (solo l'admin) o per gli amministratori ("admins").
 function notify(to, text) {
   if (!user || !to) return;
@@ -1330,10 +1046,9 @@ function push(state) {
     last.tour = tj; n++;
   }
   // il resto delle impostazioni (avviso, campi, prenotazioni, prezzi…) lo scrive solo l'admin generale
-  const settings = !isAdmin ? last.settings : JSON.stringify({ categories: state.categories, notice: state.notice || '', noticeUntil: state.noticeUntil || '', eopeRecipients: state.eopeRecipients || [], rewards: state.rewards || null, nicks: state.nicks || {}, courts: state.courts || [], booking: state.booking || null, bookRewards: state.bookRewards || null, prices: state.prices || null });
+  const settings = !isAdmin ? last.settings : JSON.stringify({ categories: state.categories, notice: state.notice || '', noticeUntil: state.noticeUntil || '', eopeRecipients: state.eopeRecipients || [], rewards: state.rewards || null, nicks: state.nicks || {}, prices: state.prices || null });
   if (settings !== last.settings) {
-    // minMinutes: durata minima di una prenotazione, letta dalle regole del database.
-    batch.set(doc(db, 'data', 'settings'), { json: settings, updated: Date.now(), minMinutes: Math.max(30, Math.round(Number((state.booking || {}).minHours || 0.5) * 60)) });
+    batch.set(doc(db, 'data', 'settings'), { json: settings, updated: Date.now() });
     last.settings = settings; n++;
   }
   const ids = new Set();
@@ -1529,10 +1244,6 @@ window.Cloud = {
   deleteMessage,
   markRead,
   setBan,
-  saveBooking,
-  deleteBooking,
-  addRecurring,
-  deleteRecurring,
   saveFreeplay,
   deleteFreeplay,
   setFreeplay,
@@ -1545,17 +1256,6 @@ window.Cloud = {
   declinePartner,
   revokePartner,
   registerFromSearch,
-  createChallenge,
-  updateChallenge,
-  applyChallenge,
-  setAppStatus,
-  deleteApp,
-  revokeApp,
-  startChallenge,
-  releaseChallenge,
-  deleteChallenge,
-  countBookings,
-  countChallenges,
   notify,
   dismissNotice,
   resendVerification,
@@ -1583,7 +1283,6 @@ window.Cloud = {
   decideSpot,
   setOccCancelled,
   setOccFree,
-  saveBkPlayers,
   recordPayment,
   voidReceipt,
   renumberReceipts,

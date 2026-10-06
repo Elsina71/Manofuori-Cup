@@ -1,7 +1,7 @@
 // Testi legali (in italiano, lingua di riferimento): informativa privacy, cookie policy, termini e condizioni.
 // Titolare: ASD Manofuori Volley Project. Aggiornare la data e la versione quando si cambia un testo.
 const Legal = (() => {
-  const VERSION = '2026-10-05';
+  const VERSION = '2026-10-06';
   const ORG = {
     name: 'ASD Manofuori Volley Project',
     kind: 'Associazione Sportiva Dilettantistica',
@@ -26,9 +26,8 @@ const Legal = (() => {
     <h2>2. Quali dati trattiamo</h2>
     <ul>
       <li><strong>Account</strong>: nome, cognome, sesso, email e password. La password è gestita dal servizio di autenticazione di Google Firebase e non è mai visibile all'associazione.</li>
-      <li><strong>Tornei e classifiche</strong>: iscrizioni, compagni di squadra, risultati, punteggi e classifiche.</li>
-      <li><strong>Prenotazioni dei campi</strong>: giorno, orario e campo. Agli altri utenti il campo risulta solo "occupato", senza il tuo nome.</li>
-      <li><strong>Sfide, gioco libero, "cerco compagno/a"</strong>: le partecipazioni e le candidature che invii (il nome è visibile agli utenti coinvolti, come descritto in ogni sezione; nel gioco libero gli altri vedono solo quanti uomini e donne partecipano).</li>
+      <li><strong>Tornei</strong>: iscrizioni, compagni di squadra, risultati e punteggi.</li>
+      <li><strong>Gioco libero e "cerco compagno/a"</strong>: le partecipazioni e le candidature che invii (il nome è visibile agli utenti coinvolti, come descritto in ogni sezione; nel gioco libero gli altri vedono solo quanti uomini e donne partecipano).</li>
       <li><strong>Allenamenti</strong>: gruppi, presenze, assenze, posti spot e recuperi. Il coach vede solo nomi e presenze dei propri allenamenti.</li>
       <li><strong>Scheda del corsista</strong> (solo per chi si allena con l'associazione): luogo e data di nascita, comune e indirizzo di residenza, codice fiscale, tesseramento della stagione e <em>data di scadenza</em> del certificato medico. Non conserviamo il certificato né informazioni sul tuo stato di salute.</li>
       <li><strong>Pagamenti</strong>: importo, data, modalità (contanti, bancomat, bonifico) e ricevute emesse. Nell'app non si inseriscono dati di carte o conti bancari.</li>
@@ -37,7 +36,7 @@ const Legal = (() => {
 
     <h2>3. Perché li trattiamo (finalità e basi giuridiche)</h2>
     <ul>
-      <li><strong>Creare e gestire il tuo account e i servizi dell'app</strong> (tornei, prenotazioni, sfide, gioco libero, allenamenti, avvisi di servizio) — esecuzione del rapporto con te, art. 6.1.b GDPR.</li>
+      <li><strong>Creare e gestire il tuo account e i servizi dell'app</strong> (tornei, gioco libero, allenamenti, avvisi di servizio) — esecuzione del rapporto con te, art. 6.1.b GDPR.</li>
       <li><strong>Pubblicare l'elenco degli iscritti, i risultati e le classifiche dei tornei</strong> (nome, cognome, categoria maschile/femminile e punteggi) — esecuzione del rapporto associativo e sportivo, art. 6.1.b, e legittimo interesse dell'associazione a dare evidenza all'attività sportiva, art. 6.1.f.</li>
       <li><strong>Tesseramento, verifica dell'idoneità sportiva (scadenza del certificato) e gestione degli allenamenti</strong> — obblighi di legge e dei regolamenti sportivi, art. 6.1.c, ed esecuzione del rapporto, art. 6.1.b.</li>
       <li><strong>Registrazione dei pagamenti ed emissione delle ricevute</strong>, con codice fiscale e residenza — obblighi fiscali e contabili, art. 6.1.c.</li>
@@ -50,7 +49,7 @@ const Legal = (() => {
 
     <h2>5. A chi comunichiamo i dati</h2>
     <ul>
-      <li><strong>Persone autorizzate dall'associazione</strong>: il Presidente e gli amministratori generali dell'app; gli amministratori dei tornei solo per tornei, iscrizioni, classifiche e referti; gli addetti alla cassa solo per incassi e ricevute (con nome, codice fiscale e residenza dei tesserati necessari a intestarle); i coach solo per nomi e presenze dei propri allenamenti; gli account dei campi solo per i referti delle partite.</li>
+      <li><strong>Persone autorizzate dall'associazione</strong>: il Presidente e gli amministratori generali dell'app; gli amministratori dei tornei solo per tornei, iscrizioni e referti; gli addetti alla cassa solo per incassi e ricevute (con nome, codice fiscale e residenza dei tesserati necessari a intestarle); i coach solo per nomi e presenze dei propri allenamenti; gli account dei campi solo per i referti delle partite.</li>
       <li><strong>Google Ireland Ltd / Google LLC</strong> (Firebase: hosting, database, autenticazione, invio delle email di conferma), che agisce come responsabile del trattamento secondo i termini sulla protezione dei dati di Google Cloud.</li>
       <li><strong>Federazioni ed enti di promozione sportiva</strong> per il tesseramento, <strong>consulenti fiscali</strong> per gli adempimenti contabili e <strong>autorità pubbliche</strong> quando previsto dalla legge.</li>
     </ul>
@@ -63,7 +62,7 @@ const Legal = (() => {
     <h2>7. Per quanto tempo li conserviamo</h2>
     <ul>
       <li><strong>Account e profilo</strong>: finché l'account è attivo; dopo la richiesta di cancellazione vengono eliminati, salvo quanto indicato sotto.</li>
-      <li><strong>Prenotazioni, presenze, iscrizioni, sfide e gioco libero</strong>: 24 mesi.</li>
+      <li><strong>Presenze, iscrizioni e gioco libero</strong>: 24 mesi.</li>
       <li><strong>Risultati e classifiche dei tornei</strong>: conservati come archivio storico dell'attività sportiva; puoi chiedere che il tuo nome sia sostituito da un'abbreviazione.</li>
       <li><strong>Scheda del corsista</strong>: 2 anni dopo la fine dell'ultima stagione di allenamenti.</li>
       <li><strong>Ricevute e dati fiscali</strong>: 10 anni, come previsto dalla legge (art. 2220 c.c.).</li>
@@ -94,7 +93,7 @@ const Legal = (() => {
         <tr><td>Sessione di accesso (Firebase Authentication: IndexedDB "firebaseLocalStorageDb")</td><td>Necessario, prima parte</td><td>Ricordare che hai fatto l'accesso</td><td>Fino all'uscita dall'account</td></tr>
         <tr><td>bpa-consent (localStorage)</td><td>Necessario</td><td>Ricordare la tua scelta sui cookie</td><td>Fino alla cancellazione dei dati del sito dal browser</td></tr>
         <tr><td>Dati del referto elettronico (localStorage, solo account dei campi)</td><td>Necessario</td><td>Non perdere il referto in compilazione senza rete</td><td>Fino all'invio o alla cancellazione</td></tr>
-        <tr><td>pcm-lang, pcm-theme, pcm-design (localStorage)</td><td>Preferenze (solo con consenso)</td><td>Lingua e stile grafico scelti</td><td>Fino alla revoca del consenso o alla cancellazione dei dati del sito</td></tr>
+        <tr><td>pcm-theme, pcm-design (localStorage)</td><td>Preferenze (solo con consenso)</td><td>Stile grafico scelto</td><td>Fino alla revoca del consenso o alla cancellazione dei dati del sito</td></tr>
         <tr><td>Copia offline del database (IndexedDB di Firestore)</td><td>Preferenze (solo con consenso)</td><td>Far funzionare l'app più velocemente e anche con poca rete</td><td>Fino alla revoca del consenso o alla cancellazione dei dati del sito</td></tr>
       </tbody></table></div>
     <h2>Risorse di terze parti</h2>
@@ -106,29 +105,22 @@ const Legal = (() => {
     <p class="muted">Termini e condizioni d'uso dell'app Manofuori Cup. Ultimo aggiornamento: ${VERSION.split('-').reverse().join('/')}.</p>
     <h2>1. Chi fornisce il servizio</h2>
     ${owner}
-    <p>L'app è uno strumento gratuito dell'associazione per i propri soci e per chi partecipa alle sue attività (tornei, prenotazioni dei campi, sfide, gioco libero, allenamenti). Le quote e i prezzi delle attività si pagano in sede; l'app non incassa pagamenti.</p>
+    <p>L'app è uno strumento gratuito dell'associazione per i propri soci e per chi partecipa alle sue attività (tornei, gioco libero, allenamenti). Le quote e i prezzi delle attività si pagano in sede; l'app non incassa pagamenti.</p>
 
     <h2>2. Account</h2>
     <ul>
       <li>Per registrarti devi indicare dati veri e aggiornati e confermare l'email; l'account è personale e non si cede.</li>
       <li>Custodisci la password: le azioni fatte con il tuo account si considerano fatte da te. Se sospetti un uso non autorizzato, cambiala e avvisaci.</li>
-      <li>L'associazione può sospendere l'uso di alcune funzioni (lista nera per tornei e/o prenotazioni) o l'account in caso di violazione di questi termini o del regolamento del centro, informandoti.</li>
+      <li>L'associazione può sospendere l'uso di alcune funzioni (lista nera per i tornei) o l'account in caso di violazione di questi termini o del regolamento del centro, informandoti.</li>
     </ul>
 
-    <h2>3. Prenotazioni dei campi</h2>
+    <h2>3. Tornei e gioco libero</h2>
     <ul>
-      <li>Le prenotazioni seguono i limiti indicati nell'app (durata minima e massima, numero al giorno, giorni di anticipo) e gli orari dei campi.</li>
-      <li>Si possono modificare o cancellare dall'app nei limiti previsti. Chi non si presenta ripetutamente può essere escluso dalle prenotazioni.</li>
-      <li>L'associazione può spostare o annullare una prenotazione per esigenze organizzative, maltempo, manutenzione o eventi, avvisandoti nell'app.</li>
+      <li>L'iscrizione a un torneo è confermata secondo le regole del torneo; si applicano il regolamento del torneo e le norme sportive. I risultati sono pubblici.</li>
+      <li>Gioco libero e "cerco compagno/a" sono strumenti per organizzarsi: ognuno è responsabile dei messaggi e delle candidature che invia, nel rispetto degli altri utenti.</li>
     </ul>
 
-    <h2>4. Tornei, sfide e gioco libero</h2>
-    <ul>
-      <li>L'iscrizione a un torneo è confermata secondo le regole del torneo; si applicano il regolamento del torneo e le norme sportive. Risultati e classifiche sono pubblici.</li>
-      <li>Sfide, gioco libero e "cerco compagno/a" sono strumenti per organizzarsi: ognuno è responsabile dei messaggi e delle candidature che invia, nel rispetto degli altri utenti.</li>
-    </ul>
-
-    <h2>5. Allenamenti</h2>
+    <h2>4. Allenamenti</h2>
     <ul>
       <li>L'abbonamento è mensile (o trimestrale, dove previsto) e dà diritto agli allenamenti settimanali del proprio piano; il quinto lunedì, martedì, ecc. del mese (giorni 29, 30 e 31) è fuori abbonamento e si paga come allenamento spot.</li>
       <li>La presenza va confermata nell'app entro le ore 12 del giorno dell'allenamento; chi non risponde è considerato assente e il posto può essere assegnato ad altri. Le assenze non danno diritto a rimborsi; l'eventuale recupero è a discrezione dell'associazione.</li>
@@ -136,19 +128,19 @@ const Legal = (() => {
       <li>Per allenarsi servono il tesseramento della stagione e un certificato medico di idoneità valido, che il socio consegna in segreteria e di cui è responsabile.</li>
     </ul>
 
-    <h2>6. Uso corretto</h2>
+    <h2>5. Uso corretto</h2>
     <p>È vietato usare l'app per scopi illeciti, inserire contenuti offensivi o dati di altre persone senza autorizzazione, tentare di accedere a dati non propri, aggirare i limiti o sovraccaricare il servizio con richieste automatiche.</p>
 
-    <h2>7. Disponibilità e responsabilità</h2>
+    <h2>6. Disponibilità e responsabilità</h2>
     <p>L'associazione cura il buon funzionamento dell'app ma non può garantire che sia sempre disponibile e priva di errori (per esempio per manutenzione o guasti dei fornitori). In caso di malfunzionamenti fanno fede gli accordi presi con la segreteria. L'associazione non risponde dei danni derivanti da un uso dell'app non conforme a questi termini; restano ferme le responsabilità per dolo o colpa grave e i diritti non derogabili del consumatore (D.Lgs. 206/2005).</p>
 
-    <h2>8. Privacy</h2>
+    <h2>7. Privacy</h2>
     <p>I dati personali sono trattati come descritto nell'<a href="#/privacy">Informativa privacy</a>.</p>
 
-    <h2>9. Modifiche, legge e foro</h2>
+    <h2>8. Modifiche, legge e foro</h2>
     <p>I termini possono essere aggiornati; le modifiche importanti ti verranno comunicate nell'app. Si applica la legge italiana. Per le controversie con un consumatore è competente il foro del suo luogo di residenza o domicilio; negli altri casi il foro di Cagliari.</p>
 
-    <h2>10. Contatti</h2>
+    <h2>9. Contatti</h2>
     <p>Per qualsiasi domanda scrivi a ${mail}.</p>`;
 
   return { VERSION, ORG, pages: { privacy, cookie: cookies, termini: terms } };

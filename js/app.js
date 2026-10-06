@@ -179,7 +179,7 @@
     }
     const tourOnly = r[0] === 'players' || r[0] === 'new' || (r[0] === 't' && (r[2] === 'manage' || r[2] === 'edit'));
     if (tourOnly && !tourAdmin()) { location.hash = '#/'; return; }
-    const adminOnly = r[0] === 'messages' || r[0] === 'users' || r[0] === 'courts' || r[0] === 'athletes' || r[0] === 'payments';
+    const adminOnly = r[0] === 'messages' || r[0] === 'users' || r[0] === 'athletes' || r[0] === 'payments';
     if (adminOnly && !admin()) { location.hash = '#/'; return; }
     let nav = 'tournaments', html;
     const loadingHtml = `<div class="empty"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</div>`;
@@ -195,8 +195,6 @@
     else if (r[0] === 't' && tourById(r[1])) { html = viewTournament(tourById(r[1]), r[2]); }
     else if (r[0] === 'tournaments') { html = viewHome(); }
     else if (r[0] === 'me') { nav = 'me'; html = viewProfile(); }
-    else if (r[0] === 'book') { nav = 'book'; html = viewBook(); }
-    else if (r[0] === 'challenges') { nav = 'challenges'; html = viewChallenges(); }
     else if (r[0] === 'free') { nav = 'free'; html = viewFreeplay(); }
     else if (r[0] === 'train') { nav = 'train'; html = viewTraining(); }
     else if (r[0] === 'privacy' || r[0] === 'cookie' || r[0] === 'termini') { nav = 'settings'; html = viewLegal(r[0]); }
@@ -204,7 +202,6 @@
     else if (r[0] === 'payments' && admin()) { nav = 'settings'; html = viewPayments(); }
     else if (r[0] === 'report' && admin()) { nav = 'train'; html = viewReport(); }
     else if (r[0] === 'cassa' && cashier()) { nav = 'cassa'; html = viewCassa(); }
-    else if (r[0] === 'courts' && admin()) { nav = 'book'; html = viewCourts(); }
     else if (r[0] === 'messages' && admin()) { nav = 'settings'; html = viewMessages(); }
     else if (r[0] === 'users' && admin()) { nav = 'settings'; html = viewUsers(); }
     else if (r[0] === 'a' && (r[1] === '1' || r[1] === '2')) { nav = 'home'; html = viewArticle(+r[1] - 1); }
@@ -431,9 +428,7 @@
       ${messageAlerts()}
       ${trainingAlerts()}
       ${certAlerts()}
-      ${bkReminderAlerts()}
-      ${bookingAlerts()}
-      ${challengeAlerts()}
+      ${noticeAlerts()}
       ${partnerAlerts()}
       ${verifyNotice()}
       ${noticeBox('home', S().notice, S().noticeUntil)}
@@ -1648,7 +1643,7 @@
       <div class="card"><ul class="reg-list users-list">${list.map(m => {
         const pl = linked(m);
         const cands = homs.has(m.uid) ? S().players.filter(p => p.gender === m.gender && L.nameKey(p.last, p.first) === L.nameKey(m.last, m.first) && (!p.uid || p.uid === m.uid)) : [];
-        return `<li class="${pend.has(m.uid) ? 'homonym' : ''} ${banOf(m.uid).tour || banOf(m.uid).book ? 'banned' : ''}">
+        return `<li class="${pend.has(m.uid) ? 'homonym' : ''} ${banOf(m.uid).tour ? 'banned' : ''}">
           <span class="reg-names"><strong>${esc(personName(m))}</strong> <span class="badge g-${m.gender}">${esc(m.gender)}</span>
             ${homs.has(m.uid) ? `<span class="badge warn-b">${esc(t('homonym'))}</span>` : ''}<br>
             <small class="muted">${esc(acc[m.uid] || '—')}${pl ? ` · ${esc(t('linkedPlayer'))}: <a href="#/p/${pl.id}">${esc(pl.last)} ${esc(pl.first)}</a>` : ''}</small>
@@ -1658,8 +1653,7 @@
               ${['tour', 'cash'].map(r => `<label class="check"><input type="checkbox" data-change="role" data-uid="${m.uid}" data-role="${r}" ${((S().roles || {})[m.uid] || {})[r] ? 'checked' : ''}> ${esc(t('role_' + r))}</label>`).join('')}
               ${coachOf(m.uid) ? `<span class="badge">${esc(t('role_coach'))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-ban" aria-hidden="true"></i> ${esc(t('banTitle'))}:
-              <label class="check"><input type="checkbox" data-change="ban" data-uid="${m.uid}" data-what="tour" ${banOf(m.uid).tour ? 'checked' : ''}> ${esc(t('banTour'))}</label>
-              <label class="check"><input type="checkbox" data-change="ban" data-uid="${m.uid}" data-what="book" ${banOf(m.uid).book ? 'checked' : ''}> ${esc(t('banBook'))}</label></span></span>
+              <label class="check"><input type="checkbox" data-change="ban" data-uid="${m.uid}" data-what="tour" ${banOf(m.uid).tour ? 'checked' : ''}> ${esc(t('banTour'))}</label></span></span>
           <form class="nick-form" data-form="nick-save" data-uid="${m.uid}">
             <input name="nick" maxlength="40" value="${esc((S().nicks || {})[m.uid] || '')}" placeholder="${esc(t('nickPh'))}" aria-label="${esc(t('nick'))}">
             ${cands.length ? `<select name="link" aria-label="${esc(t('linkedPlayer'))}"><option value="">${esc(t('linkNone'))}</option>
@@ -1917,14 +1911,8 @@
   }
 
   // ====================================================================
-  // PRENOTAZIONE DEI CAMPI, CONFERMA EMAIL, LISTA NERA
+  // ORARI E DATE, CONFERMA EMAIL, LISTA NERA
   // ====================================================================
-  // Slot di mezz'ora: verde libero, rosso occupato, giallo selezione. Si prenota per multipli di 30 minuti.
-  const BOOK_DEFAULTS = { minHours: 0.5, maxHours: 2, maxPerDay: 1, daysAhead: 7 };
-  const bookCfg = () => Object.assign({}, BOOK_DEFAULTS, S().booking || {});
-  // Durata minima di una prenotazione in minuti (l'admin non ha limiti).
-  const minBook = () => (admin() ? 30 : Math.max(30, Math.round(Number(bookCfg().minHours) * 60) || 30));
-  const hoursText = h => durText('00:00', fromMin(Math.round(Number(h) * 60) || 30));
   const toMin = hm => { const [h, m] = hm.split(':').map(Number); return h * 60 + m; };
   const fromMin = n => String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
   const addMin = (hm, n) => fromMin(toMin(hm) + n);
@@ -1933,28 +1921,12 @@
   const nowHM = () => { const d = new Date(); return fromMin(d.getHours() * 60 + d.getMinutes()); };
   const dayName = n => new Date(2024, 0, n).toLocaleDateString(I18n.locale(), { weekday: 'long' });   // 1 gen 2024 = lunedì
   const longDate = d => new Date(d + 'T12:00').toLocaleDateString(I18n.locale(), { weekday: 'long', day: 'numeric', month: 'long' });
-  const durText = (from, to) => { const n = toMin(to) - toMin(from), h = Math.floor(n / 60), m = n % 60; return [h ? `${h} h` : '', m ? `${m} min` : ''].filter(Boolean).join(' '); };
   const HALF_HOURS = Array.from({ length: 37 }, (_, i) => fromMin(360 + i * 30));   // 06:00 – 24:00
   const myUid = () => (window.Cloud && window.Cloud.user && window.Cloud.user.uid) || null;
-  const isPastSlot = (date, hm) => date < todayStr() || (date === todayStr() && hm <= nowHM());
-  const courtById = id => (S().courts || []).find(c => c.id === id);
-  const courtName = id => { const c = courtById(id); return c ? c.name : t('bkCourtDeleted'); };
-  const courtHours = (c, date) => { const o = c.hours[dow(date)]; return o && o.open && o.from < o.to ? o : null; };
-  const bookableCourts = () => (S().courts || []).filter(c => c.visible || admin());
-  // Blocchi ricorrenti di quel giorno della settimana (allenamenti fissi): sempre occupati.
-  const weeklyOn = date => {
-    const g = {}, wd = dow(date);
-    (S().weekly || []).filter(w => w.dow === wd).forEach(w => { g[w.rid] = g[w.rid] || { id: 'w:' + w.rid, rid: w.rid, recurring: true, courtId: w.courtId, date, from: w.from, to: w.to, userId: null, blocked: '' }; });
-    return Object.values(g);
-  };
-  const bookingAt = (courtId, date, hm) => (S().bookings || []).concat(weeklyOn(date)).find(b => b.courtId === courtId && b.date === date && b.from <= hm && hm < b.to);
-  const recurringReason = rid => { const r = (S().recurring || []).find(x => x.id === rid); return r ? r.reason : ''; };
-  const bookingText = b => `${courtName(b.courtId)}, ${fmtDate(b.date)} ${b.from}–${b.to}`;
   const memberByUid = uid => (S().members || []).find(m => m.uid === uid);
-  const uidName = uid => { const m = memberByUid(uid); return m ? personLabel(m) : uid === myUid() && admin() ? 'Admin' : '?'; };
   const banOf = uid => (S().bans || {})[uid] || {};
 
-  // Conferma dell'email: senza conferma non ci si iscrive ai tornei e non si prenota.
+  // Conferma dell'email: senza conferma non ci si iscrive ai tornei.
   const needsVerify = () => !!member() && !!window.Cloud && !window.Cloud.verified;
   function verifyNotice() {
     if (!needsVerify()) return '';
@@ -1964,434 +1936,39 @@
       <div class="btn-row"><button class="btn small primary" data-action="verify-check">${esc(t('verifyCheck'))}</button>
         <button class="btn small" data-action="verify-resend">${esc(t('verifyResend'))}</button></div></div>`;
   }
-  // Lista nera: avviso all'utente bloccato (what = 'tour' | 'book').
-  function banNotice(what) {
-    const m = member();
-    if (!m || !banOf(m.uid)[what]) return '';
-    return `<p class="note warn"><i class="ti ti-ban" aria-hidden="true"></i> ${esc(t(what === 'tour' ? 'banTourMsg' : 'banBookMsg'))}</p>`;
-  }
-
-  // Avvisi delle prenotazioni modificate o cancellate (ALERT in cima alla pagina, finché non si preme "Ho letto").
-  function bookingAlerts() {
+  // Avvisi per l'utente o per gli amministratori (es. richiesta di cancellazione dell'account):
+  // ALERT in cima alla pagina, finché non si preme "Ho letto".
+  function noticeAlerts() {
     if (!(member() || admin())) return '';
     return (S().notices || []).map(n => `<div class="msg-alert" role="alert">
-      <div class="msg-head"><strong><i class="ti ti-calendar-exclamation" aria-hidden="true"></i> ${esc(t(n.to === 'admins' ? 'bkNoticeAdmins' : 'bkNotice'))}</strong>
+      <div class="msg-head"><strong><i class="ti ti-bell" aria-hidden="true"></i> ${esc(t(n.to === 'admins' ? 'noticeAdmins' : 'noticeUser'))}</strong>
         <small>${esc(new Date(n.at).toLocaleString(I18n.locale(), { dateStyle: 'medium', timeStyle: 'short' }))}</small></div>
       <div class="msg-text">${esc(n.text)}</div>
       <button class="btn small" data-action="notice-dismiss" data-id="${n.id}"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('msgRead'))}</button>
     </div>`).join('');
   }
+  // Lista nera: avviso all'utente bloccato dai tornei.
+  function banNotice(what) {
+    const m = member();
+    if (!m || !banOf(m.uid)[what]) return '';
+    return `<p class="note warn"><i class="ti ti-ban" aria-hidden="true"></i> ${esc(t('banTourMsg'))}</p>`;
+  }
+
 
   // per conto di chi è la prenotazione: utente registrato o nome scritto dall'admin (giocatore non registrato)
-  const bkWho = b => (b.guest ? `${b.guest} (${t('bkGuestShort')})` : uidName(b.userId));
-  function myBookings(uid) {
-    return (S().bookings || []).filter(b => b.userId === uid && !b.guest && !isPastSlot(b.date, b.to))
-      .sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from));
-  }
-  function bookingItem(b) {
-    return `<li><span class="reg-names"><i class="ti ti-calendar-event" aria-hidden="true"></i> <strong>${esc(fmtDate(b.date))}</strong> · ${b.from}–${b.to}<br>
-      <small class="muted">${esc(courtName(b.courtId))} · ${esc(durText(b.from, b.to))}</small></span>
-      <span class="btn-row"><button class="btn small" data-action="booking-open" data-id="${b.id}">${esc(t('edit'))}</button>
-      <button class="btn small danger" data-action="booking-delete" data-id="${b.id}">${esc(t('bkCancel'))}</button></span></li>`;
-  }
 
-  // Selezione in corso: { courtId, date, from, to, editId, userId, blocked } (editId = prenotazione in modifica).
-  function selFree(courtId, date, from, to, editId) {
-    const c = courtById(courtId), h = c && courtHours(c, date);
-    if (!h || from < h.from || to > h.to) return false;
-    for (let x = from; x < to; x = addMin(x, 30)) {
-      const b = bookingAt(courtId, date, x);
-      if ((b && b.id !== editId) || isPastSlot(date, x)) return false;
-    }
-    return true;
-  }
 
-  function slotClick(courtId, hm) {
-    const d = ui.bookDate, s = ui.bkSel;
-    const keep = s && s.editId ? { editId: s.editId, userId: s.userId, blocked: s.blocked } : {};
-    if (s && s.courtId === courtId && s.date === d) {
-      if (hm >= s.from && hm < s.to) {
-        // Tocco dentro la selezione: la prenotazione finisce in quello slot (mai sotto la durata minima);
-        // toccando il primo slot di una selezione di durata minima la si annulla.
-        const minEnd = addMin(s.from, minBook());
-        if (hm === s.from && s.to <= minEnd && !s.editId) ui.bkSel = null;
-        else s.to = addMin(hm, 30) > minEnd ? addMin(hm, 30) : (selFree(courtId, d, s.from, minEnd, s.editId) ? minEnd : addMin(hm, 30));
-        return render();
-      }
-      const from = hm < s.from ? hm : s.from, to = hm < s.from ? s.to : addMin(hm, 30);
-      if (selFree(courtId, d, from, to, s.editId)) { s.from = from; s.to = to; return render(); }
-    }
-    // Nuova selezione: parte già dalla durata minima, se gli slot successivi sono liberi.
-    const to = selFree(courtId, d, hm, addMin(hm, minBook()), keep.editId || null) ? addMin(hm, minBook()) : addMin(hm, 30);
-    ui.bkSel = Object.assign({ courtId, date: d, from: hm, to, editId: null, userId: null, blocked: '' }, keep);
-    render();
-  }
 
-  function summaryPanel() {
-    const s = ui.bkSel, uid = myUid();
-    const legend = `<div class="legend"><span><i class="sw free"></i>${esc(t('bkFree'))}</span><span><i class="sw busy"></i>${esc(t('bkBusy'))}</span>
-      <span><i class="sw sel"></i>${esc(t('bkSelected'))}</span><span><i class="sw off"></i>${esc(t('bkClosed'))}</span></div>`;
-    if (!s) {
-      return `<h3><i class="ti ti-calendar-plus" aria-hidden="true"></i> ${esc(t('bkYour'))}</h3>
-        <p class="muted small">${uid && (member() || admin()) ? esc(t('bkHowTo')) : `${esc(t('bkLoginFirst'))} <a href="#/settings">${esc(t('loginOrRegister'))}</a>`}</p>${legend}`;
-    }
-    const orig = s.editId && (S().bookings || []).find(b => b.id === s.editId);
-    const slotChanged = orig && (orig.courtId !== s.courtId || orig.date !== s.date || orig.from !== s.from || orig.to !== s.to || (orig.userId || '') !== (s.userId || '') || (orig.blocked || '') !== (s.blocked || '') || (orig.guest || '') !== (s.guest || ''));
-    const plBox = bkPlayersBox(s, orig);
-    const changed = slotChanged || (orig && plBox && bkPlayersChanged(s, orig));
-    const canLonger = selFree(s.courtId, s.date, s.from, addMin(s.to, 30), s.editId);
-    const mem = (S().members || []).slice().sort((a, b) => personLabel(a).localeCompare(personLabel(b)));
-    const who = s.userId || (orig ? '' : uid);
-    const adminFields = admin() ? `
-      <label>${esc(t('bkFor'))}<select data-change="bk-user"><option value="">${esc(orig ? '—' : t('bkForMe'))}</option>
-        ${mem.map(m => `<option value="${m.uid}" ${m.uid === who && m.uid !== uid ? 'selected' : ''}>${esc(personLabel(m))}</option>`).join('')}</select></label>
-      <label>${esc(t('bkGuest'))}<input value="${esc(s.guest || '')}" maxlength="60" data-change="bk-guest" placeholder="${esc(t('bkGuestPh'))}" autocomplete="off"></label>
-      <label>${esc(t('bkBlockReason'))}<input value="${esc(s.blocked || '')}" maxlength="60" data-change="bk-blocked" placeholder="${esc(t('bkBlockPh'))}"></label>` : '';
-    return `<h3><i class="ti ti-${orig ? 'pencil' : 'calendar-plus'}" aria-hidden="true"></i> ${esc(t(orig ? 'bkEditTitle' : 'bkSummary'))}</h3><div class="summary-body"><div>
-      ${orig ? `<p class="muted small">${esc(t('bkEditOf', { w: orig.blocked ? t('bkBlock') + ': ' + orig.blocked : bkWho(orig), b: bookingText(orig) }))}</p>` : ''}
-      <dl class="summary">
-        <dt>${esc(t('bkCourt'))}</dt><dd>${esc(courtName(s.courtId))}</dd>
-        <dt>${esc(t('bkDay'))}</dt><dd>${esc(longDate(s.date))}</dd>
-        <dt>${esc(t('bkTime'))}</dt><dd><strong>${s.from} – ${s.to}</strong></dd>
-        <dt>${esc(t('bkDuration'))}</dt><dd>${esc(durText(s.from, s.to))}</dd>
-      </dl>
-      <div class="btn-row">
-        <button class="btn small" data-action="bk-shorter" ${toMin(s.to) - toMin(s.from) - 30 < minBook() ? 'disabled' : ''}>− 30 min</button>
-        <button class="btn small" data-action="bk-longer" ${canLonger ? '' : 'disabled'}>+ 30 min</button>
-      </div></div><div>
-      ${adminFields}
-      ${plBox}
-      <div class="btn-row">
-        ${orig ? `<button class="btn primary" data-action="booking-confirm" ${changed ? '' : 'disabled'}><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('bkSaveChanges'))}</button>
-          <button class="btn danger" data-action="booking-delete" data-id="${orig.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('bkCancel'))}</button>`
-        : `<button class="btn primary" data-action="booking-confirm"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('bkConfirm'))}</button>`}
-        <button class="btn" data-action="bk-clear">${esc(t(orig ? 'close' : 'cancel'))}</button>
-      </div></div></div>${legend}`;
-  }
 
-  function viewBook() {
-    const cfg = bookCfg(), uid = myUid();
-    const today = todayStr();
-    if (!ui.bookDate || ui.bookDate < today) ui.bookDate = today;
-    const d = ui.bookDate;
-    const max = addDays(today, Number(cfg.daysAhead) || 7);
-    const courts = bookableCourts();
-    const open = courts.map(c => ({ c, h: courtHours(c, d) }));
-    const opened = open.filter(x => x.h && x.c.visible);
-    const starts = open.filter(x => x.h).map(x => x.h.from).sort(), ends = open.filter(x => x.h).map(x => x.h.to).sort();
-    let rows = [];
-    if (starts.length) for (let x = starts[0]; x < ends[ends.length - 1]; x = addMin(x, 30)) rows.push(x);
-    const allRows = rows.length;
-    // Oggi si mostrano solo gli orari non ancora passati.
-    if (d === today) rows = rows.filter(x => !isPastSlot(d, x));
-    // Fasce orarie (mattina, pomeriggio, sera) quando gli orari sono molti.
-    const inBand = (x, k) => (k === 'am' ? x < '13:00' : k === 'pm' ? x >= '13:00' && x < '18:00' : k === 'eve' ? x >= '18:00' : true);
-    const showBands = rows.length > 12;
-    let band = showBands ? ui.bookBand || 'all' : 'all';
-    if (!rows.some(x => inBand(x, band))) band = 'all';
-    const bandsBar = showBands ? `<div class="bands" role="group" aria-label="${esc(t('bkBands'))}">${['all', 'am', 'pm', 'eve'].map(k =>
-      `<button class="${k === band ? 'on' : ''}" data-action="bk-band" data-band="${k}" ${rows.some(x => inBand(x, k)) ? '' : 'disabled'}>${esc(t('bkBand_' + k))}</button>`).join('')}</div>` : '';
-    rows = rows.filter(x => inBand(x, band));
-    const s = ui.bkSel && ui.bkSel.date === d ? ui.bkSel : null;
-    const freeHours = c => { const h = courtHours(c, d); if (!h || !c.visible) return 0; let n = 0; for (let x = h.from; x < h.to; x = addMin(x, 30)) if (!bookingAt(c.id, d, x) && !isPastSlot(d, x)) n++; return n / 2; };
-    // Un riquadro per campo, con gli orari in orizzontale; stessa scala oraria per tutti i campi.
-    const courtBox = c => {
-      const h = courtHours(c, d);
-      const head = `<div class="court-head"><h3>${esc(c.name)}${!c.visible ? ` <span class="badge">${esc(t('bkHidden'))}</span>` : ''}</h3>
-        <span class="muted small">${h ? `${esc(t('bkOpenHours', { a: h.from, b: h.to }))} · <strong>${esc(t('bkFreeHours', { n: String(freeHours(c)).replace('.', ',') }))}</strong>` : esc(t('bkClosedDay'))}</span></div>`;
-      if (!h || !rows.some(x => x >= h.from && x < h.to)) return `<section class="card court-box closed">${head}${h ? `<p class="muted small">${esc(t(band !== 'all' ? 'bkNoneInBand' : 'bkOverToday'))}</p>` : ''}</section>`;
-      const labels = rows.map((x, k) => (x.endsWith(':00') || k === 0 ? `<span class="tl" style="grid-column:${k + 1} / span ${x.endsWith(':00') && k + 1 < rows.length ? 2 : 1}">${x}</span>` : '')).join('');
-      const cells = [];
-      for (let k = 0; k < rows.length; k++) {
-        const x = rows[k], b = bookingAt(c.id, d, x);
-        const inSel = s && s.courtId === c.id && x >= s.from && x < s.to;
-        if (b && !(s && s.editId === b.id)) {
-          // Prenotazione: un unico blocco rosso che copre tutti i suoi slot.
-          let n = 0;
-          while (k + n < rows.length && rows[k + n] < b.to) n++;
-          // Gli utenti vedono solo "occupato": chi ha prenotato e il motivo dei blocchi li vede solo l'admin.
-          const mine = uid && b.userId === uid && !b.guest, canOpen = !b.recurring && !b.fp && (mine || admin()) && !isPastSlot(d, b.to);
-          const who = !admin() ? t('bkBusy') : b.recurring ? `${t('recurringShort')}: ${recurringReason(b.rid) || '—'}` : b.blocked ? b.blocked : bkWho(b);
-          const label = mine ? esc(t('bkMine')) : !admin() ? esc(who)
-            : b.recurring ? `<i class="ti ti-repeat" aria-hidden="true"></i> ${esc(recurringReason(b.rid) || t('recurringShort'))}`
-            : b.blocked ? `<i class="ti ti-lock" aria-hidden="true"></i> ${esc(b.blocked)}` : esc(who);
-          // Nelle prenotazioni brevi c'è spazio solo per l'orario (il nome è nel suggerimento).
-          // l'admin vede subito per chi è la prenotazione anche quando è breve (l'orario resta nel suggerimento)
-          const inner = n === 1 ? `<small>${admin() && !mine ? label : b.from}</small>` : n === 2 && !mine ? `<small>${admin() ? label : `${b.from}–${b.to}`}</small>` : `<span>${label}</span><small>${b.from}–${b.to}</small>`;
-          const adminBlock = admin() && (b.blocked || b.recurring);
-          const body = canOpen ? `<button data-action="booking-open" data-id="${b.id}">${inner}</button>`
-            : admin() && b.recurring ? `<a href="#/courts">${inner}</a>` : admin() && b.fp ? `<a href="#/free">${inner}</a>` : `<div>${inner}</div>`;
-          cells.push(`<div class="slot busy ${mine ? 'mine' : ''} ${adminBlock ? 'blocked' : ''} ${admin() && b.recurring ? 'recurring' : ''}" style="grid-column:${k + 1} / span ${n}" title="${esc(who)} ${b.from}–${b.to}">${body}</div>`);
-          k += n - 1;
-          continue;
-        }
-        const pos = `style="grid-column:${k + 1}"`;
-        if (x < h.from || x >= h.to) cells.push(`<div class="slot off" ${pos} title="${x} – ${esc(t('bkClosed'))}"></div>`);
-        else if (inSel) cells.push(`<div class="slot sel" ${pos}><button data-action="bk-slot" data-court="${c.id}" data-t="${x}" title="${x}" aria-label="${esc(c.name)} ${x} ${esc(t('bkSelected'))}">${x === s.from ? '<i class="ti ti-check" aria-hidden="true"></i>' : ''}</button></div>`);
-        else if (isPastSlot(d, x)) cells.push(`<div class="slot off past" ${pos} title="${x}"></div>`);
-        else if (d > max || !c.visible) cells.push(`<div class="slot off" ${pos} title="${x} – ${esc(t('bkNotBookable'))}"></div>`);
-        else cells.push(`<div class="slot free" ${pos}><button data-action="bk-slot" data-court="${c.id}" data-t="${x}" title="${x} – ${addMin(x, 30)}" aria-label="${esc(c.name)} ${x} ${esc(t('bkFree'))}"></button></div>`);
-      }
-      return `<section class="card court-box">${head}
-        <div class="strip-wrap"><div class="strip" style="--n:${rows.length}">
-          <div class="strip-labels">${labels}</div><div class="strip-slots">${cells.join('')}</div>
-        </div></div></section>`;
-    };
-    const mine = uid ? myBookings(uid) : [];
-    return `
-      ${bookingAlerts()}
-      ${verifyNotice()}
-      ${banNotice('book')}
-      <div class="page-head row"><h1><i class="ti ti-calendar-time" aria-hidden="true"></i> ${esc(t('bkTitle'))}</h1>
-        ${admin() ? `<a class="btn small" href="#/courts"><i class="ti ti-settings" aria-hidden="true"></i> ${esc(t('courtsManage'))}</a>` : ''}</div>
-      <p class="muted">${esc(t('bkIntro', { c: courts.filter(c => c.visible).length, o: opened.length, m: hoursText(cfg.minHours), h: hoursText(cfg.maxHours), d: cfg.daysAhead }))}</p>
-      <div class="date-nav">
-        <button class="btn icon" data-action="bk-day" data-delta="-1" aria-label="${esc(t('bkPrevDay'))}" ${d <= today ? 'disabled' : ''}><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
-        <input type="date" value="${d}" min="${today}" max="${max}" data-change="bk-date" aria-label="${esc(t('bkDay'))}">
-        <button class="btn icon" data-action="bk-day" data-delta="1" aria-label="${esc(t('bkNextDay'))}" ${d >= max ? 'disabled' : ''}><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
-        <strong class="date-label">${esc(longDate(d))}</strong>
-      </div>
-      ${bandsBar}
-      <div class="book-layout">
-        <div class="book-grid">
-        ${!courts.length ? `<div class="empty"><i class="ti ti-layout-grid" aria-hidden="true"></i> ${esc(t(admin() ? 'bkNoCourtsAdmin' : 'bkNoCourts'))}</div>`
-        : !rows.length ? `<div class="empty"><i class="ti ti-door-off" aria-hidden="true"></i> ${esc(t(allRows ? 'bkOverTodayAll' : 'bkClosedAll'))}</div>`
-        : courts.map(courtBox).join('')}
-        </div>
-        <aside class="card book-summary ${ui.bkSel ? 'active' : 'idle'}">${ui.bkSel && ui.bkSel.date !== d ? `<p class="muted small">${esc(t('bkSelOtherDay', { d: fmtDate(ui.bkSel.date) }))}</p>` : ''}${summaryPanel()}</aside>
-      </div>
-      ${uid && (member() || admin()) ? `<div class="card"><h2><i class="ti ti-calendar-event" aria-hidden="true"></i> ${esc(t('bkMyNext'))}</h2>
-        ${mine.length ? `<ul class="reg-list">${mine.map(bookingItem).join('')}</ul>` : `<p class="muted">${esc(t('bkNoMine'))}</p>`}</div>` : ''}`;
-  }
 
   // Conferma (nuova prenotazione o modifica) con tutti i controlli; avvisi a titolare e amministratori.
-  // ---------- giocatori della prenotazione e reminder ----------
-  const BK_REMIND = [30, 60, 120, 180, 360, 720, 1440];
-  const remindLabel = m => (m < 60 ? t('bkRemMin', { n: m }) : m === 60 ? t('bkRem1h') : t('bkRemH', { n: m / 60 }));
-  const bkOwnerOf = (s, orig) => (admin() ? (s.blocked ? null : s.userId || (orig ? orig.userId : myUid())) : myUid());
-  const bkPlayersOf = gid => (S().bkplayers || []).find(x => x.id === gid);
-  const bkStartMs = b => new Date(`${b.date}T${b.from}`).getTime();
-  // chi ha prenotato sceglie quante persone giocano con lui (fino a 7), chi sono e quando ricevere il reminder
-  function bkPlayersBox(s, orig) {
-    const owner = bkOwnerOf(s, orig);
-    if (!owner || s.blocked || s.guest) return '';   // prenotazione per un non registrato: niente giocatori né reminder
-    if (orig && Date.now() >= bkStartMs(orig)) return '';   // modificabile fino all'inizio
-    const cur = orig && bkPlayersOf(orig.id);
-    if (!s.plInit) { s.plInit = true; s.players = cur ? (cur.uids || []).slice() : []; s.np = s.players.length; s.remind = cur ? cur.remind : 60; }
-    const mem = (S().members || []).filter(m => m.uid !== owner).sort((a, b) => personLabel(a).localeCompare(personLabel(b)));
-    return `<div class="bk-players"><h4><i class="ti ti-users" aria-hidden="true"></i> ${esc(t('bkPlayersTitle'))}</h4>
-      <label>${esc(t('bkPlayersN'))}<select data-change="bk-np">${[0, 1, 2, 3, 4, 5, 6, 7].map(n => `<option value="${n}" ${n === s.np ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-      ${Array.from({ length: s.np }, (_, i) => `<label>${esc(t('bkPlayerN', { n: i + 1 }))}<select data-change="bk-pl" data-i="${i}"><option value="">—</option>
-        ${mem.map(m => `<option value="${m.uid}" ${s.players[i] === m.uid ? 'selected' : ''}>${esc(personLabel(m))}</option>`).join('')}</select></label>`).join('')}
-      <label>${esc(t('bkRemind'))}<select data-change="bk-rem">${BK_REMIND.map(m => `<option value="${m}" ${m === s.remind ? 'selected' : ''}>${esc(remindLabel(m))}</option>`).join('')}</select></label>
-      <p class="muted small">${esc(t('bkPlayersHelp'))}</p></div>`;
-  }
-  const bkPickedUids = s => [...new Set((s.players || []).slice(0, s.np || 0).filter(Boolean))];
-  const bkPlayersChanged = (s, orig) => { const cur = bkPlayersOf(orig.id); return JSON.stringify(bkPickedUids(s)) !== JSON.stringify(cur ? cur.uids || [] : []) || (s.remind || 60) !== (cur ? cur.remind : 60); };
-  function bkPlayersDoc(data, s) {
-    const uids = bkPickedUids(s).filter(u => u !== data.userId);
-    const om = memberByUid(data.userId);
-    return { gid: data.id, by: data.userId, ownerName: om ? personLabel(om) : '', date: data.date, from: data.from, to: data.to, courtId: data.courtId, courtName: courtName(data.courtId),
-      uids, names: Object.fromEntries(uids.map(u => { const m = memberByUid(u); return [u, m ? personLabel(m) : '']; })), remind: s.remind || 60 };
-  }
-  // Reminder in prima pagina: da "remind" minuti prima dell'inizio fino alla fine della prenotazione.
-  function bkReminderAlerts() {
-    const me = myUid();
-    if (!me) return '';
-    const now = Date.now();
-    const when = d => (d === todayStr() ? t('bkToday') : d === addDays(todayStr(), 1) ? t('bkTomorrow') : longDate(d));
-    return (S().bkplayers || []).filter(x => now >= bkStartMs(x) - (x.remind || 60) * 60000 && now < new Date(`${x.date}T${x.to}`).getTime())
-      .sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from)).map(x => {
-        const mine = x.by === me;
-        const others = Object.entries(x.names || {}).filter(([u]) => u !== me).map(([, n]) => n).filter(Boolean);
-        const txt = mine ? t('bkRemOwner', { q: when(x.date), a: x.from, b: x.to }) : t('bkRemGuest', { q: when(x.date), a: x.from, b: x.to, n: x.ownerName || '?' });
-        const players = mine ? others : [x.ownerName].concat(others).filter(Boolean);
-        return `<div class="msg-alert ok bk-reminder" role="status"><div class="msg-head"><strong><i class="ti ti-bell-ringing" aria-hidden="true"></i> ${esc(t('bkRemTitle'))}</strong></div>
-          <div class="msg-text">${esc(txt)}<br><small>${esc(x.courtName || courtName(x.courtId))}${players.length ? ` · ${esc(t('bkRemWith', { l: players.join(', ') }))}` : ''}</small></div></div>`;
-      }).join('');
-  }
-  function confirmBooking() {
-    const s = ui.bkSel, uid = myUid(), cfg = bookCfg();
-    if (!s) return;
-    if (!uid || !(member() || admin())) { location.hash = '#/settings'; return warn('bkLoginFirst'); }
-    if (needsVerify()) return warn('verifyFirst');
-    if (!admin() && banOf(uid).book) return warn('banBookMsg');
-    const c = courtById(s.courtId);
-    if (!c || (!c.visible && !admin())) return warn('bkNotBookable');
-    if (!selFree(s.courtId, s.date, s.from, s.to, s.editId)) return warn('bkTaken');
-    const orig = s.editId && (S().bookings || []).find(b => b.id === s.editId);
-    const owner = admin() ? (s.blocked ? null : s.userId || (orig ? orig.userId : uid)) : uid;
-    if (!admin()) {
-      if (s.date > addDays(todayStr(), Number(cfg.daysAhead) || 7)) return warn('bkNotBookable');
-      if (toMin(s.to) - toMin(s.from) < minBook()) return warn('bkMinHours', { h: hoursText(cfg.minHours) });
-      if (toMin(s.to) - toMin(s.from) > Number(cfg.maxHours) * 60) return warn('bkMaxHours', { h: hoursText(cfg.maxHours) });
-      const same = (S().bookings || []).filter(b => b.userId === uid && b.date === s.date && b.id !== s.editId).length;
-      if (same >= Number(cfg.maxPerDay)) return warn('bkMaxDay', { n: same, max: cfg.maxPerDay });
-    }
-    const guest = admin() && !s.blocked ? (s.guest || '').trim() : '';
-    const data = { id: orig ? orig.id : Store.uid('g'), courtId: s.courtId, date: s.date, from: s.from, to: s.to, userId: guest ? uid : owner, blocked: admin() ? (s.blocked || '').trim() : '' };
-    if (guest) data.guest = guest;
-    const slotSame = orig && orig.courtId === data.courtId && orig.date === data.date && orig.from === data.from && orig.to === data.to && (orig.userId || '') === (data.userId || '') && (orig.blocked || '') === (data.blocked || '') && (orig.guest || '') === (data.guest || '');
-    const withPlayers = !!data.userId && !data.blocked && !data.guest && s.plInit;
-    if (slotSame) {
-      // cambiano solo i giocatori o il reminder
-      if (!withPlayers) return;
-      return window.Cloud.saveBkPlayers(bkPlayersDoc(data, s)).then(() => { ui.bkSel = null; ui.flash = { text: t('bkPlayersSaved') }; render(); }).catch(e => warn('regError', { code: e.code || e.message }));
-    }
-    if (orig && !confirm(t('bkConfirmEdit', { a: bookingText(orig), b: bookingText(data) }))) return;
-    // prenotazione di una sfida: se resta del proponente segue il nuovo orario, altrimenti la sfida torna aperta
-    const chOf = orig && orig.ch ? chById(orig.ch) : null;
-    const keepCh = !!(orig && orig.ch && !data.blocked && (!chOf || data.userId === chOf.by));
-    if (keepCh) data.ch = orig.ch;
-    window.Cloud.saveBooking(data, orig || null).then(() => {
-      // giocatori e reminder (anche senza giocatori: il reminder serve a chi ha prenotato)
-      if (withPlayers) window.Cloud.saveBkPlayers(bkPlayersDoc(data, s)).catch(e => console.error(e));
-      if (orig && orig.ch) window.Cloud.updateChallenge(orig.ch, keepCh
-        ? { book: { courtId: data.courtId, date: data.date, from: data.from, to: data.to, gid: data.id }, date: data.date, from: data.from, dur: toMin(data.to) - toMin(data.from) }
-        : { status: 'open', book: null, holdUntil: 0 }).catch(() => {});
-      if (orig) notifyBooking(orig, data, 'edit');
-      ui.bkSel = null;
-      ui.flash = { text: orig ? t('bkEdited') : data.blocked ? t('bkBlocked') : t('bkDone', { b: bookingText(data) }) };
-      render();
-    }).catch(e => warn(e.code === 'permission-denied' ? 'bkTaken' : 'regError', { code: e.code || e.message }));
-  }
 
-  function removeBooking(id) {
-    const b = (S().bookings || []).find(x => x.id === id);
-    if (!b) return;
-    if (!confirm(t(b.blocked ? 'bkConfirmUnblock' : 'bkConfirmDelete', { b: bookingText(b) }))) return;
-    window.Cloud.deleteBooking(b).then(() => {
-      // prenotazione di una sfida cancellata: la sfida torna aperta (e non vale per il reward)
-      if (b.ch) window.Cloud.updateChallenge(b.ch, { status: 'open', book: null, holdUntil: 0 }).catch(() => {});
-      notifyBooking(b, null, 'delete');
-      if (ui.bkSel && ui.bkSel.editId === id) ui.bkSel = null;
-      ui.flash = { text: t('bkDeleted') };
-      render();
-    }).catch(e => warn('regError', { code: e.code || e.message }));
-  }
 
-  // Chi cambia una prenotazione altrui avvisa il titolare; l'utente che cambia la propria avvisa gli amministratori.
-  function notifyBooking(b, next, what) {
-    const uid = myUid();
-    if (!b.userId || b.blocked) return;
-    if (admin() && b.userId !== uid) {
-      window.Cloud.notify(b.userId, what === 'edit' ? t('bkNoteEditedByAdmin', { a: bookingText(b), b: bookingText(next) }) : t('bkNoteDeletedByAdmin', { a: bookingText(b) }));
-    } else if (!admin()) {
-      const who = member() ? personLabel(member()) : '?';
-      window.Cloud.notify('admins', what === 'edit' ? t('bkNoteEditedByUser', { u: who, a: bookingText(b), b: bookingText(next) }) : t('bkNoteDeletedByUser', { u: who, a: bookingText(b) }));
-    }
-  }
 
-  // ---------- reward dei campi (prenotazioni giocate), soglie decise dall'admin ----------
-  function bookRewardFor(n) {
-    const th = S().bookRewards || {};
-    let best = null;
-    REWARDS.forEach(([k, icon]) => { const v = Number(th[k]); if (v > 0 && n >= v) best = { key: k, icon }; });
-    return best;
-  }
-  // Prenotazioni giocate (concluse e non cancellate): conteggio dal database meno quelle non ancora finite.
-  function loadBookCount(uid) {
-    ui.bookCounts = ui.bookCounts || {};
-    if (ui.bookCounts[uid] != null || ui.bookCountLoading || !window.Cloud) return;
-    ui.bookCountLoading = true;
-    // prenotazioni giocate + sfide giocate come partecipante (solo se il campo era prenotato e l'orario è finito)
-    ui.chCounts = ui.chCounts || {};
-    Promise.all([window.Cloud.countBookings(uid), window.Cloud.countChallenges(uid).catch(() => 0)]).then(([total, chs]) => {
-      ui.chCounts[uid] = chs;
-      ui.bookCounts[uid] = Math.max(0, total - (S().bookings || []).filter(b => b.userId === uid && !isPastSlot(b.date, b.to)).length) + chs;
-    }).catch(() => { ui.bookCounts[uid] = 0; }).finally(() => { ui.bookCountLoading = false; render(); });
-  }
-  function bookRewardStat(uid) {
-    loadBookCount(uid);
-    const n = (ui.bookCounts || {})[uid];
-    if (n == null) return `<div class="stat"><span>${esc(t('bookReward'))}</span><strong>…</strong></div>`;
-    const rw = bookRewardFor(n), th = S().bookRewards || {};
-    const next = REWARDS.find(([k]) => Number(th[k]) > n);
-    return `<div class="stat"><span>${esc(t('bookReward'))}</span><strong>${rw ? `${rw.icon} ${esc(t('rw_' + rw.key))}` : '—'}</strong>
-      <small class="muted">${esc((ui.chCounts || {})[uid] ? t('bookPlayedCh', { b: n - ui.chCounts[uid], c: ui.chCounts[uid] }) : t('bookPlayed', { n }))}${next ? ` · ${esc(t('rewardNext', { n: Number(th[next[0]]) - n, r: t('rw_' + next[0]) }))} ${next[1]}` : ''}</small></div>`;
-  }
 
-  // ---------- amministrazione dei campi ----------
-  function courtForm(c) {
-    const opt = v => HALF_HOURS.map(h => `<option ${h === v ? 'selected' : ''}>${h}</option>`).join('');
-    return `<form data-form="court-save" class="card court-form"><input type="hidden" name="id" value="${c.id}">
-      <div class="grid-form"><label>${esc(t('courtName'))}<input name="name" value="${esc(c.name)}" maxlength="40" required></label>
-        <label class="check"><input type="checkbox" name="visible" ${c.visible ? 'checked' : ''}> ${esc(t('courtVisible'))}</label></div>
-      <div class="table-wrap"><table class="table hours"><thead><tr><th>${esc(t('bkDay'))}</th><th>${esc(t('courtOpen'))}</th><th>${esc(t('courtFrom'))}</th><th>${esc(t('courtTo'))}</th></tr></thead><tbody>
-      ${[1, 2, 3, 4, 5, 6, 7].map(n => { const o = c.hours[n]; return `<tr><td>${esc(dayName(n))}</td>
-        <td><input type="checkbox" name="open${n}" ${o.open ? 'checked' : ''} aria-label="${esc(dayName(n))}"></td>
-        <td><select name="from${n}">${opt(o.from)}</select></td>
-        <td><select name="to${n}">${opt(o.to)}</select></td></tr>`; }).join('')}
-      </tbody></table></div>
-      <div class="form-actions">
-        <button type="button" class="btn small" data-action="court-copy">${esc(t('courtCopy'))}</button>
-        <button type="button" class="btn small danger" data-action="court-delete" data-id="${c.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('courtDelete'))}</button>
-        <button class="btn small primary">${esc(t('save'))}</button>
-      </div></form>`;
-  }
 
-  // Blocchi ricorrenti (allenamenti fissi): ogni settimana, quel giorno, dalle … alle …
-  function recurringCard() {
-    const courts = S().courts || [];
-    const list = (S().recurring || []).slice().sort((a, b) => courtName(a.courtId).localeCompare(courtName(b.courtId)) || a.dow - b.dow || a.from.localeCompare(b.from));
-    const opt = (v, sel) => HALF_HOURS.map(h => `<option ${h === sel ? 'selected' : ''}>${h}</option>`).join('');
-    return `<div class="card" id="recurring">
-      <h2><i class="ti ti-repeat" aria-hidden="true"></i> ${esc(t('recurringTitle'))}</h2>
-      <p class="muted small">${esc(t('recurringHelp'))}</p>
-      ${list.length ? `<ul class="reg-list">${list.map(r => `<li><span class="reg-names"><strong>${esc(courtName(r.courtId))}</strong> · <span class="cap">${esc(dayName(r.dow))}</span> · ${r.from}–${r.to}<br>
-        <small class="muted">${esc(r.reason || '—')}</small></span>
-        ${r.trid ? `<a class="btn small" href="#/train">${esc(t('navTrain'))} →</a>` : `<button class="btn small danger" data-action="recurring-delete" data-id="${r.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('remove'))}</button>`}</li>`).join('')}</ul>`
-        : `<p class="muted">${esc(t('recurringNone'))}</p>`}
-      ${courts.length ? `<form class="grid-form" data-form="recurring-add">
-        <h3 class="span-all">${esc(t('recurringNew'))}</h3>
-        <label>${esc(t('bkCourt'))}<select name="courtId">${courts.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
-        <label>${esc(t('bkDay'))}<select name="dow">${[1, 2, 3, 4, 5, 6, 7].map(n => `<option value="${n}">${esc(dayName(n))}</option>`).join('')}</select></label>
-        <label>${esc(t('courtFrom'))}<select name="from">${opt(0, '18:00')}</select></label>
-        <label>${esc(t('courtTo'))}<select name="to">${opt(0, '19:30')}</select></label>
-        <label class="span-all">${esc(t('recurringReason'))}<input name="reason" maxlength="60" required placeholder="${esc(t('recurringReasonPh'))}"></label>
-        <div class="form-actions span-all"><button class="btn primary"><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('recurringAdd'))}</button></div>
-      </form>` : ''}
-    </div>`;
-  }
 
-  function addRecurringForm(f) {
-    const r = { courtId: f.courtId.value, dow: Number(f.dow.value), from: f.from.value, to: f.to.value, reason: f.reason.value.trim() };
-    if (!r.reason) return warn('recurringNoReason');
-    if (r.to <= r.from) return warn('courtHoursErr', { d: dayName(r.dow) });
-    // niente sovrapposizioni con altri blocchi ricorrenti dello stesso campo e giorno
-    if ((S().recurring || []).some(x => x.courtId === r.courtId && x.dow === r.dow && x.from < r.to && r.from < x.to)) return warn('recurringOverlap');
-    // prenotazioni già fatte in quegli orari (da oggi in poi): restano, ma l'admin lo sa
-    const clash = (S().bookings || []).filter(b => b.courtId === r.courtId && dow(b.date) === r.dow && b.from < r.to && r.from < b.to && !isPastSlot(b.date, b.to));
-    if (clash.length && !confirm(t('recurringClash', { n: clash.length, list: clash.map(b => `${fmtDate(b.date)} ${b.from}–${b.to} · ${b.blocked || bkWho(b)}`).join('\n') }))) return;
-    window.Cloud.addRecurring(r).then(() => { ui.flash = { text: t('recurringAdded') }; render(); }).catch(e => warn('regError', { code: e.code || e.message }));
-  }
 
-  function viewCourts() {
-    const cfg = bookCfg(), th = S().bookRewards || {};
-    return `
-      <div class="page-head"><a class="back" href="#/book">← ${esc(t('bkTitle'))}</a><h1><i class="ti ti-layout-grid" aria-hidden="true"></i> ${esc(t('courtsManage'))}</h1></div>
-      <form class="card grid-form" data-form="booking-settings">
-        <h2 class="span-all">${esc(t('bkRules'))}</h2>
-        <label>${esc(t('bkMinHoursLbl'))}<select name="minHours">${[0.5, 1, 1.5, 2, 2.5, 3].map(h => `<option value="${h}" ${h == cfg.minHours ? 'selected' : ''}>${esc(durText('00:00', fromMin(h * 60)))}</option>`).join('')}</select></label>
-        <label>${esc(t('bkMaxHoursLbl'))}<select name="maxHours">${[0.5, 1, 1.5, 2, 2.5, 3, 4].map(h => `<option value="${h}" ${h == cfg.maxHours ? 'selected' : ''}>${esc(durText('00:00', fromMin(h * 60)))}</option>`).join('')}</select></label>
-        <label>${esc(t('bkMaxDayLbl'))}<input type="number" min="1" name="maxPerDay" value="${cfg.maxPerDay}"></label>
-        <label>${esc(t('bkDaysAheadLbl'))}<input type="number" min="1" max="90" name="daysAhead" value="${cfg.daysAhead}"></label>
-        <div class="form-actions span-all"><button class="btn primary">${esc(t('save'))}</button></div>
-      </form>
-      <h2>${esc(t('courtsTitle'))}</h2>
-      <p class="muted small">${esc(t('courtsHelp'))}</p>
-      ${(S().courts || []).map(courtForm).join('')}
-      <div class="btn-row"><button class="btn" data-action="court-add"><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('courtAdd'))}</button></div>
-      <p class="muted small">${esc(t('courtsBlockHelp'))}</p>
-      ${recurringCard()}
-      <form class="card" data-form="book-rewards-save">
-        <h2><i class="ti ti-star" aria-hidden="true"></i> ${esc(t('bookRewardsTitle'))}</h2>
-        <p class="muted small">${esc(t('bookRewardsHelp'))}</p>
-        <div class="grid-form">${REWARDS.map(([k, icon]) => `<label>${icon} ${esc(t('rw_' + k))}
-          <input name="${k}" type="number" min="0" inputmode="numeric" value="${th[k] || ''}" placeholder="—"></label>`).join('')}</div>
-        <div class="form-actions"><button class="btn primary">${esc(t('save'))}</button></div>
-      </form>`;
-  }
 
   // ====================================================================
   // SFIDE: un utente cerca giocatori (uomini / donne), gli altri si candidano, il proponente accetta o declina;
@@ -2400,216 +1977,17 @@
   const LEVELS = ['start', 'inter', 'high', 'pro'];
   // livello cercato (sfide, cerco compagno/a): anche "Non importa il livello"
   const SEEK_LEVELS = LEVELS.concat('any');
-  const chApps = c => (S().chapps || []).filter(a => a.cid === c.id);
-  const chAccepted = c => chApps(c).filter(a => a.status === 'accepted');
-  const chCount = (c, g) => chAccepted(c).filter(a => a.gender === g).length + (c.guests || []).filter(x => x.gender === g).length;
-  const chNeed = (c, g) => Number(g === 'M' ? c.needM : c.needF) || 0;
-  const chMissing = (c, g) => Math.max(0, chNeed(c, g) - chCount(c, g));
-  const chComplete = c => !chMissing(c, 'M') && !chMissing(c, 'F');
-  const chTo = c => addMin(c.from, Number(c.dur) || 60);
-  const chPast = c => isPastSlot(c.date, c.from);
-  const chMine = c => c.by === myUid();
   // nome del proponente: salvato nella sfida (l'admin compare come "Manofuori Cup")
-  const chByName = c => c.byName || uidName(c.by);
-  const chMyApp = c => chApps(c).find(a => a.uid === myUid());
   // partecipanti registrati: proponente + candidati accettati (gli ospiti non registrati li conferma il proponente)
-  const chRegistered = c => [c.by].concat(chAccepted(c).map(a => a.uid));
-  const chAltOk = c => !!c.alt && chRegistered(c).every(u => (c.alt.ok || []).includes(u));
-  const canPlay = () => !!member() && !needsVerify() && !banOf(member().uid).book;
-  const gWord = (g, n) => t(g === 'F' ? (n === 1 ? 'chWoman' : 'chWomen') : (n === 1 ? 'chMan' : 'chMen'), { n });
-  const needText = (c, fn) => ['F', 'M'].filter(g => fn(c, g) > 0).map(g => gWord(g, fn(c, g))).join(', ');
 
-  // Primo campo libero (visibile) per tutta la durata; poi l'orario libero più vicino nello stesso giorno.
-  function chFindCourt(date, from, dur) {
-    const to = addMin(from, dur);
-    if (toMin(to) > 24 * 60) return null;
-    const c = (S().courts || []).filter(x => x.visible).find(x => selFree(x.id, date, from, to, null));
-    return c ? { courtId: c.id, date, from, to } : null;
-  }
-  function chFindAlternative(date, from, dur) {
-    for (let off = 30; off <= 18 * 60; off += 30) {
-      for (const sign of [1, -1]) {
-        const m = toMin(from) + sign * off;
-        if (m < 6 * 60 || m + dur > 24 * 60) continue;
-        const hit = chFindCourt(date, fromMin(m), dur);
-        if (hit) return hit;
-      }
-    }
-    return null;
-  }
 
-  // Dopo la revoca di un giocatore: scaduta l'ora senza conferma del proponente, la prenotazione si cancella
-  // al primo accesso di un partecipante (o dell'admin).
-  function chProcessExpired() {
-    ui.chExpiring = ui.chExpiring || {};
-    (S().challenges || []).forEach(c => {
-      if (c.status !== 'started' || !(c.holdUntil > 0) || Date.now() <= c.holdUntil || ui.chExpiring[c.id]) return;
-      if (!(admin() || chMine(c) || chMyApp(c))) return;
-      ui.chExpiring[c.id] = true;
-      window.Cloud.releaseChallenge(c).catch(() => { ui.chExpiring[c.id] = false; });
-    });
-  }
 
-  // Avvisi in prima pagina: candidature da valutare, revoche, orari alternativi da confermare.
-  function challengeAlerts() {
-    const uid = myUid();
-    if (!uid || !(member() || admin())) return '';
-    chProcessExpired();
-    const out = [];
-    const mine = (S().challenges || []).filter(chMine);
-    const pend = mine.reduce((n, c) => n + chApps(c).filter(a => a.status === 'pending').length, 0);
-    if (pend) out.push(`<div class="msg-alert" role="alert"><div class="msg-head"><strong><i class="ti ti-swords" aria-hidden="true"></i> ${esc(t('chTitle'))}</strong></div>
-      <div class="msg-text">${esc(t('chPendingAlert', { n: pend }))}</div><a class="btn small" href="#/challenges">${esc(t('chOpen'))} →</a></div>`);
-    mine.forEach(c => chApps(c).filter(a => a.status === 'revoked').forEach(a => out.push(revokeWarning(c, a))));
-    (S().challenges || []).filter(c => c.alt && !chMine(c) && chMyApp(c) && chMyApp(c).status === 'accepted' && !(c.alt.ok || []).includes(uid)).forEach(c =>
-      out.push(`<div class="msg-alert" role="alert"><div class="msg-head"><strong><i class="ti ti-clock-question" aria-hidden="true"></i> ${esc(t('chAltTitle'))}</strong></div>
-        <div class="msg-text">${esc(t('chAltAsk', { d: fmtDate(c.date), a: c.from, alt: `${courtName(c.alt.courtId)} ${c.alt.from}–${c.alt.to}` }))}</div>
-        <a class="btn small" href="#/challenges">${esc(t('chOpen'))} →</a></div>`));
-    return out.join('');
-  }
 
-  function revokeWarning(c, a) {
-    const hold = c.status === 'started' && c.holdUntil > Date.now();
-    const until = hold ? new Date(c.holdUntil).toLocaleTimeString(I18n.locale(), { hour: '2-digit', minute: '2-digit' }) : '';
-    return `<div class="msg-alert warn-alert" role="alert">
-      <div class="msg-head"><strong><i class="ti ti-alert-triangle" aria-hidden="true"></i> ${esc(t('chRevokedTitle'))}</strong></div>
-      <div class="msg-text">${esc(t('chRevokedText', { n: a.name, d: fmtDate(c.date), a: c.from }))}${hold ? `<br><strong>${esc(t('chHoldText', { h: until }))}</strong>` : ''}</div>
-      <div class="btn-row">${hold
-        ? `<button class="btn small primary" data-action="ch-keep" data-id="${c.id}">${esc(t('chKeep'))}</button>
-           <button class="btn small danger" data-action="ch-release" data-id="${c.id}">${esc(t('chRelease'))}</button>`
-        : `<button class="btn small primary" data-action="ch-ack" data-id="${a.id}"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('chAckRevoke'))}</button>`}</div></div>`;
-  }
 
-  function chStatusBadge(c) {
-    if (c.status === 'started' && c.book) return `<span class="badge st-done">${esc(t('chStarted'))}</span>`;
-    if (c.alt) return `<span class="badge warn-b">${esc(t('chAltPending'))}</span>`;
-    return chComplete(c) ? `<span class="badge ch-full">${esc(t('chComplete'))}</span>` : `<span class="badge">${esc(t('chOpenBadge'))}</span>`;
-  }
 
-  function challengeCard(c) {
-    const uid = myUid(), mine = chMine(c), my = chMyApp(c), m = member();
-    const apps = chApps(c), acc = chAccepted(c);
-    const players = [`<li><strong>${esc(chByName(c))}</strong> <small class="muted">· ${esc(t('chProposer'))}</small></li>`]
-      .concat(acc.map(a => `<li>${esc(a.name)} <span class="badge g-${a.gender}">${esc(a.gender)}</span>${mine && c.status !== 'started' ? ` <button class="icon-btn" data-action="ch-app" data-id="${a.id}" data-v="declined" title="${esc(t('remove'))}" aria-label="${esc(t('remove'))}">✕</button>` : ''}</li>`))
-      .concat((c.guests || []).map((g, i) => `<li>${esc(g.last)} ${esc(g.first)} <span class="badge g-${g.gender}">${esc(g.gender)}</span> <small class="muted">· ${esc(t('chGuest'))}</small>${mine ? ` <button class="icon-btn" data-action="ch-guest-del" data-id="${c.id}" data-i="${i}" title="${esc(t('remove'))}" aria-label="${esc(t('remove'))}">✕</button>` : ''}</li>`));
-    const missing = needText(c, chMissing);
-    let mineBox = '';
-    if (my) {
-      const lbl = { pending: 'chToConfirm', accepted: 'chConfirmed', declined: 'chDeclined', revoked: 'chRevoked' }[my.status];
-      mineBox = `<p class="ch-me"><span class="badge ${my.status === 'accepted' ? 'st-done' : my.status === 'pending' ? 'warn-b' : ''}">${esc(t(lbl))}</span>
-        ${['pending', 'accepted'].includes(my.status) && !chPast(c) ? `<button class="btn small danger" data-action="ch-revoke" data-id="${my.id}">${esc(t('chRevoke'))}</button>` : ''}</p>`;
-      if (c.alt && my.status === 'accepted') mineBox += (c.alt.ok || []).includes(uid) ? `<p class="note ok">${esc(t('chAltConfirmed'))}</p>`
-        : `<p class="note warn">${esc(t('chAltAskShort', { alt: `${courtName(c.alt.courtId)} ${c.alt.from}–${c.alt.to}` }))} <button class="btn small primary" data-action="ch-alt-ok" data-id="${c.id}">${esc(t('chAltConfirm'))}</button></p>`;
-    } else if (!mine && m && !chPast(c) && chMissing(c, m.gender) > 0) {
-      mineBox = canPlay() ? `<button class="btn primary" data-action="ch-apply" data-id="${c.id}"><i class="ti ti-hand-finger" aria-hidden="true"></i> ${esc(t('chApply'))}</button>`
-        : banOf(m.uid).book ? banNotice('book') : `<p class="note warn">${esc(t('verifyFirst'))}</p>`;
-    }
-    let ownerBox = '';
-    if (mine || admin()) {
-      const pend = apps.filter(a => a.status === 'pending');
-      ownerBox = `${pend.length ? `<h4>${esc(t('chApplications'))}</h4><ul class="reg-list">${pend.map(a => `<li><span class="reg-names">${esc(a.name)} <span class="badge g-${a.gender}">${esc(a.gender)}</span></span>
-          <span class="btn-row"><button class="btn small primary" data-action="ch-app" data-id="${a.id}" data-v="accepted">${esc(t('chAccept'))}</button>
-          <button class="btn small" data-action="ch-app" data-id="${a.id}" data-v="declined">${esc(t('chDecline'))}</button></span></li>`).join('')}</ul>` : ''}
-        ${mine && !chComplete(c) && !chPast(c) ? `<details class="sub-form"><summary><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('chAddGuest'))}</summary>
-          <form class="grid-form" data-form="ch-guest" data-id="${c.id}">
-            <label>${esc(t('lastName'))}<input name="last" required maxlength="60"></label>
-            <label>${esc(t('firstName'))}<input name="first" required maxlength="60"></label>
-            <label>${esc(t('gender'))}<select name="gender">${['F', 'M'].filter(g => chMissing(c, g) > 0).map(g => `<option value="${g}">${esc(t(g === 'F' ? 'female' : 'male'))}</option>`).join('')}</select></label>
-            <div class="form-actions"><button class="btn primary">${esc(t('add'))}</button></div></form></details>` : ''}
-        <div class="btn-row">
-          ${mine && c.status !== 'started' && !c.alt && !chPast(c) ? `<button class="btn primary" data-action="ch-start" data-id="${c.id}" ${chComplete(c) ? '' : 'disabled'}><i class="ti ti-player-play" aria-hidden="true"></i> ${esc(t('chStart'))}</button>` : ''}
-          ${mine && c.alt ? `${chAltOk(c) ? `<button class="btn primary" data-action="ch-alt-book" data-id="${c.id}">${esc(t('chAltBook'))}</button>` : ''}<button class="btn" data-action="ch-alt-cancel" data-id="${c.id}">${esc(t('chAltCancel'))}</button>` : ''}
-          ${mine && c.status === 'started' && !(c.holdUntil > 0) ? `<button class="btn" data-action="ch-release" data-id="${c.id}">${esc(t('chRelease'))}</button>` : ''}
-          <button class="btn danger" data-action="ch-delete" data-id="${c.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('chDelete'))}</button>
-        </div>
-        ${mine && c.status !== 'started' && !chComplete(c) ? `<p class="muted small">${esc(t('chStartHelp'))}</p>` : ''}`;
-    }
-    return `<div class="card ch-card ${mine ? 'mine' : ''}" id="ch-${c.id}">
-      <div class="ch-head"><span class="badge">${esc(t('chType_' + c.type))}</span> <span class="badge lvl-${c.level}">${esc(t('chLevel_' + c.level))}</span> ${chStatusBadge(c)}</div>
-      <h3 class="cap">${esc(longDate(c.date))} · ${c.from}–${chTo(c)}</h3>
-      <p class="muted small">${esc(t('chBy', { n: chByName(c) }))} · ${esc(t('chSeeks', { s: needText(c, chNeed) || '—' }))}${missing ? ` · <strong>${esc(t('chMissingTxt', { s: missing }))}</strong>` : ''}</p>
-      ${c.status === 'started' && c.book ? `<p class="note ok"><i class="ti ti-calendar-check" aria-hidden="true"></i> ${esc(t('chBooked', { c: courtName(c.book.courtId), a: c.book.from, b: c.book.to }))}</p>` : ''}
-      ${c.alt ? `<p class="note warn"><i class="ti ti-clock-question" aria-hidden="true"></i> ${esc(t('chAltLine', { alt: `${courtName(c.alt.courtId)} ${c.alt.from}–${c.alt.to}`, n: chRegistered(c).filter(u => (c.alt.ok || []).includes(u)).length, tot: chRegistered(c).length }))}</p>` : ''}
-      <ul class="ch-players">${players.join('')}</ul>
-      ${mineBox}${ownerBox}
-    </div>`;
-  }
 
-  function challengeForm() {
-    const cfg = bookCfg(), today = todayStr(), max = addDays(today, Number(cfg.daysAhead) || 7);
-    const durs = []; for (let x = Math.max(30, Math.round(Number(cfg.minHours) * 60) || 30); x <= Number(cfg.maxHours) * 60; x += 30) durs.push(x);
-    const type = ui.chType || 'X';
-    return `<details class="card sub-form" ${ui.chFormOpen ? 'open' : ''}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('chNew'))}</summary>
-      <form class="grid-form" data-form="ch-create">
-        <label>${esc(t('chType'))}<select name="type" data-change="ch-type">${['M', 'F', 'X'].map(x => `<option value="${x}" ${x === type ? 'selected' : ''}>${esc(t('chType_' + x))}</option>`).join('')}</select></label>
-        <label>${esc(t('chLevel'))}<select name="level">${SEEK_LEVELS.map(l => `<option value="${l}">${esc(t('chLevel_' + l))}</option>`).join('')}</select></label>
-        <label>${esc(t('bkDay'))}<input type="date" name="date" required min="${today}" ${admin() ? '' : `max="${max}"`} value="${today}"></label>
-        <label>${esc(t('bkTime'))}<select name="from">${HALF_HOURS.slice(0, -1).map(h => `<option ${h === '18:00' ? 'selected' : ''}>${h}</option>`).join('')}</select></label>
-        <label>${esc(t('bkDuration'))}<select name="dur">${durs.map(x => `<option value="${x}" ${x === 90 ? 'selected' : ''}>${esc(durText('00:00', fromMin(x)))}</option>`).join('')}</select></label>
-        ${type !== 'F' ? `<label>${esc(t('chNeedM'))}<input type="number" name="needM" min="0" max="20" value="${type === 'M' ? 3 : 1}"></label>` : ''}
-        ${type !== 'M' ? `<label>${esc(t('chNeedF'))}<input type="number" name="needF" min="0" max="20" value="${type === 'F' ? 3 : 2}"></label>` : ''}
-        <p class="muted small span-all">${esc(t('chFormHelp', { d: cfg.daysAhead }))}</p>
-        <div class="form-actions span-all"><button class="btn primary"><i class="ti ti-swords" aria-hidden="true"></i> ${esc(t('chLaunch'))}</button></div>
-      </form></details>`;
-  }
 
-  function viewChallenges() {
-    const uid = myUid();
-    const head = `<div class="page-head"><h1><i class="ti ti-swords" aria-hidden="true"></i> ${esc(t('chTitle'))}</h1><p class="muted">${esc(t('chIntro'))}</p></div>`;
-    if (!uid || !(member() || admin())) return `${head}<div class="card"><p>${esc(t('chLoginFirst'))}</p><a class="btn primary" href="#/settings">${esc(t('loginOrRegister'))}</a></div>`;
-    chProcessExpired();
-    const all = (S().challenges || []).filter(c => c.date >= todayStr()).sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from));
-    const mine = all.filter(chMine);
-    const joined = all.filter(c => !chMine(c) && chMyApp(c));
-    const others = all.filter(c => !chMine(c) && !chMyApp(c) && !chPast(c) && (admin() || !chComplete(c)));
-    const sec = (title, list, empty) => `<section class="feat-block"><h2>${esc(t(title))} (${list.length})</h2>
-      ${list.length ? `<div class="ch-grid">${list.map(challengeCard).join('')}</div>` : `<p class="muted">${esc(t(empty))}</p>`}</section>`;
-    return `${challengeAlerts()}${verifyNotice()}${banNotice('book')}${head}
-      ${canPlay() || admin() ? challengeForm() : ''}
-      ${sec('chMine', mine, 'chNoneMine')}
-      ${member() ? sec('chJoined', joined, 'chNoneJoined') : ''}
-      ${sec(admin() ? 'chAll' : 'chOthers', admin() ? all.filter(c => !chMine(c)) : others, 'chNoneOpen')}`;
-  }
 
-  // ---------- azioni delle sfide ----------
-  const chById = id => (S().challenges || []).find(c => c.id === id);
-  const chErr = e => warn(e && e.code === 'permission-denied' ? 'chDenied' : 'regError', { code: (e && (e.code || e.message)) || '' });
-  function chCreate(f) {
-    const cfg = bookCfg();
-    const type = f.type.value, needM = type === 'F' ? 0 : Math.max(0, parseInt(f.needM.value, 10) || 0), needF = type === 'M' ? 0 : Math.max(0, parseInt(f.needF.value, 10) || 0);
-    const c = { type, level: f.level.value, date: f.date.value, from: f.from.value, dur: Number(f.dur.value), needM, needF, guests: [] };
-    if (!c.date || !c.from) return warn('errRegFields');
-    if (needM + needF < 1) return warn('chNeedSome');
-    if (isPastSlot(c.date, c.from)) return warn('chPastErr');
-    if (!admin() && c.date > addDays(todayStr(), Number(cfg.daysAhead) || 7)) return warn('chTooFar', { d: cfg.daysAhead });
-    c.byName = admin() ? 'Manofuori Cup' : personLabel(member());
-    if (toMin(c.from) + c.dur > 24 * 60) return warn('chPastErr');
-    window.Cloud.createChallenge(c).then(() => { ui.chFormOpen = false; ui.flash = { text: t('chCreated') }; render(); }).catch(chErr);
-  }
-  function chStart(c) {
-    const cfg = bookCfg(), uid = myUid();
-    if (!chComplete(c)) return warn('chIncomplete');
-    if (chPast(c)) return warn('chPastErr');
-    if (!admin() && (S().bookings || []).filter(b => b.userId === uid && b.date === c.date).length >= Number(cfg.maxPerDay)) return warn('bkMaxDay', { n: cfg.maxPerDay, max: cfg.maxPerDay });
-    const hit = chFindCourt(c.date, c.from, Number(c.dur));
-    if (hit) {
-      return window.Cloud.startChallenge(c, Object.assign({ id: Store.uid('g') }, hit))
-        .then(() => { ui.flash = { text: t('chBookedOk', { c: courtName(hit.courtId), a: hit.from, b: hit.to }) }; render(); }).catch(chErr);
-    }
-    const alt = chFindAlternative(c.date, c.from, Number(c.dur));
-    if (!alt) return warn('chNoSlot');
-    const data = Object.assign({}, alt, { ok: [uid] });
-    window.Cloud.updateChallenge(c.id, { alt: data })
-      .then(() => { ui.flash = { type: 'warn', text: t('chAltProposed', { alt: `${courtName(alt.courtId)} ${alt.from}–${alt.to}` }) }; render(); }).catch(chErr);
-  }
-  function chBookAlt(c) {
-    const a = c.alt;
-    if (!a || !chAltOk(c)) return;
-    if (!chFindCourtExact(a)) { window.Cloud.updateChallenge(c.id, { alt: null }).catch(() => {}); return warn('chAltTaken'); }
-    window.Cloud.startChallenge(c, { id: Store.uid('g'), courtId: a.courtId, date: a.date, from: a.from, to: a.to }, { date: a.date, from: a.from })
-      .then(() => { ui.flash = { text: t('chBookedOk', { c: courtName(a.courtId), a: a.from, b: a.to }) }; render(); }).catch(chErr);
-  }
-  const chFindCourtExact = a => { const c = courtById(a.courtId); return c && c.visible && selFree(a.courtId, a.date, a.from, a.to, null); };
 
   // ====================================================================
   // CERCO COMPAGNO/A (tornei con iscrizioni aperte)
@@ -2809,7 +2187,6 @@
       presenze: (S().att || []).filter(mine),
       spotERecuperi: (S().spots || []).filter(mine),
       ricevute: (S().receipts || []).filter(mine),
-      prenotazioni: (S().bookingsMine || []).map(b => ({ campo: courtName(b.courtId), data: b.date, dalle: b.from, alle: b.to })),
       iscrizioniTornei: (S().registrations || []).filter(x => x.uids && x.uids.includes(uid)).map(x => ({ torneo: (tourById(x.tid) || {}).name || x.tid, iscritto: x.created ? new Date(x.created).toISOString() : null })),
       giocoLibero: (S().fpreg || []).filter(mine)
     };
@@ -2943,7 +2320,7 @@
       <h3>${esc(trTitle(tr))}</h3>
       <p class="muted cap"><i class="ti ti-calendar-repeat" aria-hidden="true"></i> ${esc(trLabel(tr))}</p>
       <p class="muted small">${tr.coachUid ? `<i class="ti ti-whistle" aria-hidden="true"></i> ${esc(t('trCoach'))}: ${esc(coachName(tr.coachUid))}` : ''}
-        ${tr.coachUid && (tr.courts || []).length ? ' · ' : ''}${(tr.courts || []).length ? `<i class="ti ti-layout-grid" aria-hidden="true"></i> ${esc(tr.courts.map(courtName).join(', '))}` : ''}</p>
+        ${tr.coachUid && tr.place ? ' · ' : ''}${tr.place ? `<i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(tr.place)}` : ''}</p>
       <h4>${esc(t('grpTitle', { m: monthLabel(month) }))}</h4>
       ${od && uids.length ? `<p class="muted small"><i class="ti ti-calendar-check" aria-hidden="true"></i> ${esc(t(oc && oc.cancelled ? 'occCancelledOn' : 'attOfDay', { d: longDate(od) }))}</p>` : ''}
       ${uids.length ? `<ul class="reg-list">${rows}</ul>` : `<p class="muted small">${esc(t('grpEmpty'))}</p>`}
@@ -2954,7 +2331,7 @@
   }
 
   function trainingForm(tr) {
-    const v = tr || { name: '', dow: 1, from: '19:00', to: '20:15', level: 'inter', max: 8, coachUid: '', courts: [] };
+    const v = tr || { name: '', dow: 1, from: '19:00', to: '20:15', level: 'inter', max: 8, coachUid: '', place: '' };
     const coaches = (S().coaches || []).slice().sort((a, b) => coachName(a.id).localeCompare(coachName(b.id)));
     const opt = (sel, list) => list.map(h => `<option ${h === sel ? 'selected' : ''}>${h}</option>`).join('');
     const form = `<form class="grid-form" data-form="tr-save" data-id="${tr ? tr.id : ''}">
@@ -2967,9 +2344,7 @@
         <label>${esc(t('trMax'))}<input type="number" name="max" min="1" max="60" required value="${v.max}" inputmode="numeric"></label>
         <label>${esc(t('trCoach'))}<select name="coachUid"><option value="">—</option>${coaches.map(c => `<option value="${c.id}" ${c.id === v.coachUid ? 'selected' : ''}>${esc(coachName(c.id))}</option>`).join('')}</select>
           ${coaches.length ? '' : `<small class="muted">${esc(t('trNoCoaches'))}</small>`}</label>
-        <fieldset class="span-all fp-levels"><legend>${esc(t('trCourts'))}</legend>
-          ${(S().courts || []).map(c => `<label class="check"><input type="checkbox" name="court" value="${c.id}" ${(v.courts || []).includes(c.id) ? 'checked' : ''}> ${esc(c.name)}</label>`).join('') || `<span class="muted small">${esc(t('trNoCourts'))}</span>`}
-          <small class="muted span-all">${esc(t('trCourtsHelp'))}</small></fieldset>
+        <label class="span-all">${esc(t('placeLabel'))}<input name="place" maxlength="80" value="${esc(v.place || '')}" placeholder="${esc(t('placePh'))}"></label>
         <div class="form-actions span-all">${tr ? `<button type="button" class="btn" data-action="tr-edit-cancel">${esc(t('cancel'))}</button>` : ''}
           <button class="btn primary">${esc(t(tr ? 'save' : 'trCreate'))}</button></div>
       </form>`;
@@ -3142,16 +2517,8 @@
   function trSave(f) {
     const old = f.dataset.id ? trainingById(f.dataset.id) : null;
     const d = { name: f.name.value.trim(), dow: +f.dow.value, from: f.from.value, to: f.to.value, level: f.level.value,
-      max: Math.max(1, parseInt(f.max.value, 10) || 1), coachUid: f.coachUid.value, courts: [...f.querySelectorAll('[name=court]:checked')].map(x => x.value) };
+      max: Math.max(1, parseInt(f.max.value, 10) || 1), coachUid: f.coachUid.value, place: f.place.value.trim() };
     if (d.to <= d.from) return warn('fpTimeErr');
-    d.reason = `${t('navTrain')} · ${d.name || t('fpLevel_' + d.level)}${d.coachUid ? ' · ' + coachName(d.coachUid) : ''}`;
-    // campi: niente sovrapposizioni con altri blocchi ricorrenti; avviso se ci sono prenotazioni future
-    const mineR = new Set((old ? old.courts || [] : []).map(c => `t_${old.id}_${c}`));
-    const clash = d.courts.filter(c => (S().recurring || []).some(r => !mineR.has(r.id) && r.courtId === c && r.dow === d.dow && r.from < d.to && d.from < r.to));
-    if (clash.length) return warn('trCourtBusy', { c: clash.map(courtName).join(', ') });
-    const today = todayStr();
-    const busy = (S().bookings || []).filter(b => !b.recurring && d.courts.includes(b.courtId) && b.date >= today && dow(b.date) === d.dow && b.from < d.to && d.from < b.to);
-    if (busy.length && !confirmed('trBookingsClash', { n: busy.length })) return;
     const groups = old ? (S().groups || []).filter(g => g.tid === old.id) : [];
     window.Cloud.saveTraining(old, d, groups).then(() => {
       if (old) ui.trEdit = null; else (ui.keep || {})['tr-new'] = false;
@@ -3703,7 +3070,6 @@
       changes.forEach(({ r: q, n }) => {
         const rn = `${n}/${rSeries(q)}/${q.year}`;
         if (q.incasso) links.push({ col: 'incassi', id: q.incasso, field: `receipts.${rSeries(q)}.rn`, rn });
-        Object.entries(S().bkpaid || {}).forEach(([gid, bp]) => { if (q.incasso && bp.incasso === q.incasso && rSeries(q) === 'Q') links.push({ col: 'bkpaid', id: gid, field: 'rn', rn }); });
         (S().plans || []).filter(p => p.paid && p.paid.rid === q.id).forEach(p => links.push({ col: 'plans', id: p.id, field: 'paid.rn', rn }));
         (S().spots || []).filter(p => p.paid && p.paid.rid === q.id).forEach(p => links.push({ col: 'spots', id: p.id, field: 'paid.rn', rn }));
         (S().packs || []).filter(p => p.paid && p.paid.rid === q.id).forEach(p => links.push({ col: 'packs', id: p.id, field: 'paid.rn', rn }));
@@ -3772,19 +3138,15 @@
   // ---------- CASSA: registro degli incassi, ricevute Q (quote sociali) e C (commerciali) ----------
   // Ogni incasso ha una o più righe; le quote sociali vanno nella ricevuta Q, il commerciale nella ricevuta C
   // (numerazioni autonome per anno). Carta e bonifico: ricevuta sempre; contanti: a scelta.
-  const CA_CATS = [['q_train', 'Q'], ['q_court', 'Q'], ['q_tour', 'Q'], ['c_drink', 'C'], ['c_other', 'C']];
+  const CA_CATS = [['q_train', 'Q'], ['q_tour', 'Q'], ['c_drink', 'C'], ['c_other', 'C']];
   const caSeries = cat => (CA_CATS.find(c => c[0] === cat) || [, 'C'])[1];
   // descrizione della riga sulla ricevuta (in italiano: è un documento contabile)
-  const CA_IT = { q_train: 'Quota sociale allenamenti', q_court: 'Quota sociale - prenotazione campo per allenamento', q_tour: 'Quota sociale torneo sociale', c_drink: 'Bevande', c_other: 'Altro' };
+  const CA_IT = { q_train: 'Quota sociale allenamenti', q_tour: 'Quota sociale torneo sociale', c_drink: 'Bevande', c_other: 'Altro' };
   const caLineDesc = (cat, desc) => (cat === 'c_other' && desc ? desc : CA_IT[cat] + (desc ? ` - ${desc}` : ''));
   const caCausale = (series, lines) => (lines.length === 1 ? lines[0].desc : series === 'Q' ? 'Quote sociali (dettaglio)' : 'Vendita (dettaglio)');
-  const bkLabel = b => `${fmtDate(b.date)} ${b.from}–${b.to} · ${courtName(b.courtId)}${b.guest ? ' · ' + bkWho(b) : b.userId ? ' · ' + uidName(b.userId) : ''}`;
-  const bkItDesc = b => `${itDate(b.date)} ${b.from}-${b.to}, ${courtName(b.courtId)}`;
-  // prenotazioni da incassare: da ieri in poi, di un utente, non ancora pagate
   // intestatari: solo i tesserati della stagione (elenco "tesserati" con i soli dati della ricevuta)
   const tessFor = date => { const se = seasonOf(date || todayStr()); return (S().tesserati || []).filter(x => (x.seasons || []).includes(se)).sort((a, b) => a.name.localeCompare(b.name)); };
   const isTess = (uid, date) => tessFor(date).some(x => x.id === uid);
-  const caBookings = () => (S().bookings || []).filter(b => b.userId && !b.blocked && !(S().bkpaid || {})[b.id]).sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from));
   // nuovo incasso: qualsiasi utente registrato (i non tesserati vengono segnati con ★ nelle ricevute)
   const caMemberOpts = () => `<option value="">— ${esc(t('caNoHolder'))} —</option>${(S().members || []).slice().sort((a, b) => personName(a).localeCompare(personName(b))).map(m => `<option value="${m.uid}">${esc(personName(m))}${isTess(m.uid) ? '' : ' ★'}</option>`).join('')}`;
   // ricevuta intestata a una persona non tesserata nella stagione della ricevuta
@@ -3793,10 +3155,8 @@
   const tessStar = r => (rcNotTess(r) ? ` <span class="tess-star" title="${esc(t('rcNotTessTip', { s: seasonOf(r.issued) }))}" aria-label="${esc(t('rcNotTessTip', { s: seasonOf(r.issued) }))}">★</span>` : '');
   const caHolderOpts = (date, sel) => `<option value="">— ${esc(t('caNoHolder'))} —</option>${tessFor(date).map(x => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}`;
   function caLineRow() {
-    const bks = caBookings();
     return `<div class="ca-line">
-      <label class="ca-cat-l">${esc(t('caCat'))}<select name="cat" data-change="ca-cat"><option value="">-</option>${CA_CATS.map(([k, sr]) => `<option value="${k}">${esc(t('caCat_' + k))} (${sr})</option>`).join('')}</select></label>
-      <select name="bk" hidden aria-label="${esc(t('caBooking'))}"><option value="">— ${esc(t('caBooking'))} —</option>${bks.map(b => `<option value="${b.id}">${esc(bkLabel(b))}</option>`).join('')}</select>
+      <label class="ca-cat-l">${esc(t('caCat'))}<select name="cat"><option value="">-</option>${CA_CATS.map(([k, sr]) => `<option value="${k}">${esc(t('caCat_' + k))} (${sr})</option>`).join('')}</select></label>
       <input name="desc" maxlength="120" placeholder="${esc(t('caDesc'))}" aria-label="${esc(t('caDesc'))}">
       <input name="amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="€" aria-label="${esc(t('payAmount'))}">
     </div>`;
@@ -3887,26 +3247,19 @@
     (S().packs || []).filter(p => p.paid && p.paid.rid === q.id).forEach(p => links.push({ col: 'packs', id: p.id, field: 'paid.rn', rn }));
     (S().athletes || []).forEach(a => Object.entries(a.prepaid || {}).forEach(([m, pd]) => { if (pd && pd.rid === q.id) links.push({ col: 'athletes', id: a.id, field: `prepaid.${m}.rn`, rn }); }));
     if (q.incasso) links.push({ col: 'incassi', id: q.incasso, field: `receipts.${rSeries(q)}.rn`, rn });
-    if (q.incasso && rSeries(q) === 'Q') Object.entries(S().bkpaid || {}).forEach(([gid, bp]) => { if (bp.incasso === q.incasso) links.push({ col: 'bkpaid', id: gid, field: 'rn', rn }); });
     return links;
   }
   function caSave(f) {
-    const rows = [...f.querySelectorAll('.ca-line')].map(row => ({ cat: row.querySelector('[name=cat]').value, bk: row.querySelector('[name=bk]').value,
+    const rows = [...f.querySelectorAll('.ca-line')].map(row => ({ cat: row.querySelector('[name=cat]').value,
       desc: row.querySelector('[name=desc]').value.trim(), amount: Math.round(Number(row.querySelector('[name=amount]').value || 0) * 100) / 100 })).filter(x => x.amount > 0 || x.cat);
     if (rows.some(x => !x.cat)) return warn('caNeedType');
     if (rows.some(x => !(x.amount > 0))) return warn('caNeedAmount');
     if (!rows.length) return warn('caNoLines');
-    const bkById = id => (S().bookings || []).find(b => b.id === id);
-    if (rows.some(x => x.cat === 'q_court' && !x.bk)) return warn('caNeedBooking');
-    const lines = rows.map(x => {
-      const b = x.cat === 'q_court' ? bkById(x.bk) : null;
-      return Object.assign({ cat: x.cat, series: caSeries(x.cat), amount: x.amount, desc: caLineDesc(x.cat, b ? [bkItDesc(b), x.desc].filter(Boolean).join(' - ') : x.desc) }, b ? { ref: { kind: 'booking', id: b.id } } : {});
-    });
+    const lines = rows.map(x => ({ cat: x.cat, series: caSeries(x.cat), amount: x.amount, desc: caLineDesc(x.cat, x.desc) }));
     const method = f.method.value, date = f.date.value;
     const always = method !== 'cash', want = always || f.receipt.checked;
-    // intestatario: un tesserato scelto, oppure chi ha prenotato il campo (se tesserato); altrimenti senza nome
-    let uid = f.holder.value;
-    if (!uid) { const b = rows.map(x => x.cat === 'q_court' && bkById(x.bk)).find(Boolean); if (b && b.userId) uid = b.userId; }
+    // intestatario: un tesserato scelto; altrimenti senza nome
+    const uid = f.holder.value;
     const person = caPerson(uid);
     const p = { date, method, lines, uid, person, receipt: { Q: want, C: want }, causale: { Q: caCausale('Q', lines.filter(l => l.series === 'Q')), C: caCausale('C', lines.filter(l => l.series === 'C')) } };
     const tq = round2(lines.filter(l => l.series === 'Q').reduce((s, l) => s + l.amount, 0)), tc = round2(lines.filter(l => l.series === 'C').reduce((s, l) => s + l.amount, 0));
@@ -4152,9 +3505,9 @@
     const d = rangeData(month + '-01', monthEnd(month));
     if (!d) return;
     const trs = trainings(), PAYM = { cash: 'contanti', card: 'bancomat', transfer: 'bonifico' };
-    const sheetTr = [['Allenamento', 'Giorno', 'Orario', 'Livello', 'Allenatore', 'Max persone', 'Campi', 'Iscritti nel mese']]
+    const sheetTr = [['Allenamento', 'Giorno', 'Orario', 'Livello', 'Allenatore', 'Max persone', 'Luogo', 'Iscritti nel mese']]
       .concat(trs.map(tr => [trTitle(tr), dayName(tr.dow), `${tr.from}–${tr.to}`, t('fpLevel_' + tr.level), tr.coachUid ? coachName(tr.coachUid) : '', tr.max || 0,
-        (tr.courts || []).map(courtName).join(', '), ((groupOf(tr.id, month) || {}).uids || []).length]));
+        tr.place || '', ((groupOf(tr.id, month) || {}).uids || []).length]));
     const sheetGr = [['Allenamento', 'Orario', 'Corsista']];
     trs.forEach(tr => { const g = groupOf(tr.id, month); ((g && g.uids) || []).forEach(u => sheetGr.push([trTitle(tr), trLabel(tr), (g.names || {})[u] || coachName(u)])); });
     const plans = (S().plans || []).filter(p => p.month === month).sort((a, b) => coachName(a.uid).localeCompare(coachName(b.uid)));
@@ -4184,8 +3537,7 @@
     'backup-xlsx': el => { backupXlsx(el.dataset.m).catch(e => { console.error(e); warn('regError', { code: e.message }); }); }
   };
 
-  // ---------- profilo: statistiche delle attività (prenotazioni con grafici, allenamenti) ----------
-  const dayShort = n => new Date(2024, 0, n).toLocaleDateString(I18n.locale(), { weekday: 'short' });   // 1 gen 2024 = lunedì
+  // ---------- profilo: statistiche degli allenamenti; grafici a barre (usati anche nel report) ----------
   const weekStart = d => addDays(d, 1 - dow(d));
   // Grafico a barre (una sola serie: niente legenda, il titolo dice cosa misura); valore sopra ogni barra,
   // dettaglio al passaggio del mouse e tabella equivalente per chi non vede il grafico.
@@ -4198,60 +3550,25 @@
       </div>
       <details class="bar-table"><summary>${esc(t('showTable'))}</summary><table class="table"><tbody>${rows.map(r => `<tr><td>${esc(r.full || r.label)}</td><td class="num">${r.v}</td></tr>`).join('')}</tbody></table></details>
     </figure>`;
-  }
-  function myStatsCard() {
+  }  function myStatsCard() {
     const m = member();
     if (!m) return '';
-    const bks = (S().bookingsMine || []).filter(b => b.userId === m.uid).sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from));
-    const per = ui.stPeriod || 'week', ref = ui.stRef || todayStr();
-    const from = per === 'week' ? weekStart(ref) : ref.slice(0, 7) + '-01';
-    const to = per === 'week' ? addDays(from, 7) : shiftMonth(ref.slice(0, 7), 1) + '-01';
-    const inP = bks.filter(b => b.date >= from && b.date < to);
-    const hours = list => list.reduce((s, b) => s + (toMin(b.to) - toMin(b.from)) / 60, 0);
-    const byDay = [1, 2, 3, 4, 5, 6, 7].map(n => ({ label: dayShort(n), full: dayName(n), v: inP.filter(b => dow(b.date) === n).length }));
-    const months = Array.from({ length: 12 }, (_, i) => shiftMonth(curMonth(), i - 11));
-    const byMonth = months.map(mo => ({ label: new Date(mo + '-15T12:00').toLocaleDateString(I18n.locale(), { month: 'short' }), full: monthLabel(mo), v: bks.filter(b => b.date.slice(0, 7) === mo).length }));
-    const pLabel = per === 'week' ? t('weekOf', { a: fmtDate(from), b: fmtDate(addDays(from, 6)) }) : monthLabel(ref.slice(0, 7));
-    const step = per === 'week' ? 7 : 0;
-    const prevRef = per === 'week' ? addDays(ref, -step) : shiftMonth(ref.slice(0, 7), -1) + '-01', nextRef = per === 'week' ? addDays(ref, step) : shiftMonth(ref.slice(0, 7), 1) + '-01';
     // allenamenti: risposte e spot del corsista (stagione in corso)
     const season = seasonOf(todayStr()), sFrom = `${season.slice(0, 4)}-09-01`;
     const att = (S().att || []).filter(x => x.uid === m.uid && x.date >= sFrom && x.date <= todayStr());
     const sp = (S().spots || []).filter(x => x.uid === m.uid && x.status === 'ok' && x.date >= sFrom && x.date <= todayStr());
-    const trBlock = att.length || sp.length ? `<h3><i class="ti ti-barbell" aria-hidden="true"></i> ${esc(t('statTraining', { s: season }))}</h3>
+    if (!att.length && !sp.length) return '';
+    return `<div class="card" id="my-stats">
+      <h2><i class="ti ti-chart-bar" aria-hidden="true"></i> ${esc(t('myStats'))}</h2>
+      <h3><i class="ti ti-barbell" aria-hidden="true"></i> ${esc(t('statTraining', { s: season }))}</h3>
       <div class="stats-row">
         <div class="stat"><span>${esc(t('statPresent'))}</span><strong>${att.filter(x => x.status === 'in').length}</strong></div>
         <div class="stat"><span>${esc(t('statAbsent'))}</span><strong>${att.filter(x => x.status === 'out').length}</strong></div>
         <div class="stat"><span>${esc(t('statSpots'))}</span><strong>${sp.filter(x => !x.recovery).length}</strong></div>
         <div class="stat"><span>${esc(t('statRecoveries'))}</span><strong>${sp.filter(x => x.recovery).length}</strong></div>
-      </div>` : '';
-    if (!bks.length && !trBlock) return '';
-    return `<div class="card" id="my-stats">
-      <h2><i class="ti ti-chart-bar" aria-hidden="true"></i> ${esc(t('myStats'))}</h2>
-      ${bks.length ? `<div class="stats-row">
-        <div class="stat"><span>${esc(t('statBookings'))}</span><strong>${bks.length}</strong><small class="muted">${esc(t('statHours', { h: hours(bks).toLocaleString(I18n.locale()) }))}</small></div>
-        <div class="stat"><span>${esc(t('statPlayed'))}</span><strong>${bks.filter(b => isPastSlot(b.date, b.to)).length}</strong></div>
       </div>
-      <div class="month-nav">
-        <div class="segmented" role="group">${['week', 'month'].map(k => `<button class="${per === k ? 'active' : ''}" aria-pressed="${per === k}" data-action="st-period" data-p="${k}">${esc(t('per_' + k))}</button>`).join('')}</div>
-        <button class="btn small" data-action="st-ref" data-d="${prevRef}" aria-label="${esc(t('prevPeriod'))}"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>
-        <strong>${esc(pLabel)}</strong>
-        <button class="btn small" data-action="st-ref" data-d="${nextRef}" aria-label="${esc(t('nextPeriod'))}"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>
-      </div>
-      <div class="charts-2">
-        ${barChart(t('chartByDay', { p: pLabel }), byDay, t('statBookingsUnit'))}
-        ${barChart(t('chartByMonth'), byMonth, t('statBookingsUnit'))}
-      </div>
-      <h3>${esc(t('statDetail', { n: inP.length, p: pLabel }))}</h3>
-      ${inP.length ? `<ul class="reg-list">${inP.map(b => `<li><span class="reg-names"><strong class="cap">${esc(longDate(b.date))}</strong> · ${b.from}–${b.to}<br><small class="muted">${esc(courtName(b.courtId))}${b.ch ? ` · ${esc(t('navChallenges'))}` : ''}</small></span></li>`).join('')}</ul>`
-        : `<p class="muted small">${esc(t('statNone'))}</p>`}` : ''}
-      ${trBlock}
     </div>`;
   }
-  const statActions = {
-    'st-period': el => { ui.stPeriod = el.dataset.p; render(); },
-    'st-ref': el => { ui.stRef = el.dataset.d; render(); }
-  };
 
   const trForms = {
     'tr-save': f => trSave(f),
@@ -4430,23 +3747,21 @@
       <div class="ch-head"><span class="badge">${esc(fpLevelsText(fp))}</span>${ended ? ` <span class="badge">${esc(t('fpEndedBadge'))}</span>` : ''}</div>
       <h3>${esc(fp.name)}</h3>
       <p class="muted cap"><i class="ti ti-calendar" aria-hidden="true"></i> ${esc(longDate(fp.date))} · ${fp.from}–${fp.to}</p>
-      ${fp.courts && fp.courts.length ? `<p class="muted small"><i class="ti ti-layout-grid" aria-hidden="true"></i> ${esc(t('fpCourtsLine', { c: fpCourtsText(fp) }))}</p>` : ''}
+      ${fp.place ? `<p class="muted small"><i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(fp.place)}</p>` : ''}
       ${admin() && ui.fpEdit === fp.id ? fpForm(fp) : `${counts}${action}${adminBox}`}
     </div>`;
   }
 
   // Modulo di creazione (fp = null) o di modifica di una sessione.
   function fpForm(fp) {
-    const nCourts = (S().courts || []).filter(c => c.visible).length;
-    const today = todayStr(), v = fp || { name: '', date: today, from: '18:00', to: '21:00', levels: ['all'], nCourts: Math.min(1, nCourts) };
+    const today = todayStr(), v = fp || { name: '', date: today, from: '18:00', to: '21:00', levels: ['all'], place: '' };
     const lv = v.levels || ['all'], all = lv.includes('all');
     const form = `<form class="grid-form" data-form="fp-save" data-id="${fp ? fp.id : ''}">
         <label class="span-all">${esc(t('fpName'))}<input name="name" required maxlength="80" value="${esc(v.name)}" placeholder="${esc(t('fpNamePh'))}"></label>
         <label>${esc(t('bkDay'))}<input type="date" name="date" required min="${fp ? '' : today}" value="${v.date}"></label>
         <label>${esc(t('courtFrom'))}<select name="from">${HALF_HOURS.slice(0, -1).map(h => `<option ${h === v.from ? 'selected' : ''}>${h}</option>`).join('')}</select></label>
         <label>${esc(t('courtTo'))}<select name="to">${HALF_HOURS.slice(1).map(h => `<option ${h === v.to ? 'selected' : ''}>${h}</option>`).join('')}</select></label>
-        <label>${esc(t('fpCourts'))}<input type="number" name="nCourts" min="0" max="${nCourts}" value="${v.nCourts != null ? v.nCourts : 0}" inputmode="numeric">
-          <small class="muted">${esc(t('fpCourtsHelp', { n: nCourts }))}</small></label>
+        <label>${esc(t('placeLabel'))}<input name="place" maxlength="80" value="${esc(v.place || '')}" placeholder="${esc(t('placePh'))}"></label>
         <label class="check span-all"><input type="checkbox" name="blocks" ${v.blocks ? 'checked' : ''}> ${esc(t('fpBlocksOpt'))} <small class="muted">${esc(t('fpBlocksHelp'))}</small></label>
         <fieldset class="span-all fp-levels"><legend>${esc(t('fpLevels'))}</legend>
           <label class="check"><input type="checkbox" name="lv" value="all" ${all ? 'checked' : ''} data-change="fp-all"> ${esc(t('fpAll'))}</label>
@@ -4459,71 +3774,20 @@
     return `<details class="card sub-form" data-keep="fp-new" ${keepOpen('fp-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('fpNew'))}</summary>${form}</details>`;
   }
 
-  // Campi per la sessione: per ogni campo visibile si prendono le mezz'ore della fascia in cui è aperto e libero
-  // (le prenotazioni già fatte restano; i blocchi della sessione stessa contano come liberi).
-  // Restituisce i tratti liberi [{ courtId, from, to }] degli n campi con più tempo libero, o null se non bastano.
-  function fpFreeCourts(date, from, to, n, own) {
-    const mine = new Set((own || []).map(c => c.gid));
-    const had = id => ((own || []).some(c => c.courtId === id) ? 1 : 0);
-    const cands = (S().courts || []).filter(c => c.visible).map((c, idx) => {
-      const h = courtHours(c, date), segs = [];
-      if (h) {
-        const a = from > h.from ? from : h.from, z = to < h.to ? to : h.to;
-        for (let x = a; x < z; x = addMin(x, 30)) {
-          const b = bookingAt(c.id, date, x);
-          if (b && !mine.has(b.id)) continue;
-          const last = segs[segs.length - 1];
-          if (last && last.to === x) last.to = addMin(x, 30); else segs.push({ courtId: c.id, from: x, to: addMin(x, 30) });
-        }
-      }
-      return { c, idx, segs, mins: segs.reduce((s, g) => s + toMin(g.to) - toMin(g.from), 0) };
-    }).filter(x => x.mins > 0);
-    // prima i campi che la sessione aveva già, poi quelli con più tempo libero, poi l'ordine dei campi
-    cands.sort((a, b) => had(b.c.id) - had(a.c.id) || b.mins - a.mins || a.idx - b.idx);
-    if (cands.length < n) return null;
-    return cands.slice(0, n).sort((a, b) => a.idx - b.idx).flatMap(x => x.segs);
-  }
 
-  // "Campo 1 (10:30–15:00), Campo 2": tra parentesi solo i tratti diversi dalla fascia della sessione.
-  function fpCourtsText(fp) {
-    const by = {};
-    (fp.courts || []).forEach(c => { (by[c.courtId] = by[c.courtId] || []).push(c); });
-    return Object.entries(by).map(([id, segs]) => {
-      const full = segs.length === 1 && (segs[0].from || fp.from) === fp.from && (segs[0].to || fp.to) === fp.to;
-      return courtName(id) + (full ? '' : ` (${segs.map(g => `${g.from}–${g.to}`).join(', ')})`);
-    }).join(', ');
-  }
 
   function fpSave(f) {
     const old = f.dataset.id ? fpById(f.dataset.id) : null;
     const levels = [...f.querySelectorAll('[name=lv]:checked')].map(x => x.value);
     const d = { name: f.name.value.trim(), date: f.date.value, from: f.from.value, to: f.to.value, levels: levels.includes('all') || !levels.length ? ['all'] : levels,
-      nCourts: Math.max(0, parseInt(f.nCourts.value, 10) || 0), blocks: f.blocks.checked };
+      place: f.place.value.trim(), blocks: f.blocks.checked };
     if (!d.name || !d.date) return warn('errRegFields');
     if (d.to <= d.from) return warn('fpTimeErr');
     d.startMs = new Date(`${d.date}T${d.from}`).getTime();
     d.endMs = new Date(`${d.date}T${d.to === '24:00' ? '23:59' : d.to}`).getTime();
-    const own = old && old.date === d.date ? old.courts || [] : [];
-    const picked = d.nCourts ? fpFreeCourts(d.date, d.from, d.to, d.nCourts, own) : [];
-    if (!picked) return warn('fpNoCourts', { n: d.nCourts });
-    // Avviso se qualche campo non è libero per tutta la fascia (chiuso o già prenotato in qualche orario).
-    const gaps = [];
-    [...new Set(picked.map(g => g.courtId))].forEach(id => {
-      const c = courtById(id), h = courtHours(c, d.date), mine = picked.filter(g => g.courtId === id);
-      let cur = null;
-      for (let x = d.from; x < d.to; x = addMin(x, 30)) {
-        const why = mine.some(g => g.from <= x && x < g.to) ? null : h && x >= h.from && x < h.to ? 'fpGapBusy' : 'fpGapClosed';
-        if (why && cur && cur.why === why && cur.b === x) cur.b = addMin(x, 30);
-        else if (why) gaps.push(cur = { c: c.name, a: x, b: addMin(x, 30), why });
-        else cur = null;
-      }
-    });
-    if (gaps.length && !confirmed('fpPartialConfirm', { list: gaps.map(g => '• ' + t(g.why, g)).join('\n') })) return;
-    // stesso campo della sessione precedente: si tiene la stessa prenotazione (gid)
-    d.courts = picked.map(g => { const o = own.find(x => x.courtId === g.courtId && (x.from || old.from) === g.from && (x.to || old.to) === g.to); return Object.assign({}, g, { gid: o ? o.gid : Store.uid('g') }); });
     window.Cloud.saveFreeplay(old, d).then(() => {
       if (old) ui.fpEdit = null; else (ui.keep || {})['fp-new'] = false;
-      ui.flash = { text: t(old ? 'fpSaved' : 'fpCreated') + (d.courts.length ? ' ' + t('fpCourtsTaken', { c: fpCourtsText(d) }) : '') };
+      ui.flash = { text: t(old ? 'fpSaved' : 'fpCreated') };
       render();
     }).catch(fpErr);
   }
@@ -4565,14 +3829,12 @@
       .map(x => ({ x, tour: tourById(x.tid) })).filter(o => o.tour && !o.tour.closed && msOf(o.tour.reg ? o.tour.reg.startAt : o.tour.start) > nowMs() - 86400000 * 3)
       .sort((a, b) => msOf(a.tour.reg && a.tour.reg.startAt) - msOf(b.tour.reg && b.tour.reg.startAt));
     const editing = ui.editProfile;
-    const myBk = myBookings(m.uid);
     return `
       ${privacyAlert()}
       ${certAlerts()}
-      ${bookingAlerts()}
+      ${noticeAlerts()}
       ${verifyNotice()}
       ${banNotice('tour')}
-      ${banNotice('book')}
       <div class="page-head"><h1><i class="ti ti-user" aria-hidden="true"></i> ${esc(personName(m))}</h1>
         <p class="meta"><span class="badge g-${m.gender}">${esc(t(m.gender === 'F' ? 'female' : 'male'))}</span> <span class="muted">${esc(m.email)}</span></p>
         ${(S().nicks || {})[m.uid] ? `<p class="muted small">${esc(t('nickShownAs', { n: S().nicks[m.uid] }))}</p>` : ''}</div>
@@ -4588,17 +3850,11 @@
         <div class="stat"><span>${esc(t('totalPoints'))}</span><strong>${fmtPts(total)}</strong></div>
         <div class="stat"><span>${esc(t('reward'))}</span><strong>${rw ? `${rw.icon} ${esc(t('rw_' + rw.key))}` : '—'}</strong>
           ${next ? `<small class="muted">${esc(t('rewardNext', { n: Number(th[next[0]]) - played, r: t('rw_' + next[0]) }))} ${next[1]}</small>` : ''}</div>
-        ${bookRewardStat(m.uid)}
       </div>
       ${myStatsCard()}
       ${myTrainingCard()}
       ${myReceiptsCard()}
       ${privacyCard()}
-      <div class="card">
-        <h2><i class="ti ti-calendar-time" aria-hidden="true"></i> ${esc(t('bkMyNext'))}</h2>
-        ${myBk.length ? `<ul class="reg-list">${myBk.map(bookingItem).join('')}</ul>` : `<p class="muted">${esc(t('bkNoMine'))}</p>`}
-        <a class="btn" href="#/book">${esc(t('bkGo'))} →</a>
-      </div>
       <div class="card">
         <h2><i class="ti ti-calendar-event" aria-hidden="true"></i> ${esc(t('myRegistrations'))}</h2>
         ${upcoming.length ? `<ul class="reg-list">${upcoming.map(({ x, tour }) => {
@@ -5328,8 +4584,6 @@
         <p class="muted small">${esc(t('rpIntro'))}</p><a class="btn primary" href="#/report">${esc(t('rpTitle'))} →</a></div>` : ''}
       ${admin() ? `<div class="card"><h2><i class="ti ti-cash-register" aria-hidden="true"></i> ${esc(t('payAdminTitle'))}</h2>
         <p class="muted small">${esc(t('payAdminIntro'))}</p><a class="btn primary" href="#/payments">${esc(t('payAdminTitle'))} →</a></div>` : ''}
-      ${admin() ? `<div class="card"><h2><i class="ti ti-layout-grid" aria-hidden="true"></i> ${esc(t('courtsManage'))} (${(S().courts || []).length})</h2>
-        <p class="muted small">${esc(t('courtsIntro'))}</p><a class="btn primary" href="#/courts">${esc(t('courtsManage'))} →</a></div>` : ''}
       ${tourAdmin() ? rewardsCard() : ''}
       ${tourAdmin() ? scorersCard() : ''}
       ${admin() ? `
@@ -5886,7 +5140,7 @@
     [list[i], list[j]] = [list[j], list[i]];
   }
 
-  const actions = Object.assign({}, trActions, occActions, payActions, statActions, privacyActions, reportActions, cassaActions, {
+  const actions = Object.assign({}, trActions, occActions, payActions, privacyActions, reportActions, cassaActions, {
     'fp-leave': el => {
       const fp = fpById(el.dataset.id), m = member();
       if (!fp || !m) return;
@@ -5948,57 +5202,6 @@
       window.Cloud.closeSearch(sr.id, psApps(sr.id)).then(() => { ui.flash = { text: t('psClosed') }; render(); }).catch(psErr);
     },
     'ps-register': el => { const sr = psById(el.dataset.id); if (sr) psRegister(sr); },
-    'ch-apply': el => {
-      const c = chById(el.dataset.id), m = member();
-      if (!c || !m) return;
-      if (!canPlay()) return warn(banOf(m.uid).book ? 'banBookMsg' : 'verifyFirst');
-      if (chMissing(c, m.gender) < 1) return warn('chNoSpot');
-      window.Cloud.applyChallenge(c, personLabel(m), m.gender).then(() => { ui.flash = { text: t('chApplied') }; render(); }).catch(chErr);
-    },
-    'ch-app': el => {
-      const a = (S().chapps || []).find(x => x.id === el.dataset.id), c = a && chById(a.cid);
-      if (!a || !c) return;
-      if (el.dataset.v === 'accepted' && chMissing(c, a.gender) < 1) return warn('chNoSpotFor', { g: t(a.gender === 'F' ? 'female' : 'male').toLowerCase() });
-      if (el.dataset.v === 'declined' && a.status === 'accepted' && !confirmed('chRemoveConfirm', { n: a.name })) return;
-      window.Cloud.setAppStatus(a.id, el.dataset.v).then(() => render()).catch(chErr);
-    },
-    'ch-revoke': el => {
-      const a = (S().chapps || []).find(x => x.id === el.dataset.id), c = a && chById(a.cid);
-      if (!a || !c || !confirmed('chRevokeConfirm')) return;
-      window.Cloud.revokeApp(a, c, c.status === 'started' && a.status === 'accepted').then(() => { ui.flash = { text: t('chRevokedOk') }; render(); }).catch(chErr);
-    },
-    'ch-ack': el => window.Cloud.deleteApp(el.dataset.id).then(() => render()).catch(chErr),
-    'ch-keep': el => {
-      const c = chById(el.dataset.id);
-      if (!c) return;
-      window.Cloud.updateChallenge(c.id, { holdUntil: 0 }).then(() => Promise.all(chApps(c).filter(a => a.status === 'revoked').map(a => window.Cloud.deleteApp(a.id))))
-        .then(() => { ui.flash = { text: t('chKept') }; render(); }).catch(chErr);
-    },
-    'ch-release': el => {
-      const c = chById(el.dataset.id);
-      if (!c || !confirmed('chReleaseConfirm')) return;
-      window.Cloud.releaseChallenge(c).then(() => Promise.all(chApps(c).filter(a => a.status === 'revoked').map(a => window.Cloud.deleteApp(a.id))))
-        .then(() => { ui.flash = { text: t('chReleased') }; render(); }).catch(chErr);
-    },
-    'ch-start': el => { const c = chById(el.dataset.id); if (c) chStart(c); },
-    'ch-alt-ok': el => {
-      const c = chById(el.dataset.id);
-      if (!c || !c.alt) return;
-      window.Cloud.updateChallenge(c.id, { alt: Object.assign({}, c.alt, { ok: [...new Set((c.alt.ok || []).concat(myUid()))] }) }).then(() => { ui.flash = { text: t('chAltConfirmed') }; render(); }).catch(chErr);
-    },
-    'ch-alt-book': el => { const c = chById(el.dataset.id); if (c) chBookAlt(c); },
-    'ch-alt-cancel': el => window.Cloud.updateChallenge(el.dataset.id, { alt: null }).then(() => render()).catch(chErr),
-    'ch-delete': el => {
-      const c = chById(el.dataset.id);
-      if (!c || !confirmed('chDeleteConfirm')) return;
-      window.Cloud.deleteChallenge(c, chApps(c)).then(() => { ui.flash = { text: t('chDeleted') }; render(); }).catch(chErr);
-    },
-    'ch-guest-del': el => {
-      const c = chById(el.dataset.id);
-      if (!c) return;
-      const guests = (c.guests || []).filter((g, i) => i !== Number(el.dataset.i));
-      window.Cloud.updateChallenge(c.id, { guests }).then(() => render()).catch(chErr);
-    },
     'verify-resend': () => {
       // al massimo un invio al minuto (Firebase blocca gli invii troppo ravvicinati)
       if (Date.now() < (ui.verifyWait || 0)) return warn('verifyWait', { s: Math.ceil((ui.verifyWait - Date.now()) / 1000) });
@@ -6007,48 +5210,7 @@
         .catch(e => warn(e.code === 'auth/too-many-requests' ? 'verifyTooMany' : 'verifyMailFail', { code: e.code || e.message }));
     },
     'verify-check': () => window.Cloud.checkVerified().then(ok => { if (ok) { ui.flash = { text: t('verifyOk') }; render(); } else warn('verifyNotYet'); }),
-    'bk-day': el => { ui.bookDate = addDays(ui.bookDate || todayStr(), Number(el.dataset.delta)); render(); },
-    'bk-band': el => { ui.bookBand = el.dataset.band; render(); },
-    'bk-slot': el => {
-      if (!(member() || admin())) { location.hash = '#/settings'; return warn('bkLoginFirst'); }
-      slotClick(el.dataset.court, el.dataset.t);
-    },
-    'bk-clear': () => { ui.bkSel = null; render(); },
-    'bk-shorter': () => { const x = ui.bkSel; if (x && toMin(x.to) - toMin(x.from) - 30 >= minBook()) { x.to = addMin(x.to, -30); render(); } },
-    'bk-longer': () => { const x = ui.bkSel; if (x && selFree(x.courtId, x.date, x.from, addMin(x.to, 30), x.editId)) { x.to = addMin(x.to, 30); render(); } },
-    'booking-open': el => {
-      const b = (S().bookings || []).find(x => x.id === el.dataset.id);
-      if (!b || !(admin() || b.userId === myUid())) return;
-      ui.bkSel = { courtId: b.courtId, date: b.date, from: b.from, to: b.to, editId: b.id, userId: b.guest ? null : b.userId, blocked: b.blocked || '', guest: b.guest || '' };
-      ui.bookDate = b.date;
-      if (!location.hash.startsWith('#/book')) location.hash = '#/book'; else render();
-      setTimeout(() => { const x = document.querySelector('.book-summary'); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80);
-    },
-    'booking-confirm': () => confirmBooking(),
-    'booking-delete': el => removeBooking(el.dataset.id),
     'notice-dismiss': el => { S().notices = (S().notices || []).filter(n => n.id !== el.dataset.id); window.Cloud.dismissNotice(el.dataset.id); render(); },
-    'court-add': () => { S().courts = (S().courts || []).concat(Store.normCourt({ id: Store.uid('c'), name: `${t('bkCourt')} ${(S().courts || []).length + 1}` })); commit(); },
-    'court-delete': el => {
-      if (!confirmed('courtDeleteConfirm')) return;
-      S().courts = (S().courts || []).filter(c => c.id !== el.dataset.id);
-      (S().recurring || []).filter(r => r.courtId === el.dataset.id).forEach(r => window.Cloud.deleteRecurring(r).catch(() => {}));
-      commit(t('saved'));
-    },
-    'recurring-delete': el => {
-      const r = (S().recurring || []).find(x => x.id === el.dataset.id);
-      if (!r || !confirmed('recurringDeleteConfirm', { c: courtName(r.courtId), d: dayName(r.dow), a: r.from, b: r.to })) return;
-      window.Cloud.deleteRecurring(r).then(() => { ui.flash = { text: t('saved') }; render(); }).catch(e => warn('regError', { code: e.code || e.message }));
-    },
-    'court-copy': el => {
-      const f = el.closest('form');
-      [2, 3, 4, 5, 6, 7].forEach(n => {
-        f.elements['open' + n].checked = f.elements.open1.checked;
-        f.elements['from' + n].value = f.elements.from1.value;
-        f.elements['to' + n].value = f.elements.to1.value;
-      });
-      // senza ridisegnare la pagina (gli orari copiati vanno ancora salvati)
-      if (!f.querySelector('.flash')) { const fl = document.createElement('div'); fl.className = 'flash ok'; fl.textContent = t('courtCopied'); f.prepend(fl); }
-    },
     'set-theme': el => setTheme(el.dataset.themeId),
     'set-design': el => setDesign(el.dataset.designId),
     'cal-view': el => { ui.calView = el.dataset.view; render(); },
@@ -6387,39 +5549,6 @@
       window.Cloud.applyPartner(sr.id, d).then(() => { (ui.keep || {})['psa-' + sr.id] = false; ui.flash = { text: t(m ? 'psAppliedMember' : 'psAppliedGuest') }; render(); })
         .catch(e => { btn.disabled = false; psErr(e); });
     },
-    'ch-create': f => chCreate(f),
-    'ch-guest': f => {
-      const c = chById(f.dataset.id);
-      if (!c) return;
-      const g = { first: f.first.value.trim(), last: f.last.value.trim(), gender: f.gender.value };
-      if (!g.first || !g.last || !g.gender) return warn('errRegFields');
-      if (chMissing(c, g.gender) < 1) return warn('chNoSpotFor', { g: t(g.gender === 'F' ? 'female' : 'male').toLowerCase() });
-      window.Cloud.updateChallenge(c.id, { guests: (c.guests || []).concat(g) }).then(() => { ui.flash = { text: t('chGuestAdded') }; render(); }).catch(chErr);
-    },
-    'court-save': f => {
-      const c = courtById(f.id.value);
-      if (!c) return;
-      const hours = {};
-      for (let n = 1; n <= 7; n++) {
-        const o = { open: f.elements['open' + n].checked, from: f.elements['from' + n].value, to: f.elements['to' + n].value };
-        if (o.open && o.to <= o.from) return warn('courtHoursErr', { d: dayName(n) });
-        hours[n] = o;
-      }
-      Object.assign(c, { name: f.name.value.trim() || c.name, visible: f.visible.checked, hours });
-      commit(t('saved'));
-    },
-    'recurring-add': f => addRecurringForm(f),
-    'booking-settings': f => {
-      if (Number(f.minHours.value) > Number(f.maxHours.value)) return warn('bkMinMax');
-      S().booking = { minHours: Number(f.minHours.value) || 0.5, maxHours: Number(f.maxHours.value) || 2, maxPerDay: Math.max(1, parseInt(f.maxPerDay.value, 10) || 1), daysAhead: Math.max(1, parseInt(f.daysAhead.value, 10) || 7) };
-      commit(t('saved'));
-    },
-    'book-rewards-save': f => {
-      const th = {};
-      REWARDS.forEach(([k]) => { const v = parseInt(f[k].value, 10); if (v > 0) th[k] = v; });
-      S().bookRewards = th;
-      commit(t('saved'));
-    },
     'tour-create': f => {
       const d = readRegForm(f);
       if (d.err) return warn(d.err);
@@ -6613,7 +5742,7 @@
   });
 
   // Azioni consentite a tutti; le altre solo agli amministratori.
-  const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'cal-view', 'toggle-past', 'logout', 'reset-password', 'close-dialog', 'bk-day', 'bk-band', 'bk-slot', 'bk-clear', 'bk-shorter', 'bk-longer']);
+  const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'cal-view', 'toggle-past', 'logout', 'reset-password', 'close-dialog']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
   const TOUR_ACTIONS = new Set(['eope-download', 'eope-send', 'eope-add', 'eope-remove', 'toggle-visible', 'vis-group', 'vis-all', 'gs-nums-reset', 'notice-edit', 'notice-cancel', 'notice-clear', 'reg-import', 'reg-reopen', 'reg-state', 'reg-confirm', 'reg-open-start', 'reg-unconfirm', 'reg-remove', 'reg-wait-add', 'entry-edit-open', 'entry-edit-cancel', 'import-entries', 'template-entries', 'sort-entries', 'entry-move', 'set-wc', 'remove-entry', 'lock-entries', 'unlock-entries', 'gen-qual', 'skip-qual', 'reset-qual', 'close-qual', 'reopen-qual', 'main-move', 'sort-main', 'lock-main', 'unlock-main', 'start-main', 'gen-bracket', 'auto-fill-bracket', 'clear-bracket-slots', 'reset-main', 'close-tournament', 'reopen-tournament', 'delete-tournament', 'edit-match', 'escore-open', 'escore-reset', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'scorer-remove', 'escore-approve', 'escore-reopen', 'match-clear', 'match-reopen', 'import-ranking', 'template-ranking', 'merge-pair', 'edit-player', 'cancel-edit-player', 'delete-player', 'new-category', 'delete-category', 'add-row', 'del-row', 'gs-add-row']);
   const TOUR_FORMS = new Set(['tour-create', 'tour-reg-edit', 'reg-open-legacy', 'tournament-new', 'tournament-edit', 'entry-edit', 'entry-add', 'wc-add', 'player-save', 'merge-players', 'category-save', 'scorer-add', 'rewards-save', 'notice-save']);
@@ -6622,8 +5751,8 @@
   const CASH_FORMS = new Set(['ca-save']);
   const SCORER_ACTIONS = new Set(['escore-open', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip']);
   const PUBLIC_FORMS = new Set(['login', 'register', 'ps-apply']);
-  const MEMBER_ACTIONS = new Set(['reg-cancel', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'booking-open', 'booking-confirm', 'booking-delete', 'notice-dismiss', 'ch-apply', 'ch-app', 'ch-revoke', 'ch-ack', 'ch-keep', 'ch-release', 'ch-start', 'ch-alt-ok', 'ch-alt-book', 'ch-alt-cancel', 'ch-delete', 'ch-guest-del', 'ps-accept', 'ps-decline', 'ps-revoke', 'ps-close', 'ps-register', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'st-period', 'st-ref', 'privacy-accept', 'my-data', 'delete-request']);
-  const MEMBER_FORMS = new Set(['reg-signup', 'profile-save', 'ch-create', 'ch-guest', 'ps-open', 'fp-join', 'fp-blocks']);
+  const MEMBER_ACTIONS = new Set(['reg-cancel', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'ps-accept', 'ps-decline', 'ps-revoke', 'ps-close', 'ps-register', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request']);
+  const MEMBER_FORMS = new Set(['reg-signup', 'profile-save', 'ps-open', 'fp-join', 'fp-blocks']);
   let submitMode = 'save';
 
   // reminder delle prenotazioni: la prima pagina si aggiorna ogni minuto (compaiono e spariscono da soli)
@@ -6672,23 +5801,9 @@
       case 'pay-period': el.form.amount.value = el.value === 'quarter' ? el.dataset.q : el.dataset.m; break;
       case 'fp-all': if (el.checked) el.form.querySelectorAll('[name=lv]:not([value=all])').forEach(x => { x.checked = false; }); break;
       case 'fp-lv': { const any = [...el.form.querySelectorAll('[name=lv]:not([value=all])')].some(x => x.checked); el.form.querySelector('[name=lv][value=all]').checked = !any; break; }
-      case 'ch-type': ui.chType = el.value; ui.chFormOpen = true; render(); break;
-      case 'bk-date': if (el.value) { ui.bookDate = el.value; render(); } break;
-      case 'bk-np': if (ui.bkSel) { ui.bkSel.np = +el.value; ui.bkSel.players = (ui.bkSel.players || []).slice(0, ui.bkSel.np); render(); } break;
-      case 'bk-pl': if (ui.bkSel) { (ui.bkSel.players = ui.bkSel.players || [])[+el.dataset.i] = el.value; render(); } break;
-      case 'bk-rem': if (ui.bkSel) { ui.bkSel.remind = +el.value; render(); } break;
-      case 'bk-user': if (ui.bkSel) { ui.bkSel.userId = el.value || null; if (el.value) { ui.bkSel.blocked = ''; ui.bkSel.guest = ''; } render(); } break;
-      case 'bk-guest': if (ui.bkSel) { ui.bkSel.guest = el.value.trim(); if (ui.bkSel.guest) { ui.bkSel.userId = null; ui.bkSel.blocked = ''; } render(); } break;
-      case 'bk-blocked': if (ui.bkSel) { ui.bkSel.blocked = el.value.trim(); if (ui.bkSel.blocked) { ui.bkSel.userId = null; ui.bkSel.guest = ''; } render(); } break;
-      // cassa: ricevuta a scelta solo per i contanti; prenotazione da scegliere per la quota del campo
       case 'ca-method': {
         const fm = el.form, cash = el.value === 'cash';
         fm.querySelector('.ca-rc').hidden = !cash; fm.querySelector('.ca-rc-note').hidden = cash;
-        break;
-      }
-      case 'ca-cat': {
-        const bk = el.closest('.ca-line').querySelector('[name=bk]');
-        if (bk) bk.hidden = el.value !== 'q_court';
         break;
       }
       case 'role': {
