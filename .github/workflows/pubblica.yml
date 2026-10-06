@@ -26,10 +26,10 @@ jobs:
   pubblica:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
       - name: Pubblica Manofuori Cup
         env:
           CHIAVE: ${{ secrets.FIREBASE_SA_MANOFUORI }}
@@ -40,5 +40,17 @@ jobs:
           printf '%s' "$CHIAVE" > "$RUNNER_TEMP/chiave.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/chiave.json"
           grep -o 'v=[0-9]*' index.html | head -1
-          npx --yes firebase-tools deploy --only hosting,firestore:rules --project "$PROGETTO" --non-interactive
+          set +e
+          npx --yes firebase-tools deploy --only hosting,firestore:rules --project "$PROGETTO" --non-interactive 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          ESITO=${PIPESTATUS[0]}
+          set -e
           rm -f "$RUNNER_TEMP/chiave.json"
+          if [ "$ESITO" -ne 0 ]; then
+            if grep -q "403" "$RUNNER_TEMP/deploy.log"; then
+              echo "::error::Permessi mancanti (403): in Google Cloud → IAM (progetto $PROGETTO) dai all'account firebase-adminsdk i ruoli 'Amministratore Firebase' e 'Consumer di Service Usage', poi rilancia."
+            else
+              MSG=$(grep -m1 'Error:' "$RUNNER_TEMP/deploy.log" | sed 's/\x1b\[[0-9;]*m//g')
+              echo "::error::${MSG:-Pubblicazione non riuscita: vedi il log del passo Pubblica}"
+            fi
+            exit "$ESITO"
+          fi
