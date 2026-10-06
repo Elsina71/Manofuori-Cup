@@ -13,7 +13,7 @@ cartella `beach-plus-arena`), con tutte le stesse funzioni; per ora ha un solo *
 
 Cerca `DA_COMPILARE` nei file: sono i dati che mancano.
 - `js/firebase-config.js` e `.firebaserc`: dati del progetto Firebase di Manofuori Cup.
-- `firestore.rules`: UID dell'admin principale (`UID_ADMIN_DA_COMPILARE`) ed email degli admin generali.
+- `firestore.rules`: email degli admin generali (l'UID dell'admin principale è già inserito).
 - `js/legal.js` (privacy, cookie, termini), `index.html` (piè di pagina) e `ASSOC` in `js/app.js` (intestazione delle
   ricevute): nome, indirizzo, codice fiscale, partita IVA, email e sito dell'organizzatore.
 
