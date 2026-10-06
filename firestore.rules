@@ -1,0 +1,643 @@
+rules_version = '2';
+
+// Tutti possono leggere tornei, giocatori, tabelle e classifiche.
+// Solo gli utenti presenti nella raccolta "admins" (ID documento = UID) possono modificare.
+// La raccolta "admins" si gestisce solo dalla console Firebase.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ADMIN GENERALE: accesso e scrittura su tutto. Sono gli account con queste email (confermate),
+    // l'account principale e gli eventuali altri inseriti nella raccolta "admins".
+    function isAdmin() {
+      return request.auth != null
+        && (request.auth.uid in ['UID_ADMIN_DA_COMPILARE']
+            || (request.auth.token.email is string && request.auth.token.email_verified == true
+                && request.auth.token.email.lower() in ['pierpaolomurgioni@gmail.com'])
+            || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+    // Ruoli assegnati dagli admin generali: roles/{uid} = { tour: admin tornei, cash: cassa }.
+    function hasRole(r) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/roles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.get(r, false) == true;
+    }
+    // ADMIN TORNEI: tornei, categorie e punti, giocatori e ranking, iscrizioni, referti e refertisti. Nient'altro.
+    function isTourAdmin() { return isAdmin() || hasRole('tour'); }
+    // CASSA: registra incassi ed emette ricevute.
+    function isCash() { return isAdmin() || hasRole('cash'); }
+
+    match /data/{docId} {
+      allow read: if true;
+      allow write: if (isAdmin() && docId in ['players', 'settings', 'tour', 'editorial1', 'editorial2'])
+        || (isTourAdmin() && docId in ['players', 'tour']);
+    }
+
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow write: if isTourAdmin();
+    }
+
+    match /roles/{uid} {
+      allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow list, write: if isAdmin();
+    }
+
+    // ---------- referto elettronico (E-scoresheet) ----------
+    // Account dei campi: scorers/{email}, gestiti dall'admin. Possono solo compilare i referti.
+    function isScorer() {
+      return request.auth != null && request.auth.token.email is string
+        && exists(/databases/$(database)/documents/scorers/$(request.auth.token.email.lower()));
+    }
+    function isStaff() { return isTourAdmin() || isScorer(); }
+    // Account del campo legato a un torneo (campo "tid"): scrive solo in quel torneo. Senza "tid": tutti i tornei.
+    function scorerFor(tid) {
+      return isScorer()
+        && get(/databases/$(database)/documents/scorers/$(request.auth.token.email.lower())).data.get('tid', '') in ['', tid];
+    }
+
+    // Il refertista scrive solo i campi previsti, non omologa e non cambia gara né squadre.
+    function scorerSets(fields) {
+      return request.resource.data.keys().hasOnly(fields)
+        && request.resource.data.status in ['ready', 'live', 'finished']
+        && request.resource.data.get('approvedAt', null) == null;
+    }
+    function sameMatch() {
+      return request.resource.data.tid == resource.data.tid && request.resource.data.key == resource.data.key
+        && request.resource.data.a == resource.data.a && request.resource.data.b == resource.data.b;
+    }
+    function rightId(id) { return id == request.resource.data.tid + '_' + request.resource.data.key; }
+
+    match /scorers/{email} {
+      allow get: if isTourAdmin() || (request.auth != null && request.auth.token.email is string && request.auth.token.email.lower() == email);
+      allow list, write: if isTourAdmin();
+    }
+
+    // referti/{torneo}_{gara}: un documento per gara con tutti i dati del referto (firme comprese).
+    match /referti/{id} {
+      allow read: if isStaff();
+      allow create: if isTourAdmin() || (scorerFor(request.resource.data.tid) && rightId(id) && scorerSets(['tid', 'key', 'a', 'b', 'court', 'info', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'json', 'createdBy', 'createdAt', 'updated', 'updatedBy', 'approvedAt', 'closedAt']));
+      allow update: if isTourAdmin() || (scorerFor(resource.data.tid) && resource.data.status in ['ready', 'live', 'finished'] && sameMatch()
+        && scorerSets(['tid', 'key', 'a', 'b', 'court', 'info', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'json', 'createdBy', 'createdAt', 'updated', 'updatedBy', 'approvedAt', 'closedAt']));
+      allow delete: if isTourAdmin();
+    }
+
+    // refertiPdf/{torneo}_{gara}[_n]: archivio dei PDF (anche in più parti se il file è grande).
+    match /refertiPdf/{id} {
+      allow read: if isStaff();
+      allow create, update: if (isTourAdmin() || scorerFor(request.resource.data.tid))
+        && request.resource.data.keys().hasOnly(['tid', 'key', 'ref', 'status', 'version', 'name', 'parts', 'part', 'data', 'updated']);
+      allow delete: if isTourAdmin();
+    }
+
+    // live/{torneo}_{gara}: punteggio in diretta, pubblico (senza dati personali né firme).
+    match /live/{id} {
+      allow read: if true;
+      allow create: if isTourAdmin() || (scorerFor(request.resource.data.tid) && rightId(id) && scorerSets(['tid', 'key', 'a', 'b', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'updated', 'approvedAt']));
+      allow update: if isTourAdmin() || (scorerFor(resource.data.tid) && resource.data.status in ['ready', 'live', 'finished'] && sameMatch()
+        && scorerSets(['tid', 'key', 'a', 'b', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'updated', 'approvedAt']));
+      allow delete: if isTourAdmin();
+    }
+
+    // ---------- utenti registrati, iscrizioni, messaggi ----------
+    function isMember() {
+      return request.auth != null && exists(/databases/$(database)/documents/members/$(request.auth.uid));
+    }
+    function person(p) {
+      return p is map && p.keys().hasOnly(['uid', 'first', 'last', 'gender'])
+        && p.first is string && p.first.size() > 0 && p.first.size() <= 60
+        && p.last is string && p.last.size() > 0 && p.last.size() <= 60
+        && p.gender in ['M', 'F'];
+    }
+    function tour(tid) { return get(/databases/$(database)/documents/tournaments/$(tid)).data; }
+    // Email dell'account confermata (link ricevuto dopo la registrazione): serve per iscriversi e prenotare.
+    // ... oppure confermato a mano dall'admin (verified/{uid}), per chi non riceve l'email o è registrato dall'admin.
+    function verified() {
+      return request.auth != null && (request.auth.token.email_verified == true
+        || exists(/databases/$(database)/documents/verified/$(request.auth.uid)));
+    }
+    // Lista nera decisa dall'admin: bans/{uid} con tour (iscrizioni ai tornei) e book (prenotazioni dei campi).
+    function banned(uid, what) {
+      return exists(/databases/$(database)/documents/bans/$(uid))
+        && get(/databases/$(database)/documents/bans/$(uid)).data.get(what, false) == true;
+    }
+
+    // Profilo del giocatore: nome, cognome, sesso. Lo scrive solo il titolare; lo leggono gli utenti collegati.
+    match /members/{uid} {
+      allow read: if isAdmin() || isTourAdmin() || isCash() || isMember() || (request.auth != null && request.auth.uid == uid);
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['first', 'last', 'gender', 'created', 'privacyAt', 'privacyVer', 'deleteReq'])
+        && request.resource.data.first is string && request.resource.data.first.size() > 0 && request.resource.data.first.size() <= 60
+        && request.resource.data.last is string && request.resource.data.last.size() > 0 && request.resource.data.last.size() <= 60
+        && request.resource.data.gender in ['M', 'F'];
+      allow delete: if isAdmin();
+      // l'admin registra direttamente un utente
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly(['first', 'last', 'gender', 'created', 'privacyAt', 'privacyVer', 'deleteReq'])
+        && request.resource.data.gender in ['M', 'F'];
+    }
+
+    // Conferma a mano dell'utente da parte dell'admin (vale come email confermata).
+    match /verified/{uid} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    // Iscrizione di una squadra: l'utente iscrive sé stesso (p1) e il compagno (p2, registrato o no),
+    // solo con le iscrizioni aperte e prima della scadenza. Si cancella fino a 24 ore dall'inizio.
+    match /registrations/{id} {
+      allow read: if true;
+      allow create: if isTourAdmin() || (isMember() && verified() && !banned(request.auth.uid, 'tour')
+        && (request.resource.data.p2.get('uid', null) == null || !banned(request.resource.data.p2.uid, 'tour'))
+        && request.resource.data.keys().hasOnly(['tid', 'by', 'uids', 'p1', 'p2', 'created'])
+        && request.resource.data.by == request.auth.uid
+        && person(request.resource.data.p1) && person(request.resource.data.p2)
+        && request.resource.data.p1.uid == request.auth.uid
+        && request.resource.data.uids == (request.resource.data.p2.get('uid', null) == null
+              ? [request.auth.uid] : [request.auth.uid, request.resource.data.p2.uid])
+        && tour(request.resource.data.tid).get('regOpen', false) == true
+        && request.time.toMillis() < tour(request.resource.data.tid).get('regClose', 0));
+      allow delete: if isTourAdmin() || (request.auth != null && request.auth.uid in resource.data.uids
+        && request.time.toMillis() < tour(resource.data.tid).get('startMs', 0) - 86400000);
+      allow update: if isTourAdmin();
+    }
+
+    // ---------- cerco compagno/a ----------
+    // psearch/{tid_uid}: ricerca pubblica (nome di chi cerca, livello e ruolo cercati, numero di candidature n).
+    // papps/{sid_k}: candidature, anche di chi non ha l'account; le leggono solo chi cerca (owner), l'admin
+    // e il candidato registrato. Solo con le iscrizioni del torneo aperte.
+    function ps(sid) { return get(/databases/$(database)/documents/psearch/$(sid)).data; }
+    function regOpenFor(tid) {
+      return tour(tid).get('regOpen', false) == true && request.time.toMillis() < tour(tid).get('regClose', 0);
+    }
+    function txt(v, max) { return v is string && v.size() <= max; }
+
+    match /psearch/{sid} {
+      allow read: if true;
+      allow create: if isMember() && verified() && !banned(request.auth.uid, 'tour')
+        && request.resource.data.keys().hasOnly(['tid', 'by', 'name', 'gender', 'pg', 'level', 'role', 'status', 'n', 'act', 'acc', 'lastRev', 'created'])
+        && sid == request.resource.data.tid + '_' + request.auth.uid && request.resource.data.by == request.auth.uid
+        && request.resource.data.status == 'open' && request.resource.data.n == 0 && request.resource.data.act == 0 && request.resource.data.acc == null
+        && txt(request.resource.data.name, 80) && request.resource.data.gender in ['M', 'F'] && request.resource.data.pg in ['M', 'F']
+        && request.resource.data.level in ['start', 'inter', 'high', 'pro', 'any'] && request.resource.data.role in ['def', 'block', 'any']
+        && regOpenFor(request.resource.data.tid);
+      allow update: if isAdmin()
+        || (request.auth != null && resource.data.by == request.auth.uid && request.resource.data.by == resource.data.by
+            && request.resource.data.tid == resource.data.tid)
+        // nuova candidatura: numero progressivo e candidature attive salgono di uno insieme alla candidatura numero n
+        || (resource.data.status == 'open' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['n', 'act'])
+            && request.resource.data.n == resource.data.n + 1 && request.resource.data.act == resource.data.get('act', 0) + 1
+            && existsAfter(/databases/$(database)/documents/papps/$(sid + '_' + string(request.resource.data.n))))
+        // il candidato registrato si ritira (lastRev = la sua candidatura, ritirata nello stesso invio):
+        // le candidature attive scendono di uno; se era quella accettata la ricerca si riapre
+        || (request.auth != null && request.resource.data.get('lastRev', '') != ''
+            && get(/databases/$(database)/documents/papps/$(request.resource.data.lastRev)).data.get('uid', null) == request.auth.uid
+            && get(/databases/$(database)/documents/papps/$(request.resource.data.lastRev)).data.sid == sid
+            && get(/databases/$(database)/documents/papps/$(request.resource.data.lastRev)).data.status in ['pending', 'accepted']
+            && getAfter(/databases/$(database)/documents/papps/$(request.resource.data.lastRev)).data.status == 'revoked'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['act', 'lastRev', 'status', 'acc'])
+            && request.resource.data.act == resource.data.get('act', 0) - 1
+            && (request.resource.data.get('acc', null) == resource.data.get('acc', null)
+                || (resource.data.get('acc', null) == request.resource.data.lastRev && request.resource.data.acc == null && request.resource.data.status == 'open'))
+            && (request.resource.data.status == resource.data.status || request.resource.data.status == 'open'));
+      allow delete: if isAdmin() || (request.auth != null && resource.data.by == request.auth.uid);
+    }
+
+    match /papps/{id} {
+      allow read: if isAdmin() || (request.auth != null
+        && (resource.data.owner == request.auth.uid || resource.data.get('uid', null) == request.auth.uid));
+      allow create: if request.resource.data.keys().hasOnly(['sid', 'k', 'owner', 'tid', 'uid', 'first', 'last', 'gender', 'level', 'role', 'contact', 'status', 'at'])
+        && id == request.resource.data.sid + '_' + string(request.resource.data.k)
+        && getAfter(/databases/$(database)/documents/psearch/$(request.resource.data.sid)).data.n == request.resource.data.k
+        && ps(request.resource.data.sid).status == 'open'
+        && request.resource.data.owner == ps(request.resource.data.sid).by
+        && request.resource.data.tid == ps(request.resource.data.sid).tid
+        && request.resource.data.gender == ps(request.resource.data.sid).pg
+        && request.resource.data.status == 'pending'
+        && txt(request.resource.data.first, 60) && request.resource.data.first.size() > 0
+        && txt(request.resource.data.last, 60) && request.resource.data.last.size() > 0
+        && txt(request.resource.data.contact, 80)
+        && request.resource.data.level in ['none', 'start', 'inter', 'high', 'pro'] && request.resource.data.role in ['def', 'block', 'any']
+        && (request.resource.data.uid == null
+            || (request.auth != null && request.resource.data.uid == request.auth.uid && request.auth.uid != request.resource.data.owner
+                && !banned(request.auth.uid, 'tour')))
+        && regOpenFor(request.resource.data.tid);
+      allow update: if isAdmin()
+        // chi cerca accetta o rifiuta
+        || (request.auth != null && resource.data.owner == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+            && request.resource.data.status in ['accepted', 'declined'])
+        // il candidato registrato ritira la candidatura
+        || (request.auth != null && resource.data.get('uid', null) == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+            && resource.data.status in ['pending', 'accepted'] && request.resource.data.status == 'revoked');
+      allow delete: if isAdmin() || (request.auth != null && resource.data.owner == request.auth.uid);
+    }
+
+    // Messaggi dell'admin: li legge solo chi è tra i destinatari (o tutti gli utenti registrati se "all").
+    match /messages/{id} {
+      allow read: if isAdmin()
+        || (request.auth != null && request.auth.uid in resource.data.get('to', []))
+        || (resource.data.get('all', false) == true && isMember());
+      allow write: if isAdmin();
+    }
+
+    // Email dell'account: la vedono solo il titolare e l'admin.
+    match /accounts/{uid} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow write: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['email', 'verified'])
+        && request.resource.data.email == request.auth.token.email.lower()
+        && request.resource.data.get('verified', false) == (request.auth.token.email_verified == true);
+      allow create: if isAdmin() && request.resource.data.keys().hasOnly(['email', 'verified']) && request.resource.data.verified == false;
+      allow delete: if isAdmin();   // eliminazione dell'utente (diritto alla cancellazione)
+    }
+
+    // Messaggi già letti da ciascun utente.
+    match /inbox/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /bans/{uid} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    // ---------- prenotazione dei campi ----------
+    // Ogni mezz'ora prenotata ha due documenti con lo stesso ID (giorno_campo_ora), scritti insieme:
+    //   busy/{id}      pubblico, solo "occupato" (nessun nome, nessun motivo);
+    //   bookings/{id}  privato: chi ha prenotato o il motivo del blocco (solo titolare e admin).
+    // Se lo slot è già di un altro la scrittura è rifiutata. Ognuno gestisce solo i propri slot; l'admin tutto.
+    // Gli slot dei blocchi ricorrenti (weekly) non si possono prenotare.
+    function bk(id) { return /databases/$(database)/documents/bookings/$(id); }
+    function bz(id) { return /databases/$(database)/documents/busy/$(id); }
+    function dowOf(d) {
+      let p = d.split('-');
+      return timestamp.date(int(p[0]), int(p[1]), int(p[2])).dayOfWeek();
+    }
+    function weeklyFree(c, d, start) {
+      return !exists(/databases/$(database)/documents/weekly/$(c + '_' + string(dowOf(d)) + '_' + start));
+    }
+    // Durata minima decisa dall'admin (minuti, in data/settings); orari "HH:MM".
+    function mins(hm) { return int(hm.split(':')[0]) * 60 + int(hm.split(':')[1]); }
+    function minBook() { return get(/databases/$(database)/documents/data/settings).data.get('minMinutes', 30); }
+    function validSlot(id) {
+      let x = request.resource.data;
+      return x.keys().hasOnly(['courtId', 'date', 'start', 'from', 'to', 'gid', 'userId', 'blocked', 'first', 'ch'])
+        && (!('ch' in x) || get(/databases/$(database)/documents/challenges/$(x.ch)).data.by == request.auth.uid)
+        && x.courtId is string && x.date is string && x.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && id == x.date + '_' + x.courtId + '_' + x.start
+        && x.from <= x.start && x.start < x.to
+        && mins(x.to) - mins(x.from) >= minBook()
+        && x.userId == request.auth.uid && x.blocked == ''
+        && weeklyFree(x.courtId, x.date, x.start)
+        && existsAfter(bz(id));
+    }
+    function canBook() { return isMember() && verified() && !banned(request.auth.uid, 'book'); }
+
+    match /bookings/{id} {
+      allow read: if isAdmin() || isCash() || (request.auth != null && resource.data.userId == request.auth.uid);
+      allow write: if isAdmin();
+      allow create: if canBook() && validSlot(id);
+      allow update: if canBook() && resource.data.userId == request.auth.uid && validSlot(id);
+      allow delete: if request.auth != null && !existsAfter(bz(id))
+        && (resource.data.userId == request.auth.uid
+            || (resource.data.get('ch', '') != '' && chExpired(resource.data.ch) && chMember(resource.data.ch)));
+    }
+
+    // bkplayers/{gid}: chi gioca nella prenotazione e quando mandare il reminder. La scrive chi ha prenotato
+    // (il primo slot della prenotazione deve essere suo); la leggono lui, gli invitati e l'admin.
+    function ownsBooking(d, gid) {
+      return exists(/databases/$(database)/documents/bookings/$(d.date + '_' + d.courtId + '_' + d.from))
+        && get(/databases/$(database)/documents/bookings/$(d.date + '_' + d.courtId + '_' + d.from)).data.userId == request.auth.uid
+        && get(/databases/$(database)/documents/bookings/$(d.date + '_' + d.courtId + '_' + d.from)).data.gid == gid;
+    }
+    match /bkplayers/{gid} {
+      allow read: if isAdmin() || (request.auth != null && (resource.data.by == request.auth.uid || request.auth.uid in resource.data.uids));
+      allow create, update: if isAdmin() || (isMember() && request.resource.data.by == request.auth.uid
+        && request.resource.data.gid == gid
+        && request.resource.data.keys().hasOnly(['gid', 'by', 'ownerName', 'date', 'from', 'to', 'courtId', 'courtName', 'uids', 'names', 'remind', 'updated'])
+        && request.resource.data.uids is list && request.resource.data.uids.size() <= 7
+        && !(request.auth.uid in request.resource.data.uids)
+        && request.resource.data.remind in [30, 60, 120, 180, 360, 720, 1440]
+        && ownsBooking(request.resource.data, gid));
+      allow delete: if isAdmin() || (request.auth != null && resource.data.by == request.auth.uid);
+    }
+
+    // Parte pubblica: deve corrispondere alla prenotazione privata scritta nello stesso invio.
+    match /busy/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasOnly(['courtId', 'date', 'start', 'from', 'to', 'gid'])
+        && existsAfter(bk(id))
+        && getAfter(bk(id)).data.userId == request.auth.uid
+        && getAfter(bk(id)).data.courtId == request.resource.data.courtId
+        && getAfter(bk(id)).data.date == request.resource.data.date
+        && getAfter(bk(id)).data.start == request.resource.data.start
+        && getAfter(bk(id)).data.from == request.resource.data.from
+        && getAfter(bk(id)).data.to == request.resource.data.to
+        && getAfter(bk(id)).data.gid == request.resource.data.gid;
+      allow delete: if request.auth != null && exists(bk(id)) && !existsAfter(bk(id))
+        && (get(bk(id)).data.userId == request.auth.uid
+            || (get(bk(id)).data.get('ch', '') != '' && chExpired(get(bk(id)).data.ch) && chMember(get(bk(id)).data.ch)));
+    }
+
+    // ---------- sfide ----------
+    // challenges/{cid}: la sfida del proponente ("by"). chapps/{cid_uid}: candidature. Partecipanti: proponente e accettati.
+    // Le leggono gli utenti registrati e l'admin. Dopo la revoca di un giocatore il proponente ha un'ora
+    // (holdUntil) per confermare la prenotazione; scaduta, qualsiasi partecipante può cancellarla.
+    function ch(cid) { return get(/databases/$(database)/documents/challenges/$(cid)).data; }
+    function chMember(cid) {
+      return request.auth != null && (ch(cid).by == request.auth.uid
+        || (exists(/databases/$(database)/documents/chapps/$(cid + '_' + request.auth.uid))
+            && get(/databases/$(database)/documents/chapps/$(cid + '_' + request.auth.uid)).data.status == 'accepted'));
+    }
+    function chExpired(cid) { return ch(cid).get('holdUntil', 0) > 0 && request.time.toMillis() > ch(cid).holdUntil; }
+    function canPlay() { return isMember() && verified() && !banned(request.auth.uid, 'book'); }
+    function onlyKeys(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+
+    match /challenges/{cid} {
+      allow read: if isAdmin() || isMember();
+      allow create: if (canPlay() || isAdmin())
+        && request.resource.data.keys().hasOnly(['by', 'byName', 'type', 'level', 'date', 'from', 'dur', 'needM', 'needF', 'guests', 'note', 'status', 'book', 'alt', 'holdUntil', 'created'])
+        && request.resource.data.by == request.auth.uid && request.resource.data.status == 'open'
+        && request.resource.data.type in ['M', 'F', 'X'] && request.resource.data.level in ['start', 'inter', 'high', 'pro', 'any']
+        && request.resource.data.needM is int && request.resource.data.needF is int
+        && request.resource.data.needM >= 0 && request.resource.data.needF >= 0 && request.resource.data.needM + request.resource.data.needF <= 20
+        && request.resource.data.guests is list && request.resource.data.guests.size() <= 20;
+      allow update: if isAdmin()
+        || (request.auth != null && resource.data.by == request.auth.uid && request.resource.data.by == resource.data.by)
+        // i partecipanti confermano l'orario alternativo o, dopo una revoca, fanno partire l'ora di tempo
+        || (chMember(cid) && onlyKeys(['alt', 'holdUntil']))
+        // scaduta l'ora: la prenotazione si cancella e la sfida si riapre
+        || (chMember(cid) && resource.data.get('holdUntil', 0) > 0 && request.time.toMillis() > resource.data.holdUntil
+            && onlyKeys(['status', 'book', 'holdUntil']) && request.resource.data.status == 'open' && request.resource.data.book == null);
+      allow delete: if isAdmin() || (request.auth != null && resource.data.by == request.auth.uid);
+    }
+
+    match /chapps/{id} {
+      allow read: if isAdmin() || isMember();
+      allow create: if canPlay()
+        && request.resource.data.keys().hasOnly(['cid', 'uid', 'name', 'gender', 'status', 'at', 'date'])
+        && request.resource.data.uid == request.auth.uid && id == request.resource.data.cid + '_' + request.auth.uid
+        && request.resource.data.status == 'pending' && request.resource.data.gender in ['M', 'F']
+        && request.resource.data.name is string && request.resource.data.name.size() <= 80
+        && ch(request.resource.data.cid).by != request.auth.uid
+        && ch(request.resource.data.cid).date == request.resource.data.date;
+      allow update: if isAdmin()
+        // il candidato può solo revocare
+        || (request.auth != null && resource.data.uid == request.auth.uid && onlyKeys(['status', 'revokedAt']) && request.resource.data.status == 'revoked')
+        // il proponente accetta o declina
+        || (request.auth != null && ch(resource.data.cid).by == request.auth.uid && onlyKeys(['status']) && request.resource.data.status in ['accepted', 'declined']);
+      allow delete: if isAdmin() || (request.auth != null
+        // il candidato non cancella la propria candidatura (la revoca, così il proponente ne è avvisato)
+        && (!exists(/databases/$(database)/documents/challenges/$(resource.data.cid))
+            || ch(resource.data.cid).by == request.auth.uid));
+    }
+
+    // ---------- gioco libero ----------
+    // freeplay/{id}: sessione creata dall'admin; pubblici solo i contatori m/f dei partecipanti.
+    // fpreg/{id_uid}: partecipazione dell'utente registrato (nomi visibili solo all'admin e all'interessato).
+    // Contatore e partecipazione cambiano insieme: +1 quando si entra, -1 quando ci si cancella.
+    // Iscrizione e cancellazione fino a un'ora prima dell'inizio (startMs).
+    function fpr(fid) { return /databases/$(database)/documents/fpreg/$(fid + '_' + request.auth.uid); }
+    function fpIn(fid) { return exists(fpr(fid)) && get(fpr(fid)).data.status == 'in'; }
+    function fpInAfter(fid) { return existsAfter(fpr(fid)) && getAfter(fpr(fid)).data.status == 'in'; }
+    function fpKey(fid) { return getAfter(fpr(fid)).data.gender == 'F' ? 'f' : 'm'; }
+
+    match /freeplay/{fid} {
+      allow read: if true;
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['name', 'date', 'from', 'to', 'startMs', 'endMs', 'levels', 'nCourts', 'courts', 'blocks', 'm', 'f', 'by', 'created'])
+        && request.resource.data.startMs is int
+        && request.resource.data.m == 0 && request.resource.data.f == 0;
+      allow delete: if isAdmin();
+      allow update: if isAdmin()
+        || (request.auth != null && existsAfter(fpr(fid))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([fpKey(fid)])
+            && ((fpInAfter(fid) && !fpIn(fid) && request.resource.data[fpKey(fid)] == resource.data.get(fpKey(fid), 0) + 1)
+                || (!fpInAfter(fid) && fpIn(fid) && request.resource.data[fpKey(fid)] == resource.data.get(fpKey(fid), 0) - 1)));
+    }
+
+    match /fpreg/{id} {
+      // ognuno legge solo la propria partecipazione (anche prima che esista: l'id finisce con il suo uid)
+      allow get: if isAdmin() || (request.auth != null && id.matches('.*_' + request.auth.uid));
+      allow list: if isAdmin() || (request.auth != null && resource.data.uid == request.auth.uid);
+      allow delete: if isAdmin();
+      allow create, update: if isAdmin() || (isMember() && verified()
+        && request.resource.data.keys().hasOnly(['fid', 'uid', 'name', 'gender', 'level', 'status', 'at', 'outAt', 'n', 'bl', 'anon'])
+        && request.resource.data.uid == request.auth.uid
+        && id == request.resource.data.fid + '_' + request.auth.uid
+        && request.resource.data.gender == get(/databases/$(database)/documents/members/$(request.auth.uid)).data.gender
+        && request.resource.data.status in ['in', 'out']
+        && request.resource.data.level in ['none', 'start', 'inter', 'high', 'pro']
+        && request.resource.data.name is string && request.resource.data.name.size() <= 80
+        && request.resource.data.get('bl', []) is list && request.resource.data.get('bl', []).size() <= 24
+        && exists(/databases/$(database)/documents/freeplay/$(request.resource.data.fid))
+        // ci si iscrive, ci si cancella e si cambiano i blocchi fino a un'ora prima dell'inizio
+        && request.time.toMillis() < get(/databases/$(database)/documents/freeplay/$(request.resource.data.fid)).data.startMs - 3600000
+        // sessione a blocchi: chi partecipa sceglie almeno un blocco
+        && (request.resource.data.status == 'out' || !get(/databases/$(database)/documents/freeplay/$(request.resource.data.fid)).data.get('blocks', false)
+            || request.resource.data.get('bl', []).size() > 0)
+        && (
+          // entrata o uscita: il contatore pubblico del proprio sesso cambia nello stesso invio
+          (getAfter(/databases/$(database)/documents/freeplay/$(request.resource.data.fid)).data[request.resource.data.gender == 'F' ? 'f' : 'm']
+             == get(/databases/$(database)/documents/freeplay/$(request.resource.data.fid)).data[request.resource.data.gender == 'F' ? 'f' : 'm']
+                + (request.resource.data.status == 'in' ? 1 : -1)
+           && (resource == null ? request.resource.data.status == 'in' : resource.data.status != request.resource.data.status)
+           // all'uscita sparisce anche la presenza anonima nei blocchi
+           && (request.resource.data.status == 'in' || resource.data.get('anon', '') == ''
+               || !existsAfter(/databases/$(database)/documents/fpanon/$(resource.data.anon))))
+          // cambio dei soli blocchi, restando dentro
+          || (resource != null && resource.data.status == 'in' && request.resource.data.status == 'in'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bl']))
+        ));
+    }
+
+    // fpanon/{id}: presenza anonima nei blocchi (sesso e blocchi, senza nome né uid). Copia esatta della propria
+    // partecipazione (fpreg.anon == id): si scrive solo insieme a lei e sparisce quando si esce.
+    function fpra(fid) { return getAfter(fpr(fid)).data; }
+    match /fpanon/{aid} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasOnly(['fp', 'g', 'bl', 'date'])
+        && (resource == null || resource.data.fp == request.resource.data.fp)
+        && existsAfter(fpr(request.resource.data.fp))
+        && fpra(request.resource.data.fp).get('anon', '') == aid
+        && fpra(request.resource.data.fp).status == 'in'
+        && fpra(request.resource.data.fp).get('bl', []) == request.resource.data.bl
+        && fpra(request.resource.data.fp).gender == request.resource.data.g
+        && request.resource.data.date == get(/databases/$(database)/documents/freeplay/$(request.resource.data.fp)).data.date;
+      // solo la propria (la partecipazione puntava a questa presenza) e solo uscendo o cambiandola
+      allow delete: if isAdmin() || (request.auth != null && exists(fpr(resource.data.fp))
+        && get(fpr(resource.data.fp)).data.get('anon', '') == aid
+        && (!existsAfter(fpr(resource.data.fp)) || fpra(resource.data.fp).get('anon', '') != aid || fpra(resource.data.fp).status == 'out'));
+    }
+
+    // ---------- allenamenti ----------
+    // trainings: pubblici (giorno, orari, coach, livello, massimo, campi); li scrive solo l'admin.
+    // coaches/{uid}: coach indicato dall'admin (all = vede tutti gli allenamenti, altrimenti solo i suoi).
+    // athletes/{uid}: scheda corsista con dati personali: solo admin e interessato (in lettura).
+    // groups/{tid_mese}: nomi del gruppo: admin e coach (tutti o solo i gruppi dei suoi allenamenti).
+    // plans/{uid_mese}: piano e prezzo del mese: admin e interessato (in lettura).
+    function coachDoc() { return /databases/$(database)/documents/coaches/$(request.auth.uid); }
+    function isCoach() { return request.auth != null && exists(coachDoc()); }
+    match /trainings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /coaches/{uid} {
+      allow get: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow list, write: if isAdmin();
+    }
+    match /athletes/{uid} {
+      allow get: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow list, write: if isAdmin();
+    }
+    match /groups/{id} {
+      allow read: if isAdmin() || (isCoach() && (get(coachDoc()).data.get('all', false) == true || resource.data.coachUid == request.auth.uid));
+      allow write: if isAdmin();
+    }
+    match /plans/{id} {
+      allow read: if isAdmin() || (request.auth != null && resource.data.uid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+    // packs/{id}: pacchetto di allenamenti (numero, prezzo, usati): admin e interessato (in lettura).
+    match /packs/{id} {
+      allow read: if isAdmin() || (request.auth != null && resource.data.uid == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // ---------- presenze e spot ----------
+    // occ/{tid_data}: pubblico (p presenti, a assenti, s spot confermati, cancelled). Il corsista cambia solo p e a,
+    //   e solo insieme alla propria risposta att/{tid_data_uid} (contatori coerenti con il cambio di risposta).
+    // att e spots: li leggono l'admin, l'interessato e il coach (tutti o solo i suoi allenamenti, campo coachUid).
+    function occP(oid) { return /databases/$(database)/documents/occ/$(oid); }
+    function attP(oid) { return /databases/$(database)/documents/att/$(oid + '_' + request.auth.uid); }
+    function stBefore(oid) { return exists(attP(oid)) ? get(attP(oid)).data.status : 'none'; }
+    function stAfter(oid) { return existsAfter(attP(oid)) ? getAfter(attP(oid)).data.status : 'none'; }
+    function cnt(oid, k, st) { return (stAfter(oid) == st ? 1 : 0) - (stBefore(oid) == st ? 1 : 0); }
+    function occBefore(oid, k) { return exists(occP(oid)) ? get(occP(oid)).data.get(k, 0) : 0; }
+    function occCountsOk(oid) {
+      return existsAfter(occP(oid))
+        && getAfter(occP(oid)).data.p == occBefore(oid, 'p') + cnt(oid, 'p', 'in')
+        && getAfter(occP(oid)).data.a == occBefore(oid, 'a') + cnt(oid, 'a', 'out');
+    }
+    function seesTraining(d) {
+      return request.auth != null && (d.uid == request.auth.uid
+        || (isCoach() && (get(coachDoc()).data.get('all', false) == true || d.coachUid == request.auth.uid)));
+    }
+    function trCoach(tid) { return get(/databases/$(database)/documents/trainings/$(tid)).data.get('coachUid', ''); }
+    function inGroup(tid, date, uid) {
+      return exists(/databases/$(database)/documents/groups/$(tid + '_' + date[0:7]))
+        && get(/databases/$(database)/documents/groups/$(tid + '_' + date[0:7])).data.uids.hasAny([uid]);
+    }
+    match /occ/{oid} {
+      allow read: if true;
+      allow write: if isAdmin();
+      allow create: if isMember() && verified()
+        && request.resource.data.keys().hasOnly(['tid', 'date', 'p', 'a', 's', 'cancelled'])
+        && oid == request.resource.data.tid + '_' + request.resource.data.date
+        && request.resource.data.s == 0 && request.resource.data.cancelled == false
+        && occCountsOk(oid);
+      allow update: if isMember() && verified()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['p', 'a'])
+        && occCountsOk(oid);
+    }
+    // occfree/{tid_data}: posti spot liberi decisi dall'admin (il numero lo vede solo l'admin; in occ resta "open").
+    match /occfree/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /att/{id} {
+      // la propria anche prima che esista (l'id finisce con il proprio uid)
+      allow get: if isAdmin() || (request.auth != null && id.matches('.*_' + request.auth.uid)) || (resource != null && seesTraining(resource.data));
+      allow list: if isAdmin() || seesTraining(resource.data);
+      allow write: if isAdmin();
+      allow create, update: if isMember() && verified()
+        && request.resource.data.keys().hasOnly(['tid', 'date', 'uid', 'status', 'at', 'coachUid'])
+        && request.resource.data.uid == request.auth.uid
+        && id == request.resource.data.tid + '_' + request.resource.data.date + '_' + request.auth.uid
+        && request.resource.data.status in ['in', 'out']
+        && request.resource.data.coachUid == trCoach(request.resource.data.tid)
+        && int(request.resource.data.date[8:10]) <= 28   // il 5° giorno del mese è fuori abbonamento (solo spot)
+        && inGroup(request.resource.data.tid, request.resource.data.date, request.auth.uid)
+        && occCountsOk(request.resource.data.tid + '_' + request.resource.data.date);
+    }
+    match /spots/{id} {
+      // la propria anche prima che esista (l'id finisce con il proprio uid)
+      allow get: if isAdmin() || (request.auth != null && id.matches('.*_' + request.auth.uid)) || (resource != null && seesTraining(resource.data));
+      allow list: if isAdmin() || seesTraining(resource.data);
+      allow write: if isAdmin();
+      // candidatura: solo "in attesa", per sé, non per un allenamento del proprio gruppo né annullato
+      allow create: if isMember() && verified()
+        && request.resource.data.keys().hasOnly(['tid', 'date', 'uid', 'name', 'status', 'at', 'seen', 'coachUid', 'from'])
+        && request.resource.data.uid == request.auth.uid
+        && id == request.resource.data.tid + '_' + request.resource.data.date + '_' + request.auth.uid
+        && request.resource.data.status == 'pending' && request.resource.data.seen == false
+        && request.resource.data.name is string && request.resource.data.name.size() <= 80
+        && request.resource.data.coachUid == trCoach(request.resource.data.tid)
+        && (int(request.resource.data.date[8:10]) > 28 || !inGroup(request.resource.data.tid, request.resource.data.date, request.auth.uid))
+        && !(exists(occP(request.resource.data.tid + '_' + request.resource.data.date))
+             && get(occP(request.resource.data.tid + '_' + request.resource.data.date)).data.get('cancelled', false) == true);
+      // l'interessato segna come letto l'esito, o ritira la candidatura ancora in attesa
+      allow update: if request.auth != null && resource.data.uid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seen']);
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid && resource.data.status == 'pending';
+    }
+
+    // ---------- ricevute ----------
+    // Ricevute: serie Q (quote sociali) e C (commerciali). La cassa le emette; correggerle o annullarle spetta all'admin generale.
+    match /receipts/{id} {
+      allow read: if isCash() || (request.auth != null && resource.data.uid == request.auth.uid);
+      allow create: if isCash() && request.resource.data.by == request.auth.uid
+        && request.resource.data.series in ['Q', 'C'] && request.resource.data.void == false;
+      allow update, delete: if isAdmin();
+    }
+    // incassi/{id}: registro di tutti gli incassi (anche senza ricevuta) per il resoconto mensile.
+    match /incassi/{id} {
+      allow read: if isCash();
+      allow create: if isCash() && request.resource.data.by == request.auth.uid && request.resource.data.void == false;
+      allow update, delete: if isAdmin();
+    }
+    // tesserati/{uid}: dati per l'intestazione delle ricevute (nome, nascita, residenza, codice fiscale, stagioni),
+    // senza certificato né pagamenti. La legge la cassa; la scrive solo l'admin generale (copia delle schede).
+    match /tesserati/{uid} {
+      allow read: if isCash();
+      allow write: if isAdmin();
+    }
+    // bkpaid/{gid}: prenotazione del campo pagata (quota sociale).
+    match /bkpaid/{gid} {
+      allow read, create: if isCash();
+      allow update, delete: if isAdmin();
+    }
+    match /counters/{id} {
+      allow read, write: if isCash();
+    }
+
+    // Blocchi ricorrenti: il motivo lo vede solo l'admin; gli orari occupati (weekly) sono pubblici.
+    match /recurring/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /weekly/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Avvisi di prenotazioni modificate o cancellate. L'utente scrive solo agli amministratori ("admins").
+    match /notices/{id} {
+      allow read: if request.auth != null && (resource.data.to == request.auth.uid || (resource.data.to == 'admins' && isAdmin()));
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['to', 'text', 'at', 'by'])
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.text is string && request.resource.data.text.size() <= 400
+        && request.resource.data.to is string && (isAdmin() || request.resource.data.to == 'admins');
+      allow delete: if request.auth != null && (resource.data.to == request.auth.uid || (resource.data.to == 'admins' && isAdmin()));
+    }
+
+    // Chi è admin lo decide solo il database: l'app chiede il documento "probe" (o il proprio) e,
+    // se la lettura è permessa, l'utente è admin. Nessun UID nel codice pubblico.
+    match /admins/{uid} {
+      allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow list, write: if false;
+    }
+  }
+}

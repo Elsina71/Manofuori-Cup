@@ -1,0 +1,44 @@
+# Pubblicazione automatica di Manofuori Cup su Firebase Hosting (sito + regole del database).
+# Parte da sola quando cambia "main" (cioè quando si unisce una PR);
+# si può anche lanciare a mano da GitHub: scheda Actions → "Pubblica l'app" → Run workflow.
+# Serve il secret del repository (Settings → Secrets and variables → Actions):
+#   FIREBASE_SA_MANOFUORI  chiave JSON dell'account di servizio del progetto Firebase di Manofuori Cup
+# L'ID del progetto si legge da .firebaserc: finché è DA_COMPILARE la pubblicazione viene saltata.
+name: Pubblica l'app
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'referto/README.md'
+      - 'pubblica-manofuori.bat'
+  workflow_dispatch:
+
+concurrency:
+  group: pubblica
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  pubblica:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Pubblica Manofuori Cup
+        env:
+          CHIAVE: ${{ secrets.FIREBASE_SA_MANOFUORI }}
+        run: |
+          PROGETTO=$(node -p "require('./.firebaserc').projects.default")
+          if [ "$PROGETTO" = "DA_COMPILARE" ]; then echo "::warning::Progetto Firebase non ancora configurato (.firebaserc): pubblicazione saltata"; exit 0; fi
+          if [ -z "$CHIAVE" ]; then echo "::error::Manca il secret FIREBASE_SA_MANOFUORI (vedi istruzioni in cima a questo file)"; exit 1; fi
+          printf '%s' "$CHIAVE" > "$RUNNER_TEMP/chiave.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/chiave.json"
+          grep -o 'v=[0-9]*' index.html | head -1
+          npx --yes firebase-tools deploy --only hosting,firestore:rules --project "$PROGETTO" --non-interactive
+          rm -f "$RUNNER_TEMP/chiave.json"
