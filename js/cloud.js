@@ -1090,15 +1090,15 @@ function watchLive(tids) {
 const EMPTY = { status: 'ready', sets: [], setsWon: { a: 0, b: 0 }, cur: null, serving: null, winner: null, outcome: null, approvedAt: null };
 
 async function openReferto(tid, key, a, b, court, info) {
-  if (!isAdmin && !scorer) throw Object.assign(new Error('permission-denied'), { code: 'permission-denied' });
+  if (!canTour() && !scorer) throw Object.assign(new Error('permission-denied'), { code: 'permission-denied' });
   const id = `${tid}_${key}`;
   const ref = await getDoc(doc(db, 'referti', id));
   const now = Date.now();
   if (ref.exists()) {
     const r = ref.data();
-    // Referto di un sorteggio precedente (squadre diverse): lo azzera solo l'admin.
+    // Referto di un sorteggio precedente (squadre diverse): lo azzera solo l'admin (generale o tornei).
     if (r.a !== a || r.b !== b) {
-      if (!isAdmin) throw Object.assign(new Error('stale'), { code: 'stale' });
+      if (!canTour()) throw Object.assign(new Error('stale'), { code: 'stale' });
       await resetReferto(id);
     } else {
       // dati della gara aggiornati (orario, campo...) finché non è omologata
@@ -1115,14 +1115,14 @@ async function openReferto(tid, key, a, b, court, info) {
 
 // Chiavi delle gare di un torneo con punteggio in diretta o referto (solo admin).
 async function matchDocKeys(tid) {
-  if (!isAdmin) return new Set();
+  if (!canTour()) return new Set();
   const [a, b] = await Promise.all([getDocs(query(collection(db, 'live'), where('tid', '==', tid))), getDocs(query(collection(db, 'referti'), where('tid', '==', tid)))]);
   return new Set(a.docs.concat(b.docs).map(d => d.data().key));
 }
 
-// Solo admin: cancella referto, punteggio pubblico e PDF archiviati di una gara.
+// Solo admin (generale o tornei): cancella referto, punteggio pubblico e PDF archiviati di una gara.
 async function resetReferto(id) {
-  if (!isAdmin) return;
+  if (!canTour()) return;
   const pdfs = await getDocs(query(collection(db, 'refertiPdf'), where('ref', '==', id)));
   const batch = writeBatch(db);
   batch.delete(doc(db, 'referti', id));
@@ -1133,7 +1133,7 @@ async function resetReferto(id) {
 
 // Omologa / riapertura decise dall'admin: stato uguale nel referto e nel punteggio pubblico.
 function setLiveStatus(id, status) {
-  if (!isAdmin) return Promise.resolve();
+  if (!canTour()) return Promise.resolve();
   const data = { status, approvedAt: status === 'approved' ? Date.now() : null, updated: Date.now() };
   const batch = writeBatch(db);
   batch.set(doc(db, 'live', id), data, { merge: true });
@@ -1145,7 +1145,7 @@ function setLiveStatus(id, status) {
 // referti: un documento per gara; refertiPdf (part 0): i file PDF archiviati, senza contenuto.
 let refUnsub = [], refTid = null;
 function watchReferti(tid) {
-  if (!(isAdmin || scorer)) tid = null;
+  if (!(canTour() || scorer)) tid = null;
   if (tid === refTid) return;
   refUnsub.forEach(u => u()); refUnsub = [];
   refTid = tid;

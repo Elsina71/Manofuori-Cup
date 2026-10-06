@@ -5,7 +5,7 @@
 import { initializeApp } from '../../vendor/firebase/firebase-app.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, getDocs, writeBatch,
-  onSnapshot, collection, query, where, connectFirestoreEmulator
+  onSnapshot, collection, query, where, updateDoc, connectFirestoreEmulator
 } from '../../vendor/firebase/firebase-firestore.js';
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, connectAuthEmulator
@@ -40,6 +40,8 @@ async function resolveUser(u) {
   // admin: lo decide il database (admins/probe è leggibile soltanto da un admin)
   let admin = false;
   try { await getDoc(doc(db, 'admins', 'probe')); admin = true; } catch (e) { admin = false; }
+  // admin tornei (ruolo "tour" dato dall'admin generale): apre e compila i referti come l'admin
+  if (!admin) { try { const r = await getDoc(doc(db, 'roles', u.uid)); admin = r.exists() && r.data().tour === true; } catch (e) { /* nessun ruolo */ } }
   if (admin) return { email, role: 'admin' };
   try {
     const sc = await getDoc(doc(db, 'scorers', email));
@@ -116,5 +118,11 @@ async function listPdf(tid) {
   return snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
 }
 
-window.RefCloud = { whoami, login, logout, load, push, watch, list, savePdf, loadPdf, listPdf };
+// Gara dei tornei a squadre (vmatches/{torneo}_{gara}): alla chiusura del referto il risultato entra nella gara,
+// come se l'avesse inserito a mano l'admin o lo scorer (set { h, a }, stato "done").
+function result(id, sets, extra) {
+  return updateDoc(doc(db, 'vmatches', id), Object.assign({ sets, status: 'done', by: (who && who.email) || '', updated: Date.now() }, extra || {}));
+}
+
+window.RefCloud = { whoami, login, logout, load, push, watch, list, savePdf, loadPdf, listPdf, result };
 window.dispatchEvent(new Event('refcloud-ready'));

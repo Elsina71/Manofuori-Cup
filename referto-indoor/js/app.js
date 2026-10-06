@@ -287,7 +287,9 @@
           ${field('Punteggio massimo (0 = nessuno)', 's.cap', S.cap, `type="number" min="0" max="60" ${locked ? 'readonly' : ''}`)}
           ${field('Time-out per set', 's.timeoutsPerSet', S.timeoutsPerSet, `type="number" min="0" max="5" ${locked ? 'readonly' : ''}`)}
           ${field('Sostituzioni per set', 's.subsPerSet', S.subsPerSet, `type="number" min="0" max="20" ${locked ? 'readonly' : ''}`)}
-          ${field('Donne in campo, minimo (0 = nessun controllo)', 's.minWomen', S.minWomen, `type="number" min="0" max="6" ${locked ? 'readonly' : ''}`)}
+          ${S.minWomen && typeof S.minWomen === 'object'
+            ? `<label class="field"><span>Donne in campo, minimo</span><input value="${esc(`${teamName(m, 'A')}: ${R.minWomenOf(S, 'A')} · ${teamName(m, 'B')}: ${R.minWomenOf(S, 'B')}`)}" readonly></label>`
+            : field('Donne in campo, minimo (0 = nessun controllo)', 's.minWomen', S.minWomen, `type="number" min="0" max="6" ${locked ? 'readonly' : ''}`)}
         </div>
         <p class="muted small">Regole FIVB: al meglio dei 5, set a 25, quinto set a 15, 2 time-out e 6 sostituzioni per set.</p>
       </section>
@@ -318,7 +320,7 @@
         const n = (k, d) => { const v = parseInt(get('s.' + k), 10); return isNaN(v) ? d : v; };
         m.settings = {
           mode: get('s.mode') === 'fixed' ? 'fixed' : 'best', sets: n('sets', 5), points: n('points', 25), lastPoints: n('lastPoints', 15),
-          cap: n('cap', 0), timeoutsPerSet: n('timeoutsPerSet', 2), subsPerSet: n('subsPerSet', 6), minWomen: n('minWomen', 2)
+          cap: n('cap', 0), timeoutsPerSet: n('timeoutsPerSet', 2), subsPerSet: n('subsPerSet', 6), minWomen: m.settings.minWomen && typeof m.settings.minWomen === 'object' ? m.settings.minWomen : n('minWomen', 2)
         };
       }
     };
@@ -350,7 +352,8 @@
       if (m.teams[tm].players.some(p => p.name && (p.no === '' || p.no == null))) return `${teamName(m, tm)}: manca il numero di maglia di un giocatore.`;
       if (r.filter(p => !p.libero).length < 6) return `${teamName(m, tm)}: servono almeno 6 giocatori (liberi esclusi).`;
       if (r.filter(p => p.libero).length > 2) return `${teamName(m, tm)}: al massimo 2 liberi.`;
-      if (S.minWomen && r.filter(p => p.gender === 'F').length < S.minWomen) return `${teamName(m, tm)}: servono almeno ${S.minWomen} donne a referto, libero compreso (indica D/U per ogni giocatore).`;
+      const mw = R.minWomenOf(S, tm);
+      if (mw && r.filter(p => p.gender === 'F').length < mw) return `${teamName(m, tm)}: servono almeno ${mw} donne a referto, libero compreso (indica D/U per ogni giocatore).`;
     }
     if (!m.teams.A.name || !m.teams.B.name) return 'Inserisci il nome delle due squadre.';
     return null;
@@ -433,12 +436,12 @@
     document.getElementById('goBtn').onclick = () => {
       const S = R.settingsOf(m);
       // il libero donna può essere una delle donne: entra in seconda linea prima del primo servizio
-      const short = S.minWomen ? ['A', 'B'].filter(tm => womenIn(m, tm, L.lineup[tm]) + (liberi(m, tm).some(n => isWoman(m, tm, n) && !stateOf(m).barredMatch[tm][n]) ? 1 : 0) < S.minWomen) : [];
+      const short = ['A', 'B'].filter(tm => R.minWomenOf(S, tm) && womenIn(m, tm, L.lineup[tm]) + (liberi(m, tm).some(n => isWoman(m, tm, n) && !stateOf(m).barredMatch[tm][n]) ? 1 : 0) < R.minWomenOf(S, tm));
       const start = () => {
         const toss = L.needsToss ? { winner: L.winner, choice: L.choice, otherChoice: L.otherChoice } : null;
         addEvent(m, { type: 'setStart', serving: L.serving, left: L.left, lineup: { A: L.lineup.A.slice(), B: L.lineup.B.slice() }, toss });
       };
-      if (short.length) confirmBox('Donne in campo', `${short.map(tm => esc(teamName(m, tm))).join(' e ')}: meno di ${S.minWomen} donne in formazione. Iniziare comunque?`, 'Inizia', start);
+      if (short.length) confirmBox('Donne in campo', `${short.map(tm => `${esc(teamName(m, tm))} (minimo ${R.minWomenOf(S, tm)})`).join(' e ')}: meno donne del minimo in formazione. Iniziare comunque?`, 'Inizia', start);
       else start();
     };
   }
@@ -476,7 +479,7 @@
           <button class="btn small" data-sub="${tm}">Cambio ${set.regSubs[tm]}/${S.subsPerSet}</button>
           ${liberi(m, tm).length ? `<button class="btn small ${set.libero[tm] ? 'lib-on' : ''}" data-lib="${tm}">Libero${set.libero[tm] ? ' ' + set.libero[tm].no : ''}</button>` : ''}
           ${setPoint ? '<span class="badge warn">Set point</span>' : ''}
-          ${S.minWomen && womenIn(m, tm, R.visibleCourt(set, tm)) < S.minWomen ? `<span class="badge women">⚠ ${womenIn(m, tm, R.visibleCourt(set, tm))} donne in campo</span>` : ''}
+          ${R.minWomenOf(S, tm) && womenIn(m, tm, R.visibleCourt(set, tm)) < R.minWomenOf(S, tm) ? `<span class="badge women">⚠ ${womenIn(m, tm, R.visibleCourt(set, tm))} donne in campo</span>` : ''}
         </div>
       </section>`;
     };
@@ -560,8 +563,9 @@
     }
     a.filter(x => x.type === 'liberoOut' && x.reason !== 'manual').forEach(x => {
       const S = st.settings, set = st.cur;
-      const w = set && S.minWomen ? womenIn(m, x.team, R.visibleCourt(set, x.team)) : null;
-      toast(`${teamName(m, x.team)}: il libero ${x.libero} esce, rientra il n. ${x.back}${w != null && w < S.minWomen ? ` · ⚠ ${w} donne in campo` : ''}`);
+      const mw = R.minWomenOf(S, x.team);
+      const w = set && mw ? womenIn(m, x.team, R.visibleCourt(set, x.team)) : null;
+      toast(`${teamName(m, x.team)}: il libero ${x.libero} esce, rientra il n. ${x.back}${w != null && w < mw ? ` · ⚠ ${w} donne in campo` : ''}`);
     });
     if (has('mustSub')) {
       const x = has('mustSub');
@@ -634,9 +638,9 @@
         const ev = { type: 'sub', team: tm, out: sel.out, in: sel.inn, exceptional: sel.exc };
         const after = R.visibleCourt(set, tm).map(n => (n === sel.out ? sel.inn : n));
         const women = womenIn(m, tm, after);
-        if (S.minWomen && women < S.minWomen) {
+        if (R.minWomenOf(S, tm) && women < R.minWomenOf(S, tm)) {
           closeOverlay();
-          confirmBox('Donne in campo', `Dopo il cambio ${esc(teamName(m, tm))} avrebbe ${women} donne in campo (minimo ${S.minWomen}). Registrare comunque?`, 'Registra', () => addEvent(m, ev));
+          confirmBox('Donne in campo', `Dopo il cambio ${esc(teamName(m, tm))} avrebbe ${women} donne in campo (minimo ${R.minWomenOf(S, tm)}). Registrare comunque?`, 'Registra', () => addEvent(m, ev));
         } else { closeOverlay(); addEvent(m, ev); }
       };
     };
@@ -658,7 +662,7 @@
     const warnThen = (nos, ev) => {
       const w = womenAfter(nos);
       closeOverlay();
-      if (S.minWomen && w < S.minWomen) confirmBox('Donne in campo', `Dopo il cambio ${esc(teamName(m, tm))} avrebbe ${w} donne in campo (minimo ${S.minWomen}). Registrare comunque?`, 'Registra', () => addEvent(m, ev));
+      if (R.minWomenOf(S, tm) && w < R.minWomenOf(S, tm)) confirmBox('Donne in campo', `Dopo il cambio ${esc(teamName(m, tm))} avrebbe ${w} donne in campo (minimo ${R.minWomenOf(S, tm)}). Registrare comunque?`, 'Registra', () => addEvent(m, ev));
       else addEvent(m, ev);
     };
     const draw = () => {
@@ -767,7 +771,7 @@
     const cb = document.getElementById('closeBtn');
     if (cb) cb.onclick = () => confirmBox('Chiudere la gara?', 'Il referto viene bloccato e il risultato inviato. Dopo la chiusura non si può più modificare.', 'Chiudi gara', () => {
       m.closedAt = new Date().toISOString(); touch(m); render(); toast('Gara chiusa');
-      if (m.link) Cloud.archivePdf(m);
+      if (m.link) { Cloud.archivePdf(m); Cloud.sendResult(m); }
     });
   }
 
@@ -894,6 +898,9 @@
       })).then(ref => {
         let m = Object.values(db.matches).find(x => x.link && x.link.id === id);
         if (!m) { m = emptyMatch(); m.link = { id }; db.matches[m.id] = m; }
+        // gara di un torneo a squadre: alla chiusura il risultato va nella gara (vmatches)
+        m.link.vmatch = !!(ref.info && ref.info.vmatch);
+        m.link.stage = (ref.info && ref.info.stage) || '';
         if (ref.json) {
           try {
             const prev = JSON.parse(ref.json);
@@ -908,7 +915,8 @@
         console.warn(err);
         const local = Object.values(db.matches).find(x => x.link && x.link.id === id);
         if (local) { go(viewFor(local), local.id); return; }  // senza rete si continua con i dati sul dispositivo
-        $app.innerHTML = `<section class="card center-card"><h2>${err && err.code === 'permission-denied' ? 'Accedi con l\'account del campo nell\'app del torneo' : err && err.code === 'not-found' ? 'Gara non trovata' : 'Nessuna connessione'}</h2><div class="row center"><button class="btn primary" onclick="location.reload()">↻ Riprova</button></div></section>`;
+        $app.innerHTML = `<section class="card center-card"><h2>${err && err.code === 'permission-denied' ? 'Accedi con l\'account del campo nell\'app del torneo' : err && err.code === 'not-found' ? 'Gara non trovata' : 'Nessuna connessione'}</h2><div class="row center"><button class="btn primary" id="retryBtn">↻ Riprova</button></div></section>`;
+        document.getElementById('retryBtn').onclick = () => location.reload();
       });
     }
     // PDF archiviato nell'app del torneo (refertiPdf/{id}) quando la gara si chiude
@@ -919,7 +927,17 @@
         return c.savePdf(m.link.id, { tid, key: rest.join('_'), status: m.closedAt ? 'finished' : 'live', version: `${m.closedAt || ''}:${m.events.length}`, name: f.name }, b64);
       }))).catch(err => console.warn('pdf', err));
     }
-    return { dot, schedule, open, applyInfo, archivePdf };
+    // Risultato nella gara del torneo a squadre (A = casa, B = ospiti)
+    function sendResult(m) {
+      if (!m.link || !m.link.vmatch) return Promise.resolve();
+      const st = stateOf(m);
+      if (st.phase !== 'matchEnd') return Promise.resolve();
+      const sets = st.sets.map(s => ({ h: s.score.A, a: s.score.B }));
+      return when().then(c => c.result(m.link.id, sets, m.link.stage === 'p' ? { golden: null } : null))
+        .then(() => toast('Risultato inviato al torneo'))
+        .catch(err => { console.warn(err); toast('Risultato non inviato al torneo: inseriscilo a mano o riprova'); });
+    }
+    return { dot, schedule, open, applyInfo, archivePdf, sendResult };
   })();
 
   // ---------- avvio ----------
