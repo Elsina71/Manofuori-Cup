@@ -14,7 +14,7 @@ service cloud.firestore {
                 && request.auth.token.email.lower() in ['pierpaolomurgioni@gmail.com'])
             || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
-    // Ruoli assegnati dagli admin generali: roles/{uid} = { tour: admin tornei, cash: cassa }.
+    // Ruoli assegnati dagli admin generali: roles/{uid} = { tour: admin tornei, cash: cassa, captain: capitano }.
     function hasRole(r) {
       return request.auth != null
         && exists(/databases/$(database)/documents/roles/$(request.auth.uid))
@@ -179,7 +179,8 @@ service cloud.firestore {
     }
 
     // ---------- squadre ----------
-    // teams/{id}: pubblico. Il capitano (utente registrato, email confermata, non in lista nera) la crea in attesa
+    // teams/{id}: pubblico. Il capitano (utente registrato abilitato dall'admin: roles.captain; email confermata,
+    //   non in lista nera) la crea in attesa
     //   (status "pending"); può cambiare nome e tipo sempre, il livello solo finché è in attesa; può ritirarla solo
     //   in attesa. L'ammissione (status "ok") e tutto il resto li decide l'admin tornei.
     // rosters/{id}: rosa (players: cognome, nome, sesso, numero di maglia): la leggono e scrivono il capitano e l'admin.
@@ -192,7 +193,7 @@ service cloud.firestore {
     match /teams/{id} {
       allow read: if true;
       allow write: if isTourAdmin();
-      allow create: if isMember() && verified() && !banned(request.auth.uid, 'tour')
+      allow create: if isMember() && verified() && hasRole('captain') && !banned(request.auth.uid, 'tour')
         && request.resource.data.keys().hasOnly(['name', 'level', 'kind', 'captainUid', 'captainName', 'status', 'created', 'updated'])
         && request.resource.data.captainUid == request.auth.uid
         && request.resource.data.status == 'pending'

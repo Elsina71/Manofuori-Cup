@@ -171,7 +171,10 @@ let rolesUnsub = null;
 function listenRoles() {
   if (rolesUnsub) { rolesUnsub(); rolesUnsub = null; }
   Store.applyRemote('roles', {});
-  if (!isAdmin) return;
+  if (!isAdmin) {
+    if (user && member) rolesUnsub = onSnapshot(doc(db, 'roles', user.uid), snap => { roles = snap.exists() ? snap.data() : {}; refresh(); }, () => {});
+    return;
+  }
   rolesUnsub = onSnapshot(collection(db, 'roles'), snap => {
     Store.applyRemote('roles', Object.fromEntries(snap.docs.map(d => [d.id, d.data()])));
     refresh();
@@ -329,6 +332,7 @@ async function register(data) {
   listenVerified();
   listenFreeplay();
   listenRosters();
+  listenRoles();
   refresh();
   return { mailErr };
 }

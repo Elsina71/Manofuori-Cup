@@ -9,6 +9,7 @@ await env.withSecurityRulesDisabled(async c => {
   const db = c.firestore();
   for (const u of ['cap', 'other']) await setDoc(doc(db, 'members', u), { first: 'A', last: 'B', gender: 'M' });
   await setDoc(doc(db, 'roles', 'org'), { tour: true });
+  await setDoc(doc(db, 'roles', 'cap'), { captain: true });
 });
 const cap = env.authenticatedContext('cap', { email_verified: true }).firestore();
 const other = env.authenticatedContext('other', { email_verified: true }).firestore();
@@ -19,6 +20,7 @@ let ok = 0, ko = 0;
 const t = async (name, p) => { try { await p; ok++; console.log('✔', name); } catch (e) { ko++; console.log('✘', name, e.message.slice(0, 120)); } };
 const batchSave = (db, id, tm, players, upd) => { const b = writeBatch(db); upd ? b.update(doc(db, 'teams', id), tm) : b.set(doc(db, 'teams', id), tm); b.set(doc(db, 'rosters', id), { captainUid: 'cap', players, updated: 2 }); return b.commit(); };
 await t('capitano crea squadra in attesa con rosa', assertSucceeds(batchSave(cap, 't1', team, [{ num: 7, last: 'R', first: 'M', g: 'M' }])));
+await t('utente registrato non abilitato come capitano: niente iscrizione', assertFails(setDoc(doc(other, 'teams', 't6'), { ...team, captainUid: 'other' })));
 await t('capitano non crea squadra già ammessa', assertFails(setDoc(doc(cap, 'teams', 't2'), { ...team, status: 'ok' })));
 await t('non si crea squadra per un altro capitano', assertFails(setDoc(doc(other, 'teams', 't3'), team)));
 await t('email non confermata: niente iscrizione', assertFails(setDoc(doc(env.authenticatedContext('other', { email_verified: false }).firestore(), 'teams', 't4'), { ...team, captainUid: 'other' })));

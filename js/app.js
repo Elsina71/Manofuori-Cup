@@ -14,6 +14,8 @@
   const tourAdmin = () => !!(window.Cloud && window.Cloud.tourAdmin);
   // cassa (o admin generale): incassi e ricevute
   const cashier = () => !!(window.Cloud && window.Cloud.cashier);
+  // capitano: utente registrato abilitato dall'admin a iscrivere squadre (roles/{uid}.captain)
+  const captainRole = () => !!(window.Cloud && !window.Cloud.isAdmin && window.Cloud.member && (window.Cloud.roles || {}).captain);
   // avviso della prima pagina: admin generale; avviso di un torneo: admin tornei
   // zona pericolosa (cancella tutti i dati): solo il Presidente
   const isOwner = () => admin() && !!(window.Cloud && window.Cloud.user && (window.Cloud.user.email || '').toLowerCase() === 'pierpaolomurgioni@gmail.com');
@@ -1611,6 +1613,7 @@
       <p class="muted small">${esc(t('rolesHelp'))}</p>
       <ul class="reg-list">
         ${row('crown', t('role_general'), t('roleHelp_general'), ['pierpaolomurgioni@gmail.com'])}
+        ${row('shirt-sport', t('role_captain'), t('roleHelp_captain'), who('captain'))}
         ${row('trophy', t('role_tour'), t('roleHelp_tour'), who('tour'))}
         ${row('cash-register', t('role_cash'), t('roleHelp_cash'), who('cash'))}
         ${row('whistle', t('role_coach'), t('roleHelp_coach'), coaches)}
@@ -1638,6 +1641,7 @@
           <label>${esc(t('gender'))}<select name="gender" required><option value="">—</option><option value="M">${esc(t('male'))}</option><option value="F">${esc(t('female'))}</option></select></label>
           <label>Email<input name="email" type="email" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>
           <label>${esc(t('password'))}<input name="password" type="text" required minlength="6" autocomplete="off"></label>
+          <label class="check span-all"><input type="checkbox" name="captain"> ${esc(t('userCreateCaptain'))}</label>
           <div class="form-actions"><button class="btn primary">${esc(t('userCreateBtn'))}</button></div>
         </form></details>
       <div class="toolbar"><input type="search" class="search" placeholder="${esc(t('search'))}" value="${esc(ui.userFilter || '')}" data-change="user-filter" aria-label="${esc(t('search'))}"></div>
@@ -1651,7 +1655,7 @@
             <button class="btn small danger" data-action="user-delete" data-uid="${m.uid}"><i class="ti ti-user-x" aria-hidden="true"></i> ${esc(t('userDelete'))}</button>
             <span class="ban-row">${verifyBadge(m.uid)} ${m.privacyAt ? `<span class="badge st-done" title="${esc(t('privacyAcceptedOn', { d: fmtDate(new Date(m.privacyAt).toLocaleDateString('sv')) }))}"><i class="ti ti-shield-check" aria-hidden="true"></i> ${esc(t('privacyOkBadge'))}</span>` : `<span class="badge tess-no">${esc(t('privacyNoBadge'))}</span>`}${m.deleteReq ? ` <span class="badge st-full">${esc(t('deleteRequested', { d: fmtDate(new Date(m.deleteReq).toLocaleDateString('sv')) }))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('rolesTitle'))}:
-              ${['tour', 'cash'].map(r => `<label class="check"><input type="checkbox" data-change="role" data-uid="${m.uid}" data-role="${r}" ${((S().roles || {})[m.uid] || {})[r] ? 'checked' : ''}> ${esc(t('role_' + r))}</label>`).join('')}
+              ${['captain', 'tour', 'cash'].map(r => `<label class="check"><input type="checkbox" data-change="role" data-uid="${m.uid}" data-role="${r}" ${((S().roles || {})[m.uid] || {})[r] ? 'checked' : ''}> ${esc(t('role_' + r))}</label>`).join('')}
               ${coachOf(m.uid) ? `<span class="badge">${esc(t('role_coach'))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-ban" aria-hidden="true"></i> ${esc(t('banTitle'))}:
               <label class="check"><input type="checkbox" data-change="ban" data-uid="${m.uid}" data-what="tour" ${banOf(m.uid).tour ? 'checked' : ''}> ${esc(t('banTour'))}</label></span></span>
@@ -4482,7 +4486,8 @@
     const players = tm ? rosterOf(tm.id).slice().sort(byShirt) : [];
     const lvLocked = !!tm && tm.status === 'ok' && !tourAdmin();
     const levels = teamLevels().concat(v.level && !teamLevels().includes(v.level) ? [v.level] : []);
-    const members = tourAdmin() ? (S().members || []).slice().sort((a, b) => personName(a).localeCompare(personName(b))) : [];
+    const caps = S().roles || {};
+    const members = tourAdmin() ? (S().members || []).filter(m => (caps[m.uid] || {}).captain || m.uid === v.captainUid || !admin()).sort((a, b) => personName(a).localeCompare(personName(b))) : [];
     return `<form class="grid-form team-form" data-form="team-save" data-id="${tm ? tm.id : ''}" autocomplete="off">
       <label class="span-all">${esc(t('tmName'))}<input name="name" required maxlength="60" value="${esc(v.name)}"></label>
       <label>${esc(t('tmLevel'))}<select name="level" required ${lvLocked ? 'disabled' : ''}><option value="">—</option>${levels.map(l => `<option value="${esc(l)}" ${sel(v.level, l)}>${esc(l)}</option>`).join('')}</select>
@@ -4537,11 +4542,12 @@
     const mine = m ? all.filter(isCaptain) : [];
     let create = '';
     if (m) {
-      if (needsVerify()) create = `<p class="note warn">${esc(t('verifyFirst'))}</p>`;
+      if (!captainRole()) create = mine.length ? '' : `<div class="card"><p class="muted"><i class="ti ti-lock" aria-hidden="true"></i> ${esc(t('tmNotCaptain'))}</p></div>`;
+      else if (needsVerify()) create = `<p class="note warn">${esc(t('verifyFirst'))}</p>`;
       else if (banOf(m.uid).tour) create = banNotice('tour');
       else create = `<details class="card sub-form" data-keep="tm-new" ${keepOpen('tm-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('tmNew'))}</summary>${teamForm(null)}</details>`;
     } else if (tourAdmin()) create = `<details class="card sub-form" data-keep="tm-new" ${keepOpen('tm-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('tmNewAdmin'))}</summary>${teamForm(null)}</details>`;
-    else if (!scorer()) create = `<div class="card"><p class="muted">${esc(t('tmLoginFirst'))}</p><a class="btn" href="#/settings">${esc(t('loginOrRegister'))}</a></div>`;
+    else if (!scorer()) create = `<div class="card"><p class="muted">${esc(t('tmLoginFirst'))}</p><a class="btn" href="#/settings">${esc(t('login'))}</a></div>`;
     // elenco per livello: tutti vedono le squadre ammesse; l'admin anche quelle in attesa
     const shown = all.filter(x => tourAdmin() || x.status === 'ok');
     const pending = tourAdmin() ? all.filter(x => x.status !== 'ok').length : 0;
@@ -5919,7 +5925,9 @@
       const d = { first: f.first.value.trim(), last: f.last.value.trim(), gender: f.gender.value, email: f.email.value.trim(), password: f.password.value };
       if (!d.first || !d.last || !d.gender) return warn('errRegFields');
       const btn = f.querySelector('button.primary'); btn.disabled = true;
-      window.Cloud.adminCreateUser(d).then(() => { (ui.keep || {})['user-create'] = false; ui.flash = { text: t('userCreated', { e: d.email }) }; render(); })
+      const cap = f.captain && f.captain.checked;
+      window.Cloud.adminCreateUser(d).then(uid => (cap ? window.Cloud.setRole(uid, 'captain', true, `${d.last} ${d.first}`) : null))
+        .then(() => { (ui.keep || {})['user-create'] = false; ui.flash = { text: t(cap ? 'userCreatedCaptain' : 'userCreated', { e: d.email }) }; render(); })
         .catch(e => { btn.disabled = false; warn(e.code === 'auth/email-already-in-use' ? 'userCreateExists' : e.code === 'auth/weak-password' ? 'registerWeak' : 'regError', { code: e.code || e.message }); });
     },
     'tour-create': f => {

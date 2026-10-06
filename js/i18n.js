@@ -879,11 +879,11 @@ const I18n = (() => {
       noticeAdmins: "Avviso per gli amministratori",
       noticeUser: "Avviso",
       navTeams: "Squadre",
-      tmIntro: "Squadre della Manofuori Cup divise per livello. Il capitano iscrive la squadra con il livello comunicato dall’organizzatore e la rosa con i numeri di maglia; l’organizzatore conferma l’ammissione.",
+      tmIntro: "Squadre della Manofuori Cup divise per livello. Il capitano (abilitato dall’organizzatore) iscrive la squadra con il livello comunicato dall’organizzatore e la rosa con i numeri di maglia; l’organizzatore conferma l’ammissione.",
       tmMine: "Le mie squadre",
       tmNew: "Iscrivi una squadra",
       tmNewAdmin: "Nuova squadra",
-      tmLoginFirst: "Per iscrivere una squadra accedi o registrati: chi iscrive la squadra ne è il capitano.",
+      tmLoginFirst: "Le squadre le iscrivono i capitani abilitati dall’organizzatore: accedi con il tuo account da capitano.",
       tmName: "Nome della squadra",
       tmLevel: "Livello",
       tmLevelHelp: "Il livello a cui l’organizzatore ha ammesso la squadra.",
@@ -1049,7 +1049,12 @@ const I18n = (() => {
       vtGoldenSave: "Salva il golden set",
       vtGoldenDone: "Golden set: {h} {x}-{y} {a}",
       vGoldenBad: "Golden set non valido: si vince a {n} punti con due di scarto.",
-      vtThirdMode: "Finale 3°/4°:"
+      vtThirdMode: "Finale 3°/4°:",
+      role_captain: "Capitano",
+      roleHelp_captain: "Iscrive la propria squadra (nome, livello, rosa con numeri di maglia) e la tiene aggiornata. Lo abilita l’admin generale.",
+      userCreateCaptain: "Abilita come capitano (può iscrivere una squadra)",
+      userCreatedCaptain: "Account creato e abilitato come capitano: {e}",
+      tmNotCaptain: "Per iscrivere una squadra l’organizzatore deve abilitarti come capitano. Contatta l’organizzatore indicando l’email del tuo account."
     }
   };
 

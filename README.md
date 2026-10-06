@@ -109,8 +109,10 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 
 ## Squadre
 
-- Voce **Squadre** nel menu (`#/teams`). Il **capitano** (utente registrato con email confermata, non in
-  lista nera) iscrive la squadra: nome, **livello** (quello comunicato dall'organizzatore), **tipo** (mista, maschile,
+- Voce **Squadre** nel menu (`#/teams`). Il **capitano** iscrive la squadra: è un utente registrato **abilitato
+  dall'admin generale** (ruolo *Capitano*: casella accanto all'utente in *Impostazioni → Utenti registrati*, oppure
+  "Abilita come capitano" quando l'admin crea l'account), con email confermata e non in lista nera. Chi non è
+  abilitato vede l'invito a contattare l'organizzatore. Il capitano indica: nome, **livello** (quello comunicato dall'organizzatore), **tipo** (mista, maschile,
   femminile) e **rosa** con cognome, nome, sesso e **numero di maglia**. Nessun numero massimo di giocatori (12
   consigliati); la rosa si cambia in qualsiasi momento. Avviso se due giocatori hanno lo stesso numero.
 - La squadra resta **in attesa** finché l'organizzatore (admin tornei) non **conferma l'ammissione** al livello. In attesa
