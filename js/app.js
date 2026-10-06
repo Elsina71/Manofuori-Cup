@@ -8,7 +8,7 @@
   const $app = document.getElementById('app');
   const $dialog = document.getElementById('matchDialog');
 
-  const ui = { rankGender: 'M', rankCat: '', editingPlayer: null, playerFilter: '', matchCtx: null, flash: null, openCat: null, busy: false };
+  const ui = { editingPlayer: null, playerFilter: '', matchCtx: null, flash: null, openCat: null, busy: false };
   const admin = () => !!(window.Cloud && window.Cloud.isAdmin);
   // admin tornei (o generale): tornei, categorie e punti, giocatori, iscrizioni, referti e refertisti
   const tourAdmin = () => !!(window.Cloud && window.Cloud.tourAdmin);
@@ -184,12 +184,11 @@
     let nav = 'tournaments', html;
     const loadingHtml = `<div class="empty"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</div>`;
     // Ranking, giocatori e tornei non ancora caricati richiedono anche i tornei passati.
-    const wantsPast = r[0] === 'ranking' || r[0] === 'p' || r[0] === 'me' || (r[0] === 't' && !tourById(r[1]));
-    if (wantsPast && needPast()) { $app.innerHTML = flashHtml() + loadingHtml; updateChrome(r[0] === 't' ? 'tournaments' : 'ranking'); return; }
+    const wantsPast = r[0] === 'p' || r[0] === 'me' || (r[0] === 't' && !tourById(r[1]));
+    if (wantsPast && needPast()) { $app.innerHTML = flashHtml() + loadingHtml; updateChrome(r[0] === 'p' && tourAdmin() ? 'players' : 'tournaments'); return; }
     if (r[0] === 'players') { nav = 'players'; html = viewPlayers(); }
-    else if (r[0] === 'p' && player(r[1])) { nav = 'ranking'; html = viewPlayer(player(r[1])); }
+    else if (r[0] === 'p' && player(r[1])) { nav = tourAdmin() ? 'players' : 'tournaments'; html = viewPlayer(player(r[1])); }
     else if (r[0] === 'categories') { nav = 'categories'; html = viewCategories(); }
-    else if (r[0] === 'ranking') { nav = 'ranking'; html = viewRanking(); }
     else if (r[0] === 'settings') { nav = 'settings'; html = viewSettings(); }
     else if (r[0] === 'mine') { nav = 'mine'; html = viewMine(); }
     else if (r[0] === 'new') { html = viewNewTournament(); }
@@ -422,20 +421,9 @@
   }
 
   // ---------- pagina "In evidenza" ----------
-  function rankTop(gender) {
-    const rows = L.ranking(S(), gender, null).filter(r => r.total > 0 || r.events > 0).slice(0, 20);
-    const list = rows.map((r, i) => { const p = player(r.id); return p ? `<tr class="${i < 3 ? 'podium' : ''}">
-        <td class="num">${medal(i + 1)}</td><td><a href="#/p/${p.id}">${nameHtml(p)}</a> ${rewardBadge(playedCount(p.id))}</td>
-        <td class="num"><strong>${fmtPts(r.total)}</strong></td></tr>` : ''; }).join('');
-    return `<div class="card rank-top">
-      <h3><span class="badge g-${gender}">${esc(genderLabel(gender))}</span></h3>
-      ${list ? `<div class="table-wrap"><table class="table"><tbody>${list}</tbody></table></div>` : `<p class="muted small">${esc(t('noRankingYet'))}</p>`}
-    </div>`;
-  }
 
   function viewFeatured() {
     const active = S().tournaments.filter(tr => !tourEnded(tr)).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-    const pastReady = !needPast();
     return `
       ${admin() && homonymPending().length ? `<div class="msg-alert" role="alert"><div class="msg-head"><strong><i class="ti ti-users" aria-hidden="true"></i> ${esc(t('homonym'))}</strong></div>
         <div class="msg-text">${esc(t('homonymWarn'))}</div><a class="btn small" href="#/users">${esc(t('usersOpen'))} →</a></div>` : ''}
@@ -460,14 +448,7 @@
         ${active.length ? `<div class="cards">${active.map(tourCard).join('')}</div>`
           : `<div class="empty">${esc(t(admin() ? 'noTournamentsAdmin' : 'noUpcomingTournaments'))}</div>`}
       </section>
-      ${freeplayHome()}
-      <section class="feat-block">
-        <div class="page-head row"><h2><i class="ti ti-chart-bar" aria-hidden="true"></i> ${esc(t('rankingTop'))}</h2>
-          <a class="btn small" href="#/ranking">${esc(t('seeFullRanking'))} →</a></div>
-        ${pastReady ? `<div class="rank-top-grid">${rankTop('M')}${rankTop('F')}</div>`
-          : `<div class="empty"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</div>`}
-        <div class="next-step center"><a class="btn primary" href="#/ranking">${esc(t('seeFullRanking'))} →</a></div>
-      </section>`;
+      ${freeplayHome()}`;
   }
 
   // Foto ridimensionata nel browser (max 1200 px, JPEG) perché stia comodamente nel database.
@@ -4836,7 +4817,7 @@
     const won = hist.reduce((x, h) => x + h.pts, 0);
     return `
       <div class="page-head">
-        <a class="back" href="#/ranking">← ${esc(t('ranking'))}</a>
+        <a class="back" href="#/tournaments">← ${esc(t('navTournaments'))}</a>
         <h1>${esc(playerFull(p))}</h1>
       </div>
       <div class="card">
@@ -4853,9 +4834,6 @@
   function viewPlayer(p) {
     if (!tourAdmin()) return viewPlayerPublic(p);
     const hist = L.playerHistory(S(), p.id);
-    const r = L.ranking(S(), p.gender, null);
-    const pos = r.findIndex(x => x.id === p.id);
-    const me = r[pos];
     const base = Number(p.base) || 0;
     const won = hist.reduce((s, h) => s + h.pts, 0);
     // Tornei non ancora chiusi a cui il giocatore è iscritto: compaiono come "in corso", senza punti.
@@ -4865,15 +4843,14 @@
     const catLabel = tr => { const c = catById(tr.categoryId); return [c ? c.name : '', '×' + fmtPts(tr.coefficient)].filter(Boolean).join(' '); };
     return `
       <div class="page-head">
-        <a class="back" href="#/ranking">← ${esc(t('ranking'))}</a>
+        <a class="back" href="#/players">← ${esc(t('navPlayers'))}</a>
         <h1>${nameHtml(p)} ${rewardBadge(playedCount(p.id))}</h1>
         <p class="meta"><span class="badge g-${p.gender}">${esc(genderLabel(p.gender))}</span>${p.club ? `<span class="muted">${esc(p.club)}</span>` : ''}
           <span class="muted">${esc(t('tournamentsPlayedN', { n: playedCount(p.id) }))}</span></p>
         ${p.aliases && p.aliases.length ? `<p class="muted small">${esc(t('otherSpellings'))}: ${esc(p.aliases.map(a => `${a.last} ${a.first}`).join(', '))}</p>` : ''}
       </div>
       <div class="stats-row">
-        <div class="stat"><span>${esc(t('rankPosition'))}</span><strong>${me && me.total ? medal(pos + 1) : '—'}</strong></div>
-        <div class="stat"><span>${esc(t('totalPoints'))}</span><strong>${fmtPts(me ? me.total : base)}</strong></div>
+        <div class="stat"><span>${esc(t('totalPoints'))}</span><strong>${fmtPts(base + won)}</strong></div>
         <div class="stat"><span>${esc(t('eventsPlayed'))}</span><strong>${hist.length + ongoing.length}</strong></div>
       </div>
       <div class="card">
@@ -4952,36 +4929,6 @@
   }
 
   // ---------- ranking ----------
-  function viewRanking() {
-    const g = ui.rankGender, cat = ui.rankCat;
-    // "Tutti": uomini e donne insieme, con lo stesso ordine (punti, poi miglior piazzamento).
-    const rows = (g === 'A' ? L.ranking(S(), 'M', cat || null).concat(L.ranking(S(), 'F', cat || null))
-      .sort((x, y) => y.total - x.total || (x.best || 999) - (y.best || 999)) : L.ranking(S(), g, cat || null))
-      .filter(r => r.total > 0 || r.events > 0);
-    return `
-      <div class="page-head"><h1>${esc(t('ranking'))}</h1>
-        <p class="muted">${esc(t('rankingIntro'))}</p></div>
-      <div class="toolbar">
-        <div class="segmented" role="group">
-          <button data-action="rank-gender" data-g="M" aria-pressed="${g === 'M'}">${esc(t('catMen'))}</button>
-          <button data-action="rank-gender" data-g="F" aria-pressed="${g === 'F'}">${esc(t('catWomen'))}</button>
-          <button data-action="rank-gender" data-g="A" aria-pressed="${g === 'A'}">${esc(t('rankAll'))}</button>
-        </div>
-        <select data-change="rank-cat" aria-label="${esc(t('category'))}">
-          <option value="">${esc(t('allCategories'))}</option>
-          ${S().categories.map(c => `<option value="${c.id}" ${sel(cat, c.id)}>${esc(c.name)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="card">
-        ${rows.length ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th class="num">#</th><th>${esc(t('player'))}</th><th class="hide-sm">${esc(t('club'))}</th><th class="num">${esc(t('eventsShort'))}</th><th class="num">${esc(t('points'))}</th></tr></thead>
-          <tbody>${rows.map((r, i) => { const p = player(r.id); return `<tr class="${i < 3 ? 'podium' : ''}">
-            <td class="num">${medal(i + 1)}</td><td><a href="#/p/${p.id}">${nameHtml(p)}</a>${g === 'A' ? ` <span class="badge g-${p.gender}">${esc(p.gender)}</span>` : ''} ${rewardBadge(playedCount(p.id))}</td>
-            <td class="hide-sm muted">${esc(p.club || '')}</td><td class="num">${r.events}</td>
-            <td class="num"><strong>${fmtPts(r.total)}</strong></td></tr>`; }).join('')}</tbody>
-        </table></div>` : `<p class="muted">${esc(t('noRankingYet'))}</p>`}
-      </div>`;
-  }
 
   // ---------- stili grafici (salvati solo su questo dispositivo) ----------
   // [id, colore principale, sfondo, colore accento]
@@ -6215,7 +6162,6 @@
         .then(() => { ui.flash = { text: t('resetSent') }; render(); })
         .catch(() => warn('resetFailed'));
     },
-    'rank-gender': el => { ui.rankGender = el.dataset.g; render(); },
     'close-dialog': () => $dialog.close(),
 
     // lista d'ingresso
@@ -6667,7 +6613,7 @@
   });
 
   // Azioni consentite a tutti; le altre solo agli amministratori.
-  const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'cal-view', 'toggle-past', 'rank-gender', 'logout', 'reset-password', 'close-dialog', 'bk-day', 'bk-band', 'bk-slot', 'bk-clear', 'bk-shorter', 'bk-longer']);
+  const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'cal-view', 'toggle-past', 'logout', 'reset-password', 'close-dialog', 'bk-day', 'bk-band', 'bk-slot', 'bk-clear', 'bk-shorter', 'bk-longer']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
   const TOUR_ACTIONS = new Set(['eope-download', 'eope-send', 'eope-add', 'eope-remove', 'toggle-visible', 'vis-group', 'vis-all', 'gs-nums-reset', 'notice-edit', 'notice-cancel', 'notice-clear', 'reg-import', 'reg-reopen', 'reg-state', 'reg-confirm', 'reg-open-start', 'reg-unconfirm', 'reg-remove', 'reg-wait-add', 'entry-edit-open', 'entry-edit-cancel', 'import-entries', 'template-entries', 'sort-entries', 'entry-move', 'set-wc', 'remove-entry', 'lock-entries', 'unlock-entries', 'gen-qual', 'skip-qual', 'reset-qual', 'close-qual', 'reopen-qual', 'main-move', 'sort-main', 'lock-main', 'unlock-main', 'start-main', 'gen-bracket', 'auto-fill-bracket', 'clear-bracket-slots', 'reset-main', 'close-tournament', 'reopen-tournament', 'delete-tournament', 'edit-match', 'escore-open', 'escore-reset', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'scorer-remove', 'escore-approve', 'escore-reopen', 'match-clear', 'match-reopen', 'import-ranking', 'template-ranking', 'merge-pair', 'edit-player', 'cancel-edit-player', 'delete-player', 'new-category', 'delete-category', 'add-row', 'del-row', 'gs-add-row']);
   const TOUR_FORMS = new Set(['tour-create', 'tour-reg-edit', 'reg-open-legacy', 'tournament-new', 'tournament-edit', 'entry-edit', 'entry-add', 'wc-add', 'player-save', 'merge-players', 'category-save', 'scorer-add', 'rewards-save', 'notice-save']);
@@ -6800,7 +6746,6 @@
         commit();
         break;
       }
-      case 'rank-cat': ui.rankCat = el.value; render(); break;
       case 'scorer-tour':
         if (!tourAdmin()) return;
         window.Cloud.setScorerTournament(el.dataset.email, el.value)

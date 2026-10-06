@@ -613,10 +613,6 @@ button.cal-btn:hover { border-color: var(--primary); }
 .article-text { font-size: 1.05rem; line-height: 1.7; overflow-wrap: anywhere; }
 .feat-block { margin: 0 0 26px; }
 .feat-block .page-head h2 { margin: 0; font-size: 1.25rem; }
-.rank-top-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 720px) { .rank-top-grid { grid-template-columns: 1fr; } }
-.rank-top h3 { margin: 0 0 8px; }
-.rank-top .table td { padding-top: 6px; padding-bottom: 6px; }
 
 /* Anteprime dei temi grafici */
 .design-opt { display: flex; flex-direction: column; gap: 8px; padding: 10px; cursor: pointer; text-align: left; border-radius: 12px;
