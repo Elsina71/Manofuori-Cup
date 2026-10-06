@@ -105,7 +105,17 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 - Database: `vtours/{id}` (torneo, pubblico) e `vmatches/{torneo_gara}` (gare, pubbliche; lo scorer scrive solo set e
   stato). Test delle regole: `tests/vtour.rules.test.mjs`.
 - I vecchi tornei beach (coppie, categorie, giocatori) non sono più nel menu; il loro codice verrà tolto più avanti.
-  Il referto elettronico per la pallavolo arriverà da un progetto separato: per ora i risultati si inseriscono a mano.
+- **E-scoresheet della pallavolo** (cartella `referto-pallavolo/`, nato nel repository `Elsina71/Repository-principale`,
+  cartella `referto-indoor`): accanto a ogni gara del calendario e di *Le mie gare* il pulsante **E-scoresheet** (admin
+  generale e account dei campi). Il referto si apre già compilato con torneo, fase, data, ora, palestra, squadre (A = casa,
+  B = ospiti), **rose** (numero di maglia, cognome e nome, sesso) e formula della gara: **3 set fissi a 25** nei gironi
+  e nei playoff a 3 set, **al meglio dei 5** (quinto set a 15) nei playoff bo5; nelle squadre **miste** almeno **2 donne
+  in campo** (libero compreso). Il refertista inserisce i sestetti dal posto 1 al 6 e il sorteggio, poi segna solo chi
+  vince l'azione: rotazioni, servizio, cambi, time-out, libero, sanzioni e fine set sono automatici.
+  Durante la gara il punteggio compare **LIVE** sotto la gara (`live/{torneo}_{gara}`). Con **Chiudi gara** il referto
+  scrive da solo il risultato nella gara (`vmatches`, come l'inserimento a mano: set e stato "done") e archivia il PDF
+  (`refertiPdf`). L'admin generale può **riaprirlo al refertista** o **azzerarlo**; il risultato resta comunque
+  modificabile a mano con *Modifica*. Gli account dei campi leggono le rose delle squadre (servono al referto).
 
 ## Squadre
 
@@ -357,4 +367,6 @@ js/logic.js       regole: formule, gironi, tabelloni, piazzamenti, punti
 js/demo.js        dati di esempio
 js/app.js         interfaccia
 referto/          referto elettronico di gara (scoresheet) → /referto/
+referto-pallavolo/ referto elettronico della pallavolo indoor (tornei a squadre) → /referto-pallavolo/
+                  (test delle regole di gioco: node --test referto-pallavolo/tests/rules.test.js)
 ```

@@ -1112,6 +1112,12 @@ async function openReferto(tid, key, a, b, court, info) {
   return id;
 }
 
+// Rosa di una squadra per il referto della pallavolo (admin e account dei campi); vuota se non leggibile.
+async function getRoster(id) {
+  try { const d = await getDoc(doc(db, 'rosters', id)); return d.exists() ? (d.data().players || []) : []; }
+  catch (e) { return []; }
+}
+
 // Chiavi delle gare di un torneo con punteggio in diretta o referto (solo admin).
 async function matchDocKeys(tid) {
   if (!isAdmin) return new Set();
@@ -1223,6 +1229,7 @@ function removeScorer(email) {
 
 window.Cloud = {
   watchLive,
+  getRoster,
   watchReferti,
   loadPdf,
   openReferto,

@@ -9,6 +9,7 @@
       "pubblica-manofuori.bat",
       "referto/README.md",
       "referto/tests/**",
+      "referto-pallavolo/tests/**",
       "tests/**",
       "**/.*",
       "**/node_modules/**"

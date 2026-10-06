@@ -998,6 +998,9 @@ li.is-void { opacity: .6; }
 .vm-score { text-align: right; white-space: nowrap; }
 .vm-when { grid-column: 1; }
 .vm-row > .btn { grid-column: 2; grid-row: 2; justify-self: end; }
+/* referto elettronico della pallavolo: punteggio in diretta e pulsanti sotto la gara */
+.vm-live { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.vm-row > .escore-row { grid-column: 1 / -1; margin: 4px 0 0; }
 .vm-win { color: var(--ok); }
 .vm-form { grid-column: 1 / -1; display: grid; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
 .vm-sets { display: grid; gap: 6px; max-width: 420px; }

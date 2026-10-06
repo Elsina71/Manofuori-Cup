@@ -10,6 +10,7 @@ await env.withSecurityRulesDisabled(async c => {
   for (const u of ['cap', 'other']) await setDoc(doc(db, 'members', u), { first: 'A', last: 'B', gender: 'M' });
   await setDoc(doc(db, 'roles', 'org'), { tour: true });
   await setDoc(doc(db, 'roles', 'cap'), { captain: true });
+  await setDoc(doc(db, 'scorers', 'campo1@test.it'), { court: '1', tid: '' });
 });
 const cap = env.authenticatedContext('cap', { email_verified: true }).firestore();
 const other = env.authenticatedContext('other', { email_verified: true }).firestore();
@@ -33,6 +34,9 @@ await t('capitano non si auto-ammette', assertFails(updateDoc(doc(cap, 'teams', 
 await t('altri non modificano la rosa', assertFails(setDoc(doc(other, 'rosters', 't1'), { captainUid: 'other', players: [], updated: 3 })));
 await t('admin tornei ammette la squadra', assertSucceeds(updateDoc(doc(org, 'teams', 't1'), { status: 'ok', updated: 4 })));
 await t('admin tornei legge la rosa', assertSucceeds(getDoc(doc(org, 'rosters', 't1'))));
+const court = env.authenticatedContext('court', { email: 'campo1@test.it', email_verified: true }).firestore();
+await t('account del campo legge la rosa (referto elettronico)', assertSucceeds(getDoc(doc(court, 'rosters', 't1'))));
+await t('account del campo non modifica la rosa', assertFails(setDoc(doc(court, 'rosters', 't1'), { captainUid: 'cap', players: [], updated: 9 })));
 await t('ammessa: capitano non cambia livello', assertFails(updateDoc(doc(cap, 'teams', 't1'), { level: 'SUPER 10', updated: 5 })));
 await t('ammessa: capitano cambia nome e rosa', assertSucceeds(batchSave(cap, 't1', { name: 'Fenicotteri Rosa', level: 'DINOS', kind: 'X', captainUid: 'cap', updated: 6 }, [{ num: 1, last: 'X', first: 'Y', g: 'F' }], true)));
 await t('ammessa: capitano non la ritira', assertFails(deleteDoc(doc(cap, 'teams', 't1'))));

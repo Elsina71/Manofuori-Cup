@@ -175,7 +175,8 @@
     }
     const r = route();
     if (window.Cloud && window.Cloud.watchLive) {
-      window.Cloud.watchLive(r[0] === 't' && tourById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? mineTours().map(x => x.id) : null);
+      window.Cloud.watchLive(r[0] === 't' && tourById(r[1]) ? r[1] : r[0] === 'vt' && vtById(r[1]) ? r[1]
+        : r[0] === 'mine' && scorer() ? mineVTours().map(x => x.id).concat(mineTours().map(x => x.id)) : null);
       window.Cloud.watchReferti(r[0] === 't' && r[2] === 'referti' && tourById(r[1]) ? r[1] : null);
     }
     const tourOnly = r[0] === 'players' || r[0] === 'new' || (r[0] === 't' && (r[2] === 'manage' || r[2] === 'edit'));
@@ -4137,6 +4138,7 @@
       <div class="vm-teams">${name(m.home, r && r.winner === 'h')} <span class="muted">–</span> ${name(m.away, r && r.winner === 'a')}</div>
       <div class="vm-score">${done ? `<strong>${vResult(m)}</strong> <small class="muted">(${esc(vSetsText(m))})</small>` : `<span class="muted small">${esc(t('vmToPlay'))}</span>`}</div>
       <div class="vm-when muted small">${m.date || m.time ? `<i class="ti ti-calendar" aria-hidden="true"></i> ${esc(vWhen(m))}` : esc(t('vmNoDate'))}${m.place ? ` · <i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(m.place)}` : ''}${m.mode === 'bo5' ? ` · ${esc(t('vmBo5'))}` : ''}</div>
+      ${vLiveLine(m)}${vEscoreButtons(tour, m)}
       ${vCanScore(tour) && !editing ? `<button class="btn small" data-action="vm-edit" data-id="${m.id}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t(tourAdmin() ? 'vmEdit' : 'vmResult'))}</button>` : ''}
       ${editing ? vmForm(tour, m) : ''}
     </li>`;
@@ -4159,6 +4161,69 @@
         ${m.status === 'done' ? `<button type="button" class="btn danger" data-action="vm-clear" data-id="${m.id}">${esc(t('vmClear'))}</button>` : ''}
         <button class="btn primary">${esc(t('save'))}</button></div>
     </form>`;
+  }
+
+  // ---------- E-scoresheet dei tornei a squadre (referto-pallavolo/) ----------
+  // Il referto si apre già compilato (squadre, rose, formula della gara); il punteggio è in diretta in live/{id}
+  // e alla chiusura il referto scrive da solo il risultato nella gara (vmatches/{id}), come l'inserimento a mano.
+  const vLive = m => { const lv = S().live && S().live[m.id]; return lv && lv.a === m.home && lv.b === m.away ? lv : null; };
+  const vCanEscore = tour => vCanScore(tour) && (admin() || !!scorer());   // il referto lo aprono admin e account dei campi
+  function vLiveLine(m) {
+    const lv = vLive(m);
+    if (!lv || lv.status !== 'live' || m.status === 'done' || !(lv.cur || (lv.sets && lv.sets.length))) return '';
+    const sets = (lv.sets || []).filter((x, i) => !lv.cur || i < lv.cur.set - 1).map(x => `${x[0]}-${x[1]}`).join(', ');
+    return `<div class="vm-live small"><span class="live-badge"><i class="dot" aria-hidden="true"></i>${esc(t('liveBadge'))}</span>
+      <strong>${lv.setsWon.a}-${lv.setsWon.b}</strong>${lv.cur ? ` · ${esc(t('vmSetN', { n: lv.cur.set }))} <strong>${lv.cur.a}-${lv.cur.b}</strong>` : ''}${sets ? ` <span class="muted">(${esc(sets)})</span>` : ''}</div>`;
+  }
+  function vEscoreButtons(tour, m) {
+    if (!vCanEscore(tour) || !m.home || !m.away) return '';
+    const lv = vLive(m);
+    if (m.status === 'done' && !lv) return '';   // risultato inserito a mano: niente referto
+    return `<div class="btn-row escore-row">
+      <button class="btn small escore-btn" data-action="vm-escore" data-id="${m.id}" title="${esc(t('escoreTitle'))}"><i class="ti ti-device-mobile" aria-hidden="true"></i> ${esc(t('escoreBtn'))}</button>
+      ${admin() && lv && lv.status === 'finished' ? `<button class="btn small" data-action="vm-escore-reopen" data-id="${m.id}"><i class="ti ti-lock-open" aria-hidden="true"></i> ${esc(t('reopenScorer'))}</button>` : ''}
+      ${admin() && lv ? `<button class="btn small" data-action="vm-escore-reset" data-id="${m.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('escoreReset'))}</button>` : ''}
+    </div>`;
+  }
+  function vPhase(tour, m) {
+    if (m.stage === 'g') return `${t('vtGroup', { g: m.group })} · ${t('vmDay', { n: m.day })}`;
+    const br = (tour.brackets || []).find(b => b.id === m.bracket);
+    return `${br ? br.name : t('vtPlayoff')}${m.leg === 2 ? ` · ${t('vmReturn')}` : ''}`;
+  }
+  // Dati della gara per il referto: A = casa, B = ospiti; nelle squadre miste almeno 2 donne in campo.
+  function vEscoreInfo(tour, m, rosters) {
+    const team = id => ({
+      name: vTeamName(tour, id),
+      players: (rosters[id] || []).slice().sort(byShirt).map(p => ({ no: p.num === '' || p.num == null ? '' : Number(p.num), name: `${p.last || ''} ${p.first || ''}`.trim(), gender: p.g === 'F' ? 'F' : 'M' }))
+    });
+    const mixed = id => { const tm = teamById(id); return !tm || tm.kind === 'X'; };
+    const bo5 = m.mode === 'bo5';
+    return {
+      vmatch: true, stage: m.stage, competition: tour.name || '', phase: vPhase(tour, m), matchNo: '',
+      date: m.date || '', time: m.time || '', venue: m.place || '', court: '',
+      A: team(m.home), B: team(m.away),
+      settings: { mode: bo5 ? 'best' : 'fixed', sets: bo5 ? 5 : 3, points: 25, lastPoints: bo5 ? 15 : 25, cap: 0, timeoutsPerSet: 2, subsPerSet: 6, minWomen: { A: mixed(m.home) ? 2 : 0, B: mixed(m.away) ? 2 : 0 } }
+    };
+  }
+  const vRefertoUrl = id => new URL(`referto-pallavolo/?g=${encodeURIComponent(id)}`, location.href.split('#')[0]).href;
+  async function openVReferto(id) {
+    const m = vmById(id), tour = m && vtById(m.tid);
+    if (!m || !tour || !vCanEscore(tour) || !m.home || !m.away || !window.Cloud) return;
+    // l'admin lo apre in una nuova scheda (aperta subito, prima dell'attesa del database)
+    const win = admin() ? window.open('', '_blank') : null;
+    ui.flash = { text: t('escoreLoading') }; render();
+    try {
+      const rosters = {};
+      for (const tid of [m.home, m.away]) rosters[tid] = rosterOf(tid).length ? rosterOf(tid) : await window.Cloud.getRoster(tid);
+      const rid = await window.Cloud.openReferto(tour.id, m.key, m.home, m.away, m.place || '', vEscoreInfo(tour, m, rosters));
+      const url = vRefertoUrl(rid);
+      ui.flash = null;
+      if (win) { win.location.href = url; render(); } else location.href = url;
+    } catch (err) {
+      if (win) win.close();
+      console.error(err);
+      warn(err.code === 'stale' ? 'escoreStale' : 'escoreError', { code: err.code || err.message });
+    }
   }
 
   function vtCalendar(tour) {
@@ -4333,6 +4398,18 @@
       window.Cloud.saveVTour(tour.id, { brackets: brs }).then(() => render()).catch(vErr);
     },
     'vm-edit': el => { ui.vmEdit = el.dataset.id || null; render(); },
+    'vm-escore': el => openVReferto(el.dataset.id),
+    'vm-escore-reopen': el => {
+      const m = vmById(el.dataset.id);
+      if (!m || !admin() || !vLive(m)) return;
+      window.Cloud.setLiveStatus(m.id, 'live');
+      ui.flash = { text: t('reopenScorerMsg') }; render();
+    },
+    'vm-escore-reset': el => {
+      const m = vmById(el.dataset.id);
+      if (!m || !admin() || !confirmed('escoreResetConfirm')) return;
+      window.Cloud.resetReferto(m.id).then(() => { ui.flash = { text: t('escoreResetDone') }; render(); }).catch(vErr);
+    },
     'vm-clear': el => {
       const m = vmById(el.dataset.id), tour = m && vtById(m.tid);
       if (!m || !vCanScore(tour) || !confirmed('vmClearConfirm')) return;
@@ -4439,10 +4516,15 @@
   };
 
   // ---------- account del campo (scorer): le gare dei tornei a squadre ----------
+  // tornei a squadre in corso dell'account del campo (legato a un torneo o a tutti)
+  function mineVTours() {
+    const sc = scorer();
+    return (S().vtours || []).filter(x => x.status === 'live' && (!sc || !sc.tid || sc.tid === x.id));
+  }
   function viewMineVolley() {
     const sc = scorer();
     if (!sc) return `<div class="card"><p class="muted">${esc(t('loginHelp'))}</p><a class="btn primary" href="#/settings">${esc(t('login'))}</a></div>`;
-    const tours = (S().vtours || []).filter(x => x.status === 'live' && (!sc.tid || sc.tid === x.id));
+    const tours = mineVTours();
     const blocks = tours.map(tour => {
       const ms = vtMatches(tour.id).slice().sort((a, b) => (a.status === 'done') - (b.status === 'done') || (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
       if (!ms.length) return '';
@@ -6125,12 +6207,12 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'cal-view', 'toggle-past', 'logout', 'reset-password', 'close-dialog', 'vt-group']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['eope-download', 'eope-send', 'eope-add', 'eope-remove', 'toggle-visible', 'vis-group', 'vis-all', 'gs-nums-reset', 'notice-edit', 'notice-cancel', 'notice-clear', 'reg-import', 'reg-reopen', 'reg-state', 'reg-confirm', 'reg-open-start', 'reg-unconfirm', 'reg-remove', 'reg-wait-add', 'entry-edit-open', 'entry-edit-cancel', 'import-entries', 'template-entries', 'sort-entries', 'entry-move', 'set-wc', 'remove-entry', 'lock-entries', 'unlock-entries', 'gen-qual', 'skip-qual', 'reset-qual', 'close-qual', 'reopen-qual', 'main-move', 'sort-main', 'lock-main', 'unlock-main', 'start-main', 'gen-bracket', 'auto-fill-bracket', 'clear-bracket-slots', 'reset-main', 'close-tournament', 'reopen-tournament', 'delete-tournament', 'edit-match', 'escore-open', 'escore-reset', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'scorer-remove', 'escore-approve', 'escore-reopen', 'match-clear', 'match-reopen', 'import-ranking', 'template-ranking', 'merge-pair', 'edit-player', 'cancel-edit-player', 'delete-player', 'new-category', 'delete-category', 'add-row', 'del-row', 'gs-add-row', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear']);
+  const TOUR_ACTIONS = new Set(['eope-download', 'eope-send', 'eope-add', 'eope-remove', 'toggle-visible', 'vis-group', 'vis-all', 'gs-nums-reset', 'notice-edit', 'notice-cancel', 'notice-clear', 'reg-import', 'reg-reopen', 'reg-state', 'reg-confirm', 'reg-open-start', 'reg-unconfirm', 'reg-remove', 'reg-wait-add', 'entry-edit-open', 'entry-edit-cancel', 'import-entries', 'template-entries', 'sort-entries', 'entry-move', 'set-wc', 'remove-entry', 'lock-entries', 'unlock-entries', 'gen-qual', 'skip-qual', 'reset-qual', 'close-qual', 'reopen-qual', 'main-move', 'sort-main', 'lock-main', 'unlock-main', 'start-main', 'gen-bracket', 'auto-fill-bracket', 'clear-bracket-slots', 'reset-main', 'close-tournament', 'reopen-tournament', 'delete-tournament', 'edit-match', 'escore-open', 'escore-reset', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'scorer-remove', 'escore-approve', 'escore-reopen', 'match-clear', 'match-reopen', 'import-ranking', 'template-ranking', 'merge-pair', 'edit-player', 'cancel-edit-player', 'delete-player', 'new-category', 'delete-category', 'add-row', 'del-row', 'gs-add-row', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore']);
   const TOUR_FORMS = new Set(['tour-create', 'tour-reg-edit', 'reg-open-legacy', 'tournament-new', 'tournament-edit', 'entry-edit', 'entry-add', 'wc-add', 'player-save', 'merge-players', 'category-save', 'scorer-add', 'rewards-save', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
-  const SCORER_ACTIONS = new Set(['escore-open', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'vm-edit', 'vm-clear']);
+  const SCORER_ACTIONS = new Set(['escore-open', 'mine-all', 'pdf-view', 'pdf-build', 'pdf-zip', 'vm-edit', 'vm-clear', 'vm-escore']);
   const PUBLIC_FORMS = new Set(['login', 'register']);
   const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
   const MEMBER_ACTIONS = new Set(['reg-cancel', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
