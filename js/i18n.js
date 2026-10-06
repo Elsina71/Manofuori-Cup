@@ -1048,7 +1048,8 @@ const I18n = (() => {
       vtGoldenNeed: "Parità perfetta (stessi set e stesso quoziente punti): si gioca un golden set a {n} punti.",
       vtGoldenSave: "Salva il golden set",
       vtGoldenDone: "Golden set: {h} {x}-{y} {a}",
-      vGoldenBad: "Golden set non valido: si vince a {n} punti con due di scarto."
+      vGoldenBad: "Golden set non valido: si vince a {n} punti con due di scarto.",
+      vtThirdMode: "Finale 3°/4°:"
     }
   };
 

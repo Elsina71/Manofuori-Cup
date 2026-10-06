@@ -8,7 +8,8 @@
 // - Playoff a eliminazione diretta (anche Gold e Silver): per ogni turno l'admin sceglie 3 set fissi ("3")
 //   o al meglio dei 5 ("bo5", quinto set a 15), andata e ritorno o gara secca; la finale è sempre gara secca.
 //   Andata e ritorno: passa chi vince più set nelle due gare; a parità di set conta il quoziente punti; a parità
-//   perfetta si gioca un golden set ai punti decisi dall'admin. C'è anche la finale per il 3° e 4° posto.
+//   perfetta si gioca un golden set ai punti decisi dall'admin. C'è anche la finale per il 3° e 4° posto (gara secca,
+//   3 set o al meglio dei 5 anche diversamente dalla finale).
 const Volley = (() => {
   // ---------- set e gare ----------
   // Set valido: chi vince arriva almeno a "to" punti con due di scarto (oltre "to" lo scarto è esattamente 2).
@@ -190,7 +191,8 @@ const Volley = (() => {
         ties.push({ slot: s, a: a === undefined ? null : a, b: b === undefined ? null : b, ready, bye: ready && (a == null) !== (b == null), matches: ms, winner: st.winner, golden: st.golden, goldenTo });
       }
       const rd = { r, name: roundName(prev.length), mode, legs, ties };
-      // finale per il 3° e 4° posto (gara secca tra le perdenti delle semifinali, con la stessa formula della finale)
+      if (last) rd.thirdMode = cfg.thirdMode === 'bo5' ? 'bo5' : cfg.thirdMode === '3' ? '3' : mode;   // formula della finale 3°/4° (di base come la finale)
+      // finale per il 3° e 4° posto (gara secca tra le perdenti delle semifinali; formula scelta dall'admin)
       if (last && out.length) {
         const semis = out[out.length - 1].ties;
         const losers = semis.map(tt => (tt.bye || (tt.ready && (tt.a == null || tt.b == null)) ? null : tt.winner ? (tt.winner === tt.a ? tt.b : tt.a) : undefined));
@@ -223,7 +225,7 @@ const Volley = (() => {
       } else out.push({ bracket: br.id, round: r, slot: tt.slot, leg: 1, home: tt.a, away: tt.b, mode: rd.mode });
     });
     const t3 = rd.third;
-    if (t3 && t3.ready && !t3.matches.length) out.push({ bracket: br.id, round: r, slot: 1, leg: 1, home: t3.a, away: t3.b, mode: rd.mode });
+    if (t3 && t3.ready && !t3.matches.length) out.push({ bracket: br.id, round: r, slot: 1, leg: 1, home: t3.a, away: t3.b, mode: rd.thirdMode || rd.mode });
     return out;
   }
   const playoffKey = m => `p-${m.bracket}-r${m.round}-s${m.slot}-l${m.leg}`;

@@ -4232,6 +4232,7 @@
       const last = rd.r === rounds.length - 1;
       const cfg = tourAdmin() && pending.length ? `<form class="vt-roundform" data-form="vt-round" data-id="${tour.id}" data-b="${br.id}" data-r="${rd.r}">
           <select name="mode" aria-label="${esc(t('vtRoundMode'))}"><option value="3" ${sel(rd.mode, '3')}>${esc(t('vtMode_3'))}</option><option value="bo5" ${sel(rd.mode, 'bo5')}>${esc(t('vtMode_bo5'))}</option></select>
+          ${last && rd.third ? `<label class="vt-golden-to">${esc(t('vtThirdMode'))} <select name="thirdMode"><option value="3" ${sel(rd.thirdMode, '3')}>${esc(t('vtMode_3'))}</option><option value="bo5" ${sel(rd.thirdMode, 'bo5')}>${esc(t('vtMode_bo5'))}</option></select></label>` : ''}
           ${last ? `<span class="muted small">${esc(t(rd.third ? 'vtFinalSingle3' : 'vtFinalSingle'))}</span>` : `<select name="legs" aria-label="${esc(t('vtRoundLegs'))}"><option value="1" ${rd.legs === 1 ? 'selected' : ''}>${esc(t('vtLegs_1'))}</option><option value="2" ${rd.legs === 2 ? 'selected' : ''}>${esc(t('vtLegs_2'))}</option></select>
           <label class="vt-golden-to">${esc(t('vtGoldenTo'))} <input type="number" name="goldenTo" min="5" max="25" value="${(br.rounds[rd.r] || {}).goldenTo || 15}" inputmode="numeric"></label>`}
           <button class="btn small primary">${esc(t('vtRoundMake', { n: pending.length }))}</button></form>` : '';
@@ -4239,7 +4240,7 @@
           ${created || !pending.length ? `<small class="muted">· ${esc(t('vtMode_' + rd.mode))}${last ? '' : ' · ' + esc(t('vtLegs_' + rd.legs))}</small>` : ''}</h3>
         ${cfg}
         <ul class="vt-ties">${rd.ties.filter(tt => tt.ready ? (tt.a || tt.b) : true).map(tt => vtTie(tour, tt)).join('')}</ul>
-        ${rd.third ? `<h3 class="vt-third-title">${esc(t('vtThird'))}</h3><ul class="vt-ties">${vtTie(tour, rd.third)}</ul>` : ''}</div>`;
+        ${rd.third ? `<h3 class="vt-third-title">${esc(t('vtThird'))}${rd.third.matches.length ? ` <small class="muted">· ${esc(t('vtMode_' + (rd.third.matches[0].mode === 'bo5' ? 'bo5' : '3')))}</small>` : ''}</h3><ul class="vt-ties">${vtTie(tour, rd.third)}</ul>` : ''}</div>`;
     }).join('');
     const fin = rounds.length ? rounds[rounds.length - 1] : null, ft = fin && fin.ties[0];
     const podium = [ft && ft.winner, ft && ft.winner ? (ft.winner === ft.a ? ft.b : ft.a) : null, fin && fin.third && fin.third.winner,
@@ -4384,7 +4385,9 @@
       const br = brs.find(b => b.id === f.dataset.b);
       if (!br) return;
       while (br.rounds.length <= r) br.rounds.push({ mode: '3', legs: 1 });
-      br.rounds[r] = { mode: f.mode.value === 'bo5' ? 'bo5' : '3', legs: f.legs && f.legs.value === '2' ? 2 : 1, goldenTo: f.goldenTo ? Math.min(25, Math.max(5, parseInt(f.goldenTo.value, 10) || 15)) : 15 };
+      br.rounds[r] = { mode: f.mode.value === 'bo5' ? 'bo5' : '3', legs: f.legs && f.legs.value === '2' ? 2 : 1, goldenTo: f.goldenTo ? Math.min(25, Math.max(5, parseInt(f.goldenTo.value, 10) || 15)) : 15,
+        thirdMode: f.thirdMode ? (f.thirdMode.value === 'bo5' ? 'bo5' : '3') : undefined };
+      if (!br.rounds[r].thirdMode) delete br.rounds[r].thirdMode;
       const ms = vtMatches(tour.id).filter(m => m.stage === 'p').map(vEngine);
       const list = VL.roundMatches(br, VL.bracket(br, ms), r);
       const set = {};

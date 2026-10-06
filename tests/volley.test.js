@@ -161,3 +161,11 @@ test('playoff: finale per il 3° e 4° posto tra le perdenti delle semifinali', 
   // con 3 squadre (una semifinale è un bye) non c'è la finale per il 3° posto
   assert.equal(V.bracket({ id: 'x', seeds: ['a', 'b', 'c'], rounds: [] }, [])[1].third, undefined);
 });
+
+test('playoff: la finale 3°/4° può avere una formula diversa dalla finale', () => {
+  const br = { id: 'g', seeds: ['a', 'b', 'c', 'd'], rounds: [{ mode: '3', legs: 1 }, { mode: 'bo5', legs: 1, thirdMode: '3' }] };
+  const semis = V.roundMatches(br, V.bracket(br, []), 0).map(m => Object.assign({}, m, { status: 'done', sets: [[25, 20], [25, 20], [25, 20]] }));
+  const finals = V.roundMatches(br, V.bracket(br, semis), 1);
+  assert.equal(finals.find(m => m.slot === 0).mode, 'bo5');
+  assert.equal(finals.find(m => m.slot === 1).mode, '3');
+});

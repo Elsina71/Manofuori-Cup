@@ -100,8 +100,8 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   gare; a parità di set conta il **quoziente punti**; a parità perfetta si gioca un **golden set** ai punti decisi
   dall'admin per quel turno (si inserisce sotto il confronto; lo salva la gara di ritorno). Con un numero di squadre che
   non è una potenza di 2, le prime teste di serie passano il primo turno.
-- **Finale per il 3° e 4° posto** tra le perdenti delle semifinali, gara secca con la stessa formula della finale (si
-  crea insieme alla finale). In cima al tabellone il podio con le prime quattro.
+- **Finale per il 3° e 4° posto** tra le perdenti delle semifinali, sempre gara secca; la formula (3 set o al meglio dei
+  5) si sceglie a parte, anche diversa da quella della finale (si crea insieme alla finale). In cima al tabellone il podio con le prime quattro.
 - Database: `vtours/{id}` (torneo, pubblico) e `vmatches/{torneo_gara}` (gare, pubbliche; lo scorer scrive solo set e
   stato). Test delle regole: `tests/vtour.rules.test.mjs`.
 - I vecchi tornei beach (coppie, categorie, giocatori) non sono più nel menu; il loro codice verrà tolto più avanti.
