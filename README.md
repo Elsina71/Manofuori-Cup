@@ -15,7 +15,9 @@ occupano campi: hanno un **luogo** scritto a mano.
 
 Cerca `DA_COMPILARE` nei file: sono i dati che mancano.
 - `firestore.rules`: email degli admin generali (l'UID dell'admin principale è già inserito).
-- `js/legal.js`: sito (ora `manofuori-774b2.web.app`) da cambiare se ci sarà un dominio proprio.
+- Indirizzo dell'app: **https://manofuori.it** (dominio Aruba collegato a Firebase Hosting: record A `199.36.158.100` e
+  TXT `hosting-site=manofuori-774b2` sul dominio, CNAME `www` → `manofuori-774b2.web.app`). Funziona anche
+  `manofuori-774b2.web.app`. I domini vanno anche in Firebase *Authentication → Domini autorizzati*.
 
 ## Configurazione (una volta sola)
 
