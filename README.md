@@ -274,24 +274,16 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 
 ## Temi grafici e colori
 
-Per ora c'è un solo **tema neutro** (grigi e blu ardesia, chiaro o scuro secondo il dispositivo): i colori sono in
-`:root` in cima a `css/style.css`. Con un solo tema le schede *Tema grafico* e *Colori* in Impostazioni non compaiono.
+Ogni utente sceglie il tema da *Impostazioni → Tema*; la scelta resta solo su quel dispositivo (con il consenso alle
+preferenze nell'avviso cookie, altrimenti vale per la visita). Temi: **Neutro** (predefinito), **Palestra**,
+**Gialloblù**, **Notte di gara** (scuro), **Fenicottero**, **Azzurri**, **Tramonto** e tre cartoon: **Fumetto**,
+**Lavagna del coach** (scuro) e **Palla pazza**. Ogni tema cambia colori, carattere dei titoli, testata, barra in basso
+e l'illustrazione in prima pagina (`.theme-hero`), con un pallone disegnato nello stile del Molten Flistatec (senza marchi).
 
-Per aggiungere un tema:
-- **tavolozza di colori**: un blocco `[data-theme="id"] { --bg: …; --primary: …; }` in fondo a `css/style.css`, una riga
-  in `THEMES` (`js/app.js`) e il nome `theme_id` in `js/i18n.js`;
-- **tema grafico** (caratteri, decorazioni, immagine in cima ai tornei `.theme-hero`): un blocco `[data-design="id"]` in
-  `css/style.css`, una riga in `DESIGNS` (`js/app.js`), i nomi `design_id` / `designDesc_id` in `js/i18n.js` e, se usa
-  altri caratteri, il file `assets/fonts/id.css` con i font in `assets/fonts/files/`.
-I temi di Beach+ Arena (cartella `beach-plus-arena` del repository principale) si possono riprendere da lì.
-
-### Pubblicare le regole del database
-
-Le regole di sicurezza (`firestore.rules`) si pubblicano insieme all'app dal workflow di GitHub; a mano:
-
-```
-firebase deploy --only hosting,firestore:rules
-```
+Per aggiungere un tema: un blocco `[data-theme="id"]` in fondo a `css/style.css` (variabili di colore e regole), una
+riga in `THEMES` (`js/app.js`: id, colore principale, sfondo, accento) e il nome `theme_id` in `js/i18n.js`. I caratteri
+dei temi (Google Fonts, licenza OFL) sono in `assets/fonts/files/`, dichiarati in `assets/fonts/themes.css`: il browser
+li scarica solo per il tema scelto.
 
 ## Struttura
 

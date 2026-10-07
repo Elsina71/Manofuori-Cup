@@ -3135,7 +3135,16 @@
   // [id, colore principale, sfondo, colore accento]
   // Tavolozze di colori: [id, primario, sfondo, accento]. Per ora solo il tema neutro (colori in :root di css/style.css).
   const THEMES = [
-    ['logo', '#2f4a6d', '#f4f5f7', '#d9822b']
+    ['logo', '#2f4a6d', '#f4f5f7', '#d9822b'],
+    ['palestra', '#0b5563', '#e9b77b', '#e36414'],
+    ['gialloblu', '#0a3fa8', '#f3f6fb', '#ffcc00'],
+    ['notte', '#38d0ff', '#0a0f1e', '#ffe14d'],
+    ['fenicottero', '#d6336c', '#fff6f7', '#12a4a0'],
+    ['azzurri', '#0057b8', '#f1f5fb', '#009246'],
+    ['tramonto', '#c2410c', '#fdf4e7', '#7c3aed'],
+    ['fumetto', '#e63946', '#fff8e1', '#ffd60a'],
+    ['lavagna', '#ffe08a', '#24443a', '#ff9fb2'],
+    ['pallapazza', '#7b2ff7', '#e6f4ff', '#ff7a00']
   ];
   const THEME_KEY = 'pcm-theme';
 

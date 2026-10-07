@@ -1,0 +1,12 @@
+/* Caratteri dei temi grafici (Google Fonts, licenza SIL OFL 1.1: vedi LICENSE-OFL.txt), solo latino.
+   Il browser scarica un file solo quando il tema scelto lo usa. */
+@font-face { font-family: 'Oswald'; font-style: normal; font-display: swap; font-weight: 200 700; src: url(files/oswald-latin-wght-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Bebas Neue'; font-style: normal; font-display: swap; font-weight: 400; src: url(files/bebas-neue-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-display: swap; font-weight: 600; src: url(files/barlow-condensed-latin-600-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-display: swap; font-weight: 800; src: url(files/barlow-condensed-latin-800-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Fredoka'; font-style: normal; font-display: swap; font-weight: 300 700; src: url(files/fredoka-latin-wght-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Teko'; font-style: normal; font-display: swap; font-weight: 300 700; src: url(files/teko-latin-wght-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Bangers'; font-style: normal; font-display: swap; font-weight: 400; src: url(files/bangers-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Permanent Marker'; font-style: normal; font-display: swap; font-weight: 400; src: url(files/permanent-marker-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Luckiest Guy'; font-style: normal; font-display: swap; font-weight: 400; src: url(files/luckiest-guy-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Baloo 2'; font-style: normal; font-display: swap; font-weight: 400 800; src: url(files/baloo-2-latin-wght-normal.woff2) format('woff2'); }
