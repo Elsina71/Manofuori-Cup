@@ -424,7 +424,7 @@ function tessMirror(a) {
   const m = (Store.state.members || []).find(x => x.uid === a.id);
   const seasons = Object.keys(a.tess || {}).filter(k => a.tess[k]).sort();
   if (!seasons.length) return null;
-  const x = { name: m ? `${m.first} ${m.last}` : `${a.first || ''} ${a.last || ''}`.trim(), gender: (m && m.gender) || 'M', birthPlace: a.birthPlace || '', birthDate: a.birthDate || '',
+  const x = { name: m ? `${m.first} ${m.last}` : `${a.first || ''} ${a.last || ''}`.trim(), gender: (m && m.gender) || a.gender || 'M', birthPlace: a.birthPlace || '', birthDate: a.birthDate || '',
     city: a.city || '', address: a.address || '', cf: a.cf || '', seasons };
   // minorenne: dati del genitore a cui si intesta la ricevuta
   if (a.minor) Object.assign(x, { minor: true, parentFirst: a.parentFirst || '', parentLast: a.parentLast || '', parentGender: a.parentGender || '',

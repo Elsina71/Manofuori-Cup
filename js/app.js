@@ -46,7 +46,7 @@
   }
   // Dopo un avviso la pagina si ridisegna: i dati già scritti nei moduli restano (stessi campi, nello stesso ordine)
   // e le parti che dipendono da una scelta (intestatario a mano, minore, genitore...) si riaprono.
-  const REOPEN = ['ca-holder-sel', 'ca-minor', 'ath-minor', 'ca-method'];
+  const REOPEN = ['ca-holder-sel', 'ca-minor', 'ath-minor', 'ath-who', 'ca-method'];
   const formKey = f => `${f.dataset.form}|${f.dataset.id || f.dataset.uid || f.dataset.kind || ''}|${f.dataset.ref || ''}`;
   function keepForms() {
     return [...$app.querySelectorAll('form[data-form]')].map(f => ({ key: formKey(f), vals: [...f.elements].filter(e => e.name && e.type !== 'file' && e.type !== 'password')
@@ -378,6 +378,8 @@
   const personName = p => `${p.last} ${p.first}`;
   // Nome mostrato agli altri: alias dell'admin se l'utente ne ha uno.
   const personLabel = p => (p && p.uid && (S().nicks || {})[p.uid]) || personName(p);
+  // corsista: utente dell'app oppure scheda senza account (minore, chi non usa l'app)
+  const athName = (uid, a) => { const m = memberByUid(uid); if (m) return personName(m); a = a || (S().athletes || []).find(x => x.id === uid); return a ? `${a.last || ''} ${a.first || ''}`.trim() : ''; };
 
   // ---------- omonimi (utenti registrati con stesso nome, cognome e sesso) ----------
   const nameKeyOf = p => `${p.gender}|${norm(`${p.last} ${p.first}`)}`;
@@ -783,7 +785,7 @@
     const q = (ui.athFilter || '').toLowerCase();
     const list = (S().athletes || []).map(a => ({ a, m: memberByUid(a.id) }))
       .filter(x => !q || personName(x.m || { first: x.a.first || '', last: x.a.last || '' }).toLowerCase().includes(q))
-      .sort((x, y) => (x.m ? personName(x.m) : '').localeCompare(y.m ? personName(y.m) : ''));
+      .sort((x, y) => athName(x.a.id, x.a).localeCompare(athName(y.a.id, y.a)));
     const noSheet = (S().members || []).filter(m => !athleteOf(m.uid)).sort((a, b) => personName(a).localeCompare(personName(b)));
     const warnN = (S().athletes || []).filter(a => ['expired', 'soon'].includes(certState(a))).length;
     return `
@@ -798,8 +800,21 @@
       </div>
       <details class="card sub-form" data-keep="ath-new" ${keepOpen('ath-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('athNewTitle'))}</summary>
         <form class="grid-form" data-form="ath-new" data-m="${month}">
-          <label class="span-all">${esc(t('athPerson'))}<select name="uid" required><option value="">— ${esc(t('chooseUser'))} —</option>${noSheet.map(m => `<option value="${m.uid}">${esc(personName(m))}</option>`).join('')}</select></label>
+          <label class="span-all">${esc(t('athPerson'))}<select name="uid" required data-change="ath-who"><option value="">— ${esc(t('chooseUser'))} —</option>
+            <option value="__new">${esc(t('athNewNoAccount'))}</option>${noSheet.map(m => `<option value="${m.uid}">${esc(personName(m))}</option>`).join('')}</select></label>
+          <fieldset class="span-all grid-form parent-box ath-who-box" hidden><legend>${esc(t('athNewPerson'))}</legend>
+            <label>${esc(t('firstName'))}<input name="first" maxlength="60"></label>
+            <label>${esc(t('lastName'))}<input name="last" maxlength="60"></label>
+            <label>${esc(t('gender'))}<select name="gender"><option value="">—</option><option value="M">${esc(t('male'))}</option><option value="F">${esc(t('female'))}</option></select></label>
+          </fieldset>
+          <h3 class="span-all">${esc(t('athData'))}</h3>
+          <label>${esc(t('athBirthPlace'))}<input name="birthPlace" maxlength="60"></label>
+          <label>${esc(t('athBirthDate'))}<input type="date" name="birthDate" data-change="ath-birth"></label>
           <label>${esc(t('athCf'))}<input name="cf" maxlength="16" autocapitalize="characters" pattern="[A-Za-z0-9]{16}" placeholder="RSSMRA80A01B354X"></label>
+          <label class="adult-only">${esc(t('athCity'))}<input name="city" maxlength="60"></label>
+          <label class="adult-only">${esc(t('athAddress'))}<input name="address" maxlength="100" placeholder="${esc(t('athAddressPh'))}"></label>
+          <label class="check span-all"><input type="checkbox" name="minor" data-change="ath-minor"> <strong>${esc(t('athMinor'))}</strong></label>
+          ${parentInputs({}, true)}
           <label class="check"><input type="checkbox" name="tess"> ${esc(t('tessLabel', { s: seasonOf(todayStr()) }))}</label>
           <label>${esc(t('certExp'))}<input type="date" name="certExp"></label>
           ${trChecks(null, month)}
@@ -840,6 +855,10 @@
       <form class="grid-form" data-form="ath-save" data-uid="${a.id}">
         <h3 class="span-all">${esc(t('athData'))}</h3>
         <p class="muted small span-all"><i class="ti ti-shield-lock" aria-hidden="true"></i> ${t('athDataNote')}</p>
+        ${m ? '' : `<p class="muted small span-all">${esc(t('athNoAccountNote'))}</p>
+          <label>${esc(t('firstName'))}<input name="first" maxlength="60" value="${esc(a.first || '')}"></label>
+          <label>${esc(t('lastName'))}<input name="last" maxlength="60" value="${esc(a.last || '')}"></label>
+          <label>${esc(t('gender'))}<select name="gender"><option value="M" ${a.gender === 'M' ? 'selected' : ''}>${esc(t('male'))}</option><option value="F" ${a.gender === 'F' ? 'selected' : ''}>${esc(t('female'))}</option></select></label>`}
         <label>${esc(t('athBirthPlace'))}<input name="birthPlace" maxlength="60" value="${esc(a.birthPlace || '')}"></label>
         <label>${esc(t('athBirthDate'))}<input type="date" name="birthDate" data-change="ath-birth" value="${esc(a.birthDate || '')}"></label>
         <label>${esc(t('athCity'))}<input name="city" maxlength="60" value="${esc(a.city || '')}"></label>
@@ -861,6 +880,7 @@
           <button class="btn primary">${esc(t('save'))}</button></div>
       </form>${payBox('month', p, a.id, p.price)}` : `<p class="muted small">${esc(t('planHint'))}</p>`}
       ${packCard(a.id)}
+      ${m ? '' : `<div class="form-actions"><button class="btn small danger" data-action="user-delete" data-uid="${a.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('athDelete'))}</button></div>`}
     </div>`;
   }
   // Pacchetti del corsista (admin): elenco con allenamenti usati/rimasti e pagamento; nuovo pacchetto.
@@ -946,7 +966,7 @@
     if (!tr) return;
     const cur = groupOf(tid, month) || { id: `${tid}_${month}`, tid, month, uids: [], names: {} };
     const g = Object.assign({}, cur, { uids: (cur.uids || []).slice(), names: Object.assign({}, cur.names || {}), coachUid: tr.coachUid || '' });
-    if (add) { if (!g.uids.includes(uid)) g.uids.push(uid); const m = memberByUid(uid); if (m) g.names[uid] = personName(m); }
+    if (add) { if (!g.uids.includes(uid)) g.uids.push(uid); const nm = athName(uid); if (nm) g.names[uid] = nm; }
     else { g.uids = g.uids.filter(x => x !== uid); delete g.names[uid]; }
     g.updated = Date.now();
     const all = (S().groups || []).filter(x => x.id !== g.id).concat([g]);
@@ -965,12 +985,12 @@
   }
   // Mette il corsista esattamente negli allenamenti scelti per il mese (aggiunge e toglie dai gruppi), con il piano.
   function setAthleteTrainings(uid, month, tids, athleteData) {
-    const m = memberByUid(uid), changed = [], full = [];
+    const nm = athName(uid, athleteData && athleteData.first ? athleteData : null), changed = [], full = [];
     trainings().forEach(tr => {
       const cur = groupOf(tr.id, month), has = !!(cur && (cur.uids || []).includes(uid)), want = tids.includes(tr.id);
       if (has === want) return;
       const g = Object.assign({ id: `${tr.id}_${month}`, tid: tr.id, month }, cur || {}, { uids: ((cur && cur.uids) || []).slice(), names: Object.assign({}, (cur && cur.names) || {}), coachUid: tr.coachUid || '', updated: Date.now() });
-      if (want) { if (g.uids.length >= tr.max) full.push(trTitle(tr)); g.uids.push(uid); if (m) g.names[uid] = personName(m); }
+      if (want) { if (g.uids.length >= tr.max) full.push(trTitle(tr)); g.uids.push(uid); if (nm) g.names[uid] = nm; }
       else { g.uids = g.uids.filter(x => x !== uid); delete g.names[uid]; }
       changed.push(g);
     });
@@ -1268,7 +1288,7 @@
       minor: { name, gender: gender || '', birthPlace: a.birthPlace || '', birthDate: a.birthDate || '', cf: a.cf || '' } };
     return { name, gender: gender || 'M', birthPlace: a.birthPlace || '', birthDate: a.birthDate || '', city: a.city || '', address: a.address || '', cf: a.cf || '' };
   }
-  const personOf = (uid, a) => { const m = memberByUid(uid); return personFrom(m ? `${m.first} ${m.last}` : `${(a && a.first) || ''} ${(a && a.last) || ''}`.trim(), (m && m.gender) || 'M', a); };
+  const personOf = (uid, a) => { const m = memberByUid(uid); return personFrom(m ? `${m.first} ${m.last}` : `${(a && a.first) || ''} ${(a && a.last) || ''}`.trim(), (m && m.gender) || (a && a.gender) || 'M', a); };
   const causaleMonth = m => `Quota sociale allenamenti - mese di ${itMonth(m)}`;
   const causaleSpot = d => `Quota sociale allenamenti - allenamento del ${itDate(d)}`;
   const paidLine = (p, pd) => { pd = pd || (p && p.paid); return pd ? `${esc(t('paidOn', { d: fmtDate(pd.date), m: t('pay_' + pd.method) }))}${pd.quarter ? ` · ${esc(t('payQuarterOf', { a: monthLabel(pd.months[0]), b: monthLabel(pd.months[2]) }))}` : ''}${pd.rn ? ` · ${esc(t('receiptN', { n: rnFmt(pd.rn) }))}` : ''}` : ''; };
@@ -1640,7 +1660,12 @@
     if (person && cf) person.cf = cf;
     return { uid, person };
   }
-  const caMemberOpts = () => `<option value="">— ${esc(t('caNoHolder'))} —</option><option value="${CA_MANUAL}">${esc(t('caManualOpt'))}</option>${(S().members || []).slice().sort((a, b) => personName(a).localeCompare(personName(b))).map(m => `<option value="${m.uid}">${esc(personName(m))}${isTess(m.uid) ? '' : ' ★'}</option>`).join('')}`;
+  const caMemberOpts = () => {
+    const ppl = (S().members || []).map(m => ({ id: m.uid, name: personName(m) }));
+    (S().tesserati || []).forEach(x => { if (!ppl.some(p => p.id === x.id)) ppl.push({ id: x.id, name: x.name }); });
+    if (admin()) (S().athletes || []).forEach(a => { if (!ppl.some(p => p.id === a.id)) ppl.push({ id: a.id, name: athName(a.id, a) }); });
+    return `<option value="">— ${esc(t('caNoHolder'))} —</option><option value="${CA_MANUAL}">${esc(t('caManualOpt'))}</option>${ppl.sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${p.id}">${esc(p.name)}${isTess(p.id) ? '' : ' ★'}</option>`).join('')}`;
+  };
   // ricevuta intestata a una persona non tesserata nella stagione della ricevuta
   const rcNotTess = r => !r.void && !!r.uid && !!(r.person && r.person.name) && !isTess(r.uid, r.issued);
   const notTessReceipts = () => (S().receipts || []).filter(rcNotTess).sort((a, b) => (b.issued || '').localeCompare(a.issued || ''));
@@ -2097,10 +2122,17 @@
       grpChange(tid, month, uid, true, ad).then(() => { ui.flash = { text: t('grpAdded', { n: personName(m) }) }; render(); }).catch(e => warn('regError', { code: e.code || e.message }));
     },
     'ath-new': f => {
-      const m = memberByUid(f.uid.value);
+      // corsista: utente dell'app oppure persona senza account (es. minore), con i dati per le ricevute
+      const isNew = f.uid.value === '__new';
+      const m = isNew ? { uid: Store.uid('ath'), first: f.first.value.trim().replace(/\s+/g, ' '), last: f.last.value.trim().replace(/\s+/g, ' '), gender: f.gender.value } : memberByUid(f.uid.value);
       if (!m) return;
-      const ad = { id: m.uid, first: m.first, last: m.last, tess: { [seasonOf(todayStr())]: f.tess.checked }, created: Date.now(), updated: Date.now() };
-      if (f.cf.value.trim()) ad.cf = f.cf.value.trim().toUpperCase();
+      if (isNew && (!m.first || !m.last || !m.gender)) return warn('athNewNeedName');
+      const minor = f.minor.checked, par = readParent(f);
+      if (minor && !(par.parentFirst && par.parentLast)) return warn('athParentNeed');
+      const ad = Object.assign({ id: m.uid, first: m.first, last: m.last, tess: { [seasonOf(todayStr())]: f.tess.checked }, created: Date.now(), updated: Date.now(),
+        birthPlace: f.birthPlace.value.trim(), birthDate: f.birthDate.value, cf: f.cf.value.trim().toUpperCase(), minor },
+        minor ? par : { city: f.city.value.trim(), address: f.address.value.trim() });
+      if (isNew) Object.assign(ad, { gender: m.gender, noAccount: true });
       if (f.certExp.value) ad.certExp = f.certExp.value;
       const tids = [...f.querySelectorAll('[name=tid]:checked')].map(x => x.value);
       setAthleteTrainings(m.uid, f.dataset.m, tids, ad).then(ok => { if (!ok) return; (ui.keep || {})['ath-new'] = false; ui.athEdit = m.uid; ui.flash = { text: t('athCreated') }; render(); })
@@ -2118,6 +2150,10 @@
         certExp: f.certExp.value, tess: Object.assign({}, a.tess || {}, { [s]: f.tess.checked }), updated: Date.now(), minor: f.minor.checked }, readParent(f));
       if (d.minor && !(d.parentFirst && d.parentLast)) return warn('athParentNeed');
       if (m) Object.assign(d, { first: m.first, last: m.last });
+      else if (f.first) {   // scheda senza account: nome, cognome e sesso si correggono qui
+        Object.assign(d, { first: f.first.value.trim(), last: f.last.value.trim(), gender: f.gender.value });
+        if (!d.first || !d.last) return warn('athNewNeedName');
+      }
       window.Cloud.saveAthlete(uid, d).then(() => { ui.flash = { text: t('athSaved') }; render(); }).catch(e => warn('regError', { code: e.code || e.message }));
     },
     'plan-price': f => {
@@ -3644,10 +3680,12 @@
     },
     'user-edit': el => { ui.userEdit = el.dataset.uid || null; render(); },
     'user-delete': el => {
-      const m = memberByUid(el.dataset.uid);
+      // utente dell'app, oppure scheda di un corsista senza account (stessa pulizia: gruppi, piani, pacchetti, scheda)
+      const a = !memberByUid(el.dataset.uid) && (S().athletes || []).find(x => x.id === el.dataset.uid);
+      const m = memberByUid(el.dataset.uid) || (a ? { uid: a.id, first: a.first || '', last: a.last || '' } : null);
       if (!m) return;
       const email = (S().accounts || {})[m.uid] || '';
-      if (!confirmed('userDeleteConfirm', { n: personName(m), e: email })) return;
+      if (!confirmed(a ? 'athDeleteConfirm' : 'userDeleteConfirm', { n: personName(m), e: email })) return;
       // tolto da tutti i gruppi degli allenamenti; piani eliminati; poi scheda, profilo, email, conferme, lista nera, coach
       const groups = (S().groups || []).filter(g => (g.uids || []).includes(m.uid)).map(g => {
         const names = Object.assign({}, g.names || {}); delete names[m.uid];
@@ -3657,6 +3695,7 @@
       const planIds = (S().plans || []).filter(p => p.uid === m.uid).map(p => p.id);
       const packIds = (S().packs || []).filter(k => k.uid === m.uid).map(k => k.id);
       window.Cloud.deleteUser(m.uid, groups, planIds, packIds).then(() => {
+        if (a) { ui.athEdit = null; ui.flash = { text: t('athDeleted', { n: personName(m) }) }; render(); return; }
         alert(t('userDeletedAlert', { n: personName(m), e: email || '—' }));
         ui.flash = { text: t('userDeleted', { n: personName(m) }) }; render();
       }).catch(e => warn('regError', { code: e.code || e.message }));
@@ -3887,14 +3926,20 @@
         if (!fm.mName.value.trim() && p.name) { fm.mName.value = p.name; fm.mGender.value = p.gender || ''; fm.mAddress.value = p.address || ''; fm.mCity.value = p.city || ''; fm.mCf.value = p.cf || ''; }
         break;
       }
+      case 'ath-who': {   // nuovo corsista senza account: nome, cognome e sesso
+        const box = el.form.querySelector('.ath-who-box');
+        if (box) box.hidden = el.value !== '__new';
+        break;
+      }
       case 'ath-birth': {   // meno di 18 anni: corsista minorenne (si può togliere a mano)
         const mi = el.form.querySelector('[name=minor]');
-        if (mi && isUnder18(el.value) && !mi.checked) { mi.checked = true; const box = el.form.querySelector('.parent-box'); if (box) box.hidden = false; }
+        if (mi && isUnder18(el.value) && !mi.checked) { mi.checked = true; mi.dispatchEvent(new Event('change', { bubbles: true })); }
         break;
       }
       case 'ath-minor': {
-        const box = el.form.querySelector('.parent-box');
+        const box = el.form.querySelector('.parent-box:not(.ath-who-box)');
         if (box) box.hidden = !el.checked;
+        el.form.querySelectorAll('.adult-only').forEach(x => { x.hidden = el.checked; });   // minore: residenza del genitore
         break;
       }
       case 'sign-file': {

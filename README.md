@@ -203,6 +203,9 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   "prepagati" nella scheda e risultano pagati quando si compone il gruppo. Annullando la ricevuta tornano da pagare.
 - **Pagamento spot** (presenze del giorno, spot confermati): importo dal prezzo dello spot; un recupero gratuito (0 €)
   si segna pagato senza ricevuta. Se mancano i dati per la ricevuta, si compilano nel modulo e si salvano nella scheda.
+- **Nuova scheda corsista**: per un utente dell'app oppure per un corsista **senza account** (es. un minore: nome, cognome,
+  sesso scritti a mano; la scheda si elimina con *Elimina scheda*). Nel modulo ci sono subito tutti i dati per le
+  ricevute: luogo e data di nascita, codice fiscale, residenza (adulti) oppure i dati del genitore (minori).
 - **Corsisti minorenni** (scheda corsista → *Corsista minorenne*, spuntata da sola se dalla data di nascita risultano meno
   di 18 anni): dati del genitore responsabile (nome, cognome, Sig./Sig.ra, via e numero, città, codice fiscale). La
   ricevuta è intestata al genitore, riporta i dati del minore (nome, luogo e data di nascita, codice fiscale), dice che il
