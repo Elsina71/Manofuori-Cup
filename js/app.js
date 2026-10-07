@@ -39,8 +39,31 @@
   }
 
   function warn(key, params) {
+    const kept = keepForms();
     ui.flash = { type: 'warn', text: t(key, params) };
     render();
+    restoreForms(kept);
+  }
+  // Dopo un avviso la pagina si ridisegna: i dati già scritti nei moduli restano (stessi campi, nello stesso ordine)
+  // e le parti che dipendono da una scelta (intestatario a mano, minore, genitore...) si riaprono.
+  const REOPEN = ['ca-holder-sel', 'ca-minor', 'ath-minor', 'ca-method'];
+  const formKey = f => `${f.dataset.form}|${f.dataset.id || f.dataset.uid || f.dataset.kind || ''}|${f.dataset.ref || ''}`;
+  function keepForms() {
+    return [...$app.querySelectorAll('form[data-form]')].map(f => ({ key: formKey(f), vals: [...f.elements].filter(e => e.name && e.type !== 'file' && e.type !== 'password')
+      .map(e => [e.name, e.type === 'checkbox' || e.type === 'radio' ? e.checked : e.value]) }));
+  }
+  function restoreForms(kept) {
+    kept.forEach(({ key, vals }) => {
+      const f = [...$app.querySelectorAll('form[data-form]')].find(x => formKey(x) === key);
+      if (!f) return;
+      const seen = {};
+      vals.forEach(([name, v]) => {
+        const i = seen[name] = (seen[name] || 0) + 1, e = [...f.elements].filter(x => x.name === name)[i - 1];
+        if (!e) return;
+        if (e.type === 'checkbox' || e.type === 'radio') e.checked = v; else e.value = v;
+      });
+      f.querySelectorAll('[data-change]').forEach(e => { if (REOPEN.includes(e.dataset.change)) e.dispatchEvent(new Event('change', { bubbles: true })); });
+    });
   }
 
   // Il messaggio resta qualche secondo sulla pagina in cui compare, anche se nel frattempo arrivano
@@ -1573,12 +1596,30 @@
   // nuovo incasso: qualsiasi utente registrato (i non tesserati vengono segnati con ★ nelle ricevute)
   const CA_MANUAL = '__manual';
   // intestatario scritto a mano (nome e cognome, Sig./Sig.ra) e codice fiscale (anche per una persona scelta dall'elenco)
-  const caManualFields = (p, manual) => `<div class="span-all grid-form ca-manual-box">
-      <label class="ca-manual" ${manual ? '' : 'hidden'}>${esc(t('caManualName'))}<input name="mName" maxlength="80" value="${esc((manual && p && p.name) || '')}"></label>
-      <label class="ca-manual" ${manual ? '' : 'hidden'}>${esc(t('caManualTitle'))}<select name="mGender"><option value="">${esc(t('caManualTitleAny'))}</option>
+  const caManualFields = (p, manual) => {
+    const mn = (manual && p && p.minor) || null, hid = manual ? '' : 'hidden';
+    // minori già registrati (schede dei corsisti / tesserati): si sceglie e i dati si compilano
+    const kids = (S().tesserati || []).filter(x => x.minor).concat((S().athletes || []).filter(a => a.minor && !(S().tesserati || []).some(x => x.id === a.id)).map(a => ({ id: a.id })))
+      .map(x => ({ id: x.id, name: (caPerson(x.id) || {}).minor ? caPerson(x.id).minor.name : '' })).filter(x => x.name).sort((a, b) => a.name.localeCompare(b.name));
+    return `<div class="span-all grid-form ca-manual-box">
+      <label class="ca-manual" ${hid}>${esc(t('caManualName'))}<input name="mName" maxlength="80" value="${esc((manual && p && p.name) || '')}"></label>
+      <label class="ca-manual" ${hid}>${esc(t('caManualTitle'))}<select name="mGender"><option value="">${esc(t('caManualTitleAny'))}</option>
         <option value="M" ${manual && p && p.gender === 'M' ? 'selected' : ''}>${esc(t('caManualMr'))}</option><option value="F" ${manual && p && p.gender === 'F' ? 'selected' : ''}>${esc(t('caManualMrs'))}</option></select></label>
+      <label class="ca-manual" ${hid}>${esc(t('athParentAddress'))}<input name="mAddress" maxlength="100" value="${esc((manual && p && p.address) || '')}" placeholder="${esc(t('athAddressPh'))}"></label>
+      <label class="ca-manual" ${hid}>${esc(t('athCity'))}<input name="mCity" maxlength="60" value="${esc((manual && p && p.city) || '')}"></label>
       <label>${esc(t('athCf'))}<input name="mCf" maxlength="16" autocapitalize="characters" value="${esc((p && p.cf) || '')}" placeholder="${esc(t('caCfPh'))}"></label>
+      <label class="check span-all ca-manual" ${hid}><input type="checkbox" name="mMinor" data-change="ca-minor" ${mn ? 'checked' : ''}> <strong>${esc(t('caMinorCheck'))}</strong></label>
+      <fieldset class="span-all grid-form parent-box ca-minor-box" ${mn ? '' : 'hidden'}><legend>${esc(t('caMinorTitle'))}</legend>
+        ${kids.length ? `<label class="span-all">${esc(t('caMinorPick'))}<select name="mKid" data-change="ca-min-pick"><option value="">— ${esc(t('caMinorPickNone'))} —</option>${kids.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join('')}</select></label>` : ''}
+        <label>${esc(t('caMinorName'))}<input name="mKName" maxlength="80" value="${esc((mn && mn.name) || '')}"></label>
+        <label>${esc(t('caMinorSon'))}<select name="mKGender"><option value="">${esc(t('caMinorSonAny'))}</option>
+          <option value="M" ${mn && mn.gender === 'M' ? 'selected' : ''}>${esc(t('caMinorSonM'))}</option><option value="F" ${mn && mn.gender === 'F' ? 'selected' : ''}>${esc(t('caMinorSonF'))}</option></select></label>
+        <label>${esc(t('athBirthPlace'))}<input name="mKPlace" maxlength="60" value="${esc((mn && mn.birthPlace) || '')}"></label>
+        <label>${esc(t('athBirthDate'))}<input type="date" name="mKDate" value="${esc((mn && mn.birthDate) || '')}"></label>
+        <label>${esc(t('caMinorCf'))}<input name="mKCf" maxlength="16" autocapitalize="characters" value="${esc((mn && mn.cf) || '')}"></label>
+      </fieldset>
     </div>`;
+  };
   // persona per la ricevuta dal modulo: persona scelta (con il codice fiscale scritto, se c'è) o nome scritto a mano
   function caFormPerson(f) {
     const cf = f.mCf.value.trim().toUpperCase().replace(/\s+/g, '');
@@ -1586,7 +1627,14 @@
     if (f.holder.value === CA_MANUAL) {
       const name = f.mName.value.trim().replace(/\s+/g, ' ');
       if (!name) return { err: 'caManualNeedName' };
-      return { uid: '', person: { name, gender: f.mGender.value, cf } };
+      const person = { name, gender: f.mGender.value, cf, address: f.mAddress.value.trim(), city: f.mCity.value.trim() };
+      if (f.mMinor.checked) {   // pagamento per conto di un minore: ricevuta al genitore con i dati del figlio o della figlia
+        const kcf = f.mKCf.value.trim().toUpperCase().replace(/\s+/g, '');
+        if (!f.mKName.value.trim()) return { err: 'caMinorNeedName' };
+        if (kcf && !/^[A-Z0-9]{16}$/.test(kcf)) return { err: 'caCfBad' };
+        person.minor = { name: f.mKName.value.trim().replace(/\s+/g, ' '), gender: f.mKGender.value, birthPlace: f.mKPlace.value.trim(), birthDate: f.mKDate.value, cf: kcf };
+      }
+      return { uid: '', person };
     }
     const uid = f.holder.value, person = caPerson(uid);
     if (person && cf) person.cf = cf;
@@ -3827,6 +3875,18 @@
       case 'pay-period': el.form.amount.value = el.value === 'quarter' ? el.dataset.q : el.dataset.m; break;
       case 'fp-all': if (el.checked) el.form.querySelectorAll('[name=lv]:not([value=all])').forEach(x => { x.checked = false; }); break;
       case 'fp-lv': { const any = [...el.form.querySelectorAll('[name=lv]:not([value=all])')].some(x => x.checked); el.form.querySelector('[name=lv][value=all]').checked = !any; break; }
+      case 'ca-minor': {
+        const box = el.form.querySelector('.ca-minor-box');
+        if (box) box.hidden = !el.checked;
+        break;
+      }
+      case 'ca-min-pick': {   // minore già registrato: dati dalla sua scheda (e il genitore, se il nome è ancora vuoto)
+        const p = caPerson(el.value), mn = p && p.minor, fm = el.form;
+        if (!mn) break;
+        fm.mKName.value = mn.name || ''; fm.mKGender.value = mn.gender || ''; fm.mKPlace.value = mn.birthPlace || ''; fm.mKDate.value = mn.birthDate || ''; fm.mKCf.value = mn.cf || '';
+        if (!fm.mName.value.trim() && p.name) { fm.mName.value = p.name; fm.mGender.value = p.gender || ''; fm.mAddress.value = p.address || ''; fm.mCity.value = p.city || ''; fm.mCf.value = p.cf || ''; }
+        break;
+      }
       case 'ath-birth': {   // meno di 18 anni: corsista minorenne (si può togliere a mano)
         const mi = el.form.querySelector('[name=minor]');
         if (mi && isUnder18(el.value) && !mi.checked) { mi.checked = true; const box = el.form.querySelector('.parent-box'); if (box) box.hidden = false; }
@@ -3848,9 +3908,11 @@
       case 'ca-holder-sel': {
         const manual = el.value === CA_MANUAL;
         el.form.querySelectorAll('.ca-manual').forEach(x => { x.hidden = !manual; });
+        const mb = el.form.querySelector('.ca-minor-box'), mm = el.form.querySelector('[name=mMinor]');
+        if (mb) mb.hidden = !(manual && mm && mm.checked);
         // persona scelta: il suo codice fiscale (se c'è) nel campo
         const cfIn = el.form.querySelector('[name=mCf]');
-        if (cfIn && !manual) { const p = caPerson(el.value); cfIn.value = (p && p.cf) || ''; }
+        if (cfIn && !manual && e.isTrusted) { const p = caPerson(el.value); cfIn.value = (p && p.cf) || ''; }   // solo scelta dell'utente, non al ripristino
         break;
       }
       case 'ca-method': {

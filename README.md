@@ -239,7 +239,10 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   (persona registrata o nome scritto a mano; le modifiche restano registrate). Già al momento dell'incasso
   l'intestatario si può **scrivere a mano** (nome e cognome, Sig./Sig.ra) con il **codice fiscale** (16 caratteri, o 11 cifre
   di partita IVA); per una persona scelta dall'elenco il codice fiscale si prende dalla scheda e si può correggere.
-  L'admin cambia il **numero di una ricevuta** anche dall'elenco degli incassi (*Cambia numero*). Inserimento con numero e data scelti: le
+  L'admin cambia il **numero di una ricevuta** anche dall'elenco degli incassi (*Cambia numero*).
+  Scrivendo a mano si può indicare **Pagamento per un minore**: il genitore è l'intestatario (con indirizzo e città) e si
+  inseriscono nome, figlio/figlia, luogo e data di nascita e codice fiscale del minore, oppure si sceglie il minore dalle
+  schede dei corsisti e i dati si compilano da soli. La ricevuta è quella per i minori (con il testo per le detrazioni). Inserimento con numero e data scelti: le
   ricevute successive della stessa serie scalano di uno. Annullamento dell'incasso (ricevute ANNULLATE,
   piani, spot e pacchetti di nuovo da pagare). Resoconto mensile (totali Q/C, per voce e modalità) e prospetto Excel.
   I pagamenti degli allenamenti registrati dalla scheda corsista sono anche incassi della cassa.
