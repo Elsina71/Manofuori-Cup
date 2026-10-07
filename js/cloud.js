@@ -130,6 +130,8 @@ onAuthStateChanged(auth, async u => {
     // Admin che è anche giocatore (corsista o coach): la sua scheda utente, se esiste.
     if (isAdmin) {
       try { const m = await getDoc(doc(db, 'members', u.uid)); adminMember = m.exists() ? Object.assign({ uid: u.uid, email: u.email || '' }, m.data()) : null; } catch (e) { adminMember = null; }
+      // email dell'admin nella lista utenti
+      if (adminMember && u.email) setDoc(doc(db, 'accounts', u.uid), { email: u.email.toLowerCase(), verified: !!u.emailVerified }).catch(() => {});
     }
     // Account di un campo (refertista): può solo compilare i referti elettronici.
     if (!isAdmin && u.email) {
@@ -277,7 +279,9 @@ async function checkVerified() {
   await user.reload();
   if (user.emailVerified) {
     await user.getIdToken(true);
-    if (member && user.email) setDoc(doc(db, 'accounts', user.uid), { email: user.email.toLowerCase(), verified: true }).catch(() => {});
+    if ((member || adminMember) && user.email) setDoc(doc(db, 'accounts', user.uid), { email: user.email.toLowerCase(), verified: true }).catch(() => {});
+    // admin principale per email: diventa admin solo con l'email confermata → si ricarica l'app
+    if (!isAdmin && await adminCheck()) { location.reload(); return true; }
   }
   refresh();
   return user.emailVerified || manualOk;
@@ -780,7 +784,22 @@ function savePlan(p) { return setDoc(doc(db, 'plans', p.id), stripId(p)); }
 async function saveSelfProfile(d) {
   const prof = { first: d.first, last: d.last, gender: d.gender, created: Date.now() };
   await setDoc(doc(db, 'members', user.uid), prof);
+  if (user.email) setDoc(doc(db, 'accounts', user.uid), { email: user.email.toLowerCase(), verified: !!user.emailVerified }).catch(() => {});
   adminMember = Object.assign({ uid: user.uid, email: user.email || '' }, prof);
+  refresh();
+}
+// Account senza scheda utente (creato fuori dall'app): completa nome, cognome e sesso e accetta privacy e termini.
+// Da qui in poi compare nella lista degli utenti, come chi si registra dall'app.
+async function completeProfile(d) {
+  const prof = { first: d.first, last: d.last, gender: d.gender, created: Date.now(), privacyAt: Date.now(), privacyVer: d.privacyVer || '' };
+  await setDoc(doc(db, 'members', user.uid), prof);
+  if (user.email) await setDoc(doc(db, 'accounts', user.uid), { email: user.email.toLowerCase(), verified: !!user.emailVerified });
+  member = Object.assign({ uid: user.uid, email: user.email || '' }, prof);
+  listenAccount();
+  listenVerified();
+  listenFreeplay();
+  listenRosters();
+  listenRoles();
   refresh();
 }
 // Elimina un utente dall'app (admin): gruppi degli allenamenti, piani, scheda e profilo.
@@ -1115,6 +1134,7 @@ window.Cloud = {
   saveEditorial,
   register,
   updateProfile,
+  completeProfile,
   adminUpdateMember,
   sendMessage,
   deleteMessage,

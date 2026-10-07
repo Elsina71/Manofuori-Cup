@@ -1942,6 +1942,11 @@
 
   const trForms = {
     'tr-save': f => trSave(f),
+    'complete-profile': f => {
+      const d = { first: f.first.value.trim(), last: f.last.value.trim(), gender: f.gender.value, privacyVer: Legal.VERSION };
+      if (!d.first || !d.last || !['M', 'F'].includes(d.gender) || !f.privacy.checked) return warn('errRegFields');
+      window.Cloud.completeProfile(d).then(() => { ui.flash = { text: t('noProfileSaved') }; render(); }).catch(e => warn('regError', { code: e.code || e.message }));
+    },
     'self-profile': f => {
       const d = { first: f.first.value.trim(), last: f.last.value.trim(), gender: f.gender.value };
       if (!d.first || !d.last) return warn('errRegFields');
@@ -3370,7 +3375,8 @@
     let account;
     if (user && admin()) {
       account = `<p><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(t('loggedInAs', { email: user.email }))}</p>
-        <button class="btn" data-action="logout">${esc(t('logout'))}</button>`;
+        <button class="btn" data-action="logout">${esc(t('logout'))}</button>
+        ${window.Cloud.adminMember ? '' : `<p class="note warn">${esc(t('adminNoProfile'))}</p>${selfProfileCard()}`}`;
     } else if (user && scorer()) {
       account = `<p><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(t('scorerBadge', { c: scorer().court }))} · ${esc(user.email)}</p>
         <div class="btn-row"><a class="btn primary" href="#/mine"><i class="ti ti-device-mobile" aria-hidden="true"></i> ${esc(t('navMine'))}</a>
@@ -3380,7 +3386,20 @@
         <div class="btn-row"><a class="btn primary" href="#/me"><i class="ti ti-user" aria-hidden="true"></i> ${esc(t('profile'))}</a>
         <button class="btn" data-action="logout">${esc(t('logout'))}</button></div>`;
     } else if (user) {
+      // account senza scheda utente (creato fuori dall'app): conferma dell'email e completamento del profilo
+      const ver = window.Cloud.verified;
       account = `<p class="note warn">${esc(t('notAdmin', { email: user.email }))}</p>
+        ${ver ? '' : `<p class="muted small">${esc(t('noProfileVerify', { e: user.email }))}</p>
+          <div class="btn-row"><button class="btn small primary" data-action="verify-check">${esc(t('verifyCheck'))}</button>
+          <button class="btn small" data-action="verify-resend">${esc(t('verifyResend'))}</button></div>`}
+        <form class="grid-form" data-form="complete-profile">
+          <p class="muted small span-all">${esc(t('noProfileHelp'))}</p>
+          <label>${esc(t('firstName'))}<input name="first" required maxlength="60"></label>
+          <label>${esc(t('lastName'))}<input name="last" required maxlength="60"></label>
+          <label>${esc(t('gender'))}<select name="gender" required><option value="">—</option><option value="M">${esc(t('male'))}</option><option value="F">${esc(t('female'))}</option></select></label>
+          <label class="check span-all legal-check"><input type="checkbox" name="privacy" required> <span>${t('registerPrivacy')}</span></label>
+          <div class="form-actions span-all"><button class="btn primary">${esc(t('noProfileSave'))}</button></div>
+        </form>
         <p class="muted small">UID: <code>${esc(user.uid)}</code></p>
         <button class="btn" data-action="logout">${esc(t('logout'))}</button>`;
     } else {
@@ -3636,7 +3655,7 @@
   });
 
   // Azioni consentite a tutti; le altre solo agli amministratori.
-  const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group']);
+  const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
   const TOUR_ACTIONS = new Set(['notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
   const TOUR_FORMS = new Set(['scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
@@ -3644,7 +3663,7 @@
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
   const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'pdf-view', 'pdf-zip']);
-  const PUBLIC_FORMS = new Set(['login', 'register']);
+  const PUBLIC_FORMS = new Set(['login', 'register', 'complete-profile']);
   const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
   const MEMBER_ACTIONS = new Set(['profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
   const MEMBER_FORMS = new Set(['profile-save', 'fp-join', 'fp-blocks', 'team-save']);
