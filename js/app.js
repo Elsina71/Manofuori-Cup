@@ -776,6 +776,7 @@
       <details class="card sub-form" data-keep="ath-new" ${keepOpen('ath-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('athNewTitle'))}</summary>
         <form class="grid-form" data-form="ath-new" data-m="${month}">
           <label class="span-all">${esc(t('athPerson'))}<select name="uid" required><option value="">— ${esc(t('chooseUser'))} —</option>${noSheet.map(m => `<option value="${m.uid}">${esc(personName(m))}</option>`).join('')}</select></label>
+          <label>${esc(t('athCf'))}<input name="cf" maxlength="16" autocapitalize="characters" pattern="[A-Za-z0-9]{16}" placeholder="RSSMRA80A01B354X"></label>
           <label class="check"><input type="checkbox" name="tess"> ${esc(t('tessLabel', { s: seasonOf(todayStr()) }))}</label>
           <label>${esc(t('certExp'))}<input type="date" name="certExp"></label>
           ${trChecks(null, month)}
@@ -789,7 +790,7 @@
     const p = planOf(a.id, month);
     const editing = ui.athEdit === a.id;
     const planLine = p ? `${esc(t('planN', { n: p.n }))} · ${esc(planDesc(p).join(' / '))}` : esc(t('planNone'));
-    const head = `<div class="ath-head"><div><strong>${esc(name)}</strong> ${tessBadge(a)} ${certBadge(a)}
+    const head = `<div class="ath-head"><div><strong>${esc(name)}</strong> ${a.cf ? `<span class="badge cf-badge" title="${esc(t('athCf'))}">${esc(t('cfShort'))} ${esc(a.cf)}</span>` : `<span class="badge tess-no">${esc(t('cfMissing'))}</span>`} ${tessBadge(a)} ${certBadge(a)}
         <br><small class="muted">${planLine}${p ? ` · <b>${esc(euro(p.price))}</b>${p.manual ? ` <span class="badge">${esc(t('priceManual'))}</span>` : ''} ${payBadge(p)}` : ''}</small>
         ${packsOf(a.id).length ? `<br><small class="muted"><i class="ti ti-ticket" aria-hidden="true"></i> ${activePack(a.id) ? esc(t('packLeftShort', { l: packsOf(a.id).reduce((s, k) => s + packLeft(k), 0) })) : esc(t('packNoneLeft'))}</small>` : ''}</div>
         <button class="btn small" data-action="ath-edit" data-uid="${a.id}">${esc(t(editing ? 'close' : 'athOpen'))}</button></div>`;
@@ -1295,9 +1296,9 @@
     pdf.text(`RICEVUTA N. ${rcNum(r)} del ${itDate(r.issued)}`, L, y);
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(11.5);
     if (C) { pdf.setFontSize(9.5); pdf.text('Ricevuta non fiscale', 188, y, { align: 'right' }); pdf.setFontSize(11.5); }
-    y += 13; pdf.text(named ? `Si attesta che ${F ? 'la Sig.ra' : 'il Sig.'}:` : 'Si attesta che il/la Sig./Sig.ra:', L, y);
+    y += 13; pdf.text(named && p.gender ? `Si attesta che ${F ? 'la Sig.ra' : 'il Sig.'}:` : 'Si attesta che il/la Sig./Sig.ra:', L, y);
     const blank = '______________________________';
-    const rows = named ? [['Nome e Cognome', p.name], [F ? 'Nata a' : 'Nato a', p.birthPlace || p.birthDate ? `${p.birthPlace || ''} il ${itDate(p.birthDate)}` : ''], ['Residente a', p.city || p.address ? `${p.city || ''}, ${p.address || ''}` : ''], ['Codice Fiscale', p.cf || '']]
+    const rows = named ? [['Nome e Cognome', p.name], [!p.gender ? 'Nato/a a' : F ? 'Nata a' : 'Nato a', p.birthPlace || p.birthDate ? `${p.birthPlace || ''} il ${itDate(p.birthDate)}` : ''], ['Residente a', p.city || p.address ? `${p.city || ''}, ${p.address || ''}` : ''], ['Codice Fiscale', p.cf || '']]
       : [['Nome e Cognome', blank], ['Codice Fiscale', blank]];
     rows.forEach(([k, v]) => { y += 8; pdf.text('•', L + 3, y); pdf.setFont('helvetica', 'bold'); pdf.text(`${k}:`, L + 8, y); const w = pdf.getTextWidth(`${k}: `); pdf.setFont('helvetica', 'normal'); pdf.text(String(v || ''), L + 8 + w, y); });
     y += 13; pdf.text(`ha versato in data ${itDate(r.payDate)} la somma complessiva di:`, L, y);
@@ -1518,12 +1519,33 @@
   const tessFor = date => { const se = seasonOf(date || todayStr()); return (S().tesserati || []).filter(x => (x.seasons || []).includes(se)).sort((a, b) => a.name.localeCompare(b.name)); };
   const isTess = (uid, date) => tessFor(date).some(x => x.id === uid);
   // nuovo incasso: qualsiasi utente registrato (i non tesserati vengono segnati con ★ nelle ricevute)
-  const caMemberOpts = () => `<option value="">— ${esc(t('caNoHolder'))} —</option>${(S().members || []).slice().sort((a, b) => personName(a).localeCompare(personName(b))).map(m => `<option value="${m.uid}">${esc(personName(m))}${isTess(m.uid) ? '' : ' ★'}</option>`).join('')}`;
+  const CA_MANUAL = '__manual';
+  // intestatario scritto a mano (nome e cognome, Sig./Sig.ra) e codice fiscale (anche per una persona scelta dall'elenco)
+  const caManualFields = (p, manual) => `<div class="span-all grid-form ca-manual-box">
+      <label class="ca-manual" ${manual ? '' : 'hidden'}>${esc(t('caManualName'))}<input name="mName" maxlength="80" value="${esc((manual && p && p.name) || '')}"></label>
+      <label class="ca-manual" ${manual ? '' : 'hidden'}>${esc(t('caManualTitle'))}<select name="mGender"><option value="">${esc(t('caManualTitleAny'))}</option>
+        <option value="M" ${manual && p && p.gender === 'M' ? 'selected' : ''}>${esc(t('caManualMr'))}</option><option value="F" ${manual && p && p.gender === 'F' ? 'selected' : ''}>${esc(t('caManualMrs'))}</option></select></label>
+      <label>${esc(t('athCf'))}<input name="mCf" maxlength="16" autocapitalize="characters" value="${esc((p && p.cf) || '')}" placeholder="${esc(t('caCfPh'))}"></label>
+    </div>`;
+  // persona per la ricevuta dal modulo: persona scelta (con il codice fiscale scritto, se c'è) o nome scritto a mano
+  function caFormPerson(f) {
+    const cf = f.mCf.value.trim().toUpperCase().replace(/\s+/g, '');
+    if (cf && !/^([A-Z0-9]{16}|[0-9]{11})$/.test(cf)) return { err: 'caCfBad' };
+    if (f.holder.value === CA_MANUAL) {
+      const name = f.mName.value.trim().replace(/\s+/g, ' ');
+      if (!name) return { err: 'caManualNeedName' };
+      return { uid: '', person: { name, gender: f.mGender.value, cf } };
+    }
+    const uid = f.holder.value, person = caPerson(uid);
+    if (person && cf) person.cf = cf;
+    return { uid, person };
+  }
+  const caMemberOpts = () => `<option value="">— ${esc(t('caNoHolder'))} —</option><option value="${CA_MANUAL}">${esc(t('caManualOpt'))}</option>${(S().members || []).slice().sort((a, b) => personName(a).localeCompare(personName(b))).map(m => `<option value="${m.uid}">${esc(personName(m))}${isTess(m.uid) ? '' : ' ★'}</option>`).join('')}`;
   // ricevuta intestata a una persona non tesserata nella stagione della ricevuta
   const rcNotTess = r => !r.void && !!r.uid && !!(r.person && r.person.name) && !isTess(r.uid, r.issued);
   const notTessReceipts = () => (S().receipts || []).filter(rcNotTess).sort((a, b) => (b.issued || '').localeCompare(a.issued || ''));
   const tessStar = r => (rcNotTess(r) ? ` <span class="tess-star" title="${esc(t('rcNotTessTip', { s: seasonOf(r.issued) }))}" aria-label="${esc(t('rcNotTessTip', { s: seasonOf(r.issued) }))}">★</span>` : '');
-  const caHolderOpts = (date, sel) => `<option value="">— ${esc(t('caNoHolder'))} —</option>${tessFor(date).map(x => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}`;
+  const caHolderOpts = (date, sel, manual) => `<option value="">— ${esc(t('caNoHolder'))} —</option><option value="${CA_MANUAL}" ${manual ? 'selected' : ''}>${esc(t('caManualOpt'))}</option>${tessFor(date).map(x => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}`;
   function caLineRow() {
     return `<div class="ca-line">
       <label class="ca-cat-l">${esc(t('caCat'))}<select name="cat"><option value="">-</option>${CA_CATS.map(([k, sr]) => `<option value="${k}">${esc(t('caCat_' + k))} (${sr})</option>`).join('')}</select></label>
@@ -1548,6 +1570,7 @@
     const who = uid => (uid ? (memberByUid(uid) ? personName(memberByUid(uid)) : uid === myUid() ? t('caMe') : 'Admin') : '');
     const rcBtns = i => Object.entries(i.receipts || {}).map(([sr, r]) => { const rr = receiptById(r.id); return `<span class="badge rc-${sr}">${esc(rr ? rcNum(rr) : r.rn)}</span>${rr ? tessStar(rr) : ''}
       ${rr ? `<button class="btn small" data-action="rc-pdf" data-id="${rr.id}" aria-label="PDF ${esc(rcNum(rr))}"><i class="ti ti-file-type-pdf" aria-hidden="true"></i></button>` : ''}
+      ${rr && admin() ? `<button class="btn small" data-action="rc-renum" data-id="${rr.id}" title="${esc(t('receiptRenum'))}"><i class="ti ti-hash" aria-hidden="true"></i> ${esc(t('receiptRenum'))}</button>` : ''}
       ${rr && admin() && !i.void ? `<button class="btn small" data-action="ca-holder-open" data-id="${rr.id}">${esc(t('caHolderBtn'))}</button>` : ''}`; }).join(' ');
     return `<div class="page-head row"><h1><i class="ti ti-cash-register" aria-hidden="true"></i> ${esc(t('caTitle'))}</h1>
         ${admin() ? `<a class="btn small" href="#/payments"><i class="ti ti-receipt" aria-hidden="true"></i> ${esc(t('payAdminTitle'))} →</a>` : ''}</div>
@@ -1558,8 +1581,9 @@
         <label>${esc(t('payMethod'))}<select name="method" data-change="ca-method">${PAY_METHODS.map(x => `<option value="${x}">${esc(t('pay_' + x))}</option>`).join('')}</select></label>
         <div class="span-all ca-lines">${caLineRow()}${caLineRow()}</div>
         <div class="span-all"><button type="button" class="btn small" data-action="ca-addline"><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('caAddLine'))}</button></div>
-        <label class="span-all">${esc(t('caHolder'))}<select name="holder">${caMemberOpts()}</select>
+        <label class="span-all">${esc(t('caHolder'))}<select name="holder" data-change="ca-holder-sel">${caMemberOpts()}</select>
           <small class="muted">${esc(t('caHolderTessOnly', { s: seasonOf(todayStr()) }))}</small></label>
+        ${caManualFields()}
         <label class="check span-all ca-rc"><input type="checkbox" name="receipt"> ${esc(t('caReceiptCash'))}</label>
         <p class="note span-all ca-rc-note" hidden>${esc(t('caReceiptAlways'))}</p>
         ${admin() ? `<details class="span-all"><summary>${esc(t('caInsertTitle'))}</summary><p class="muted small">${esc(t('caInsertHelp'))}</p>
@@ -1594,7 +1618,8 @@
   function caHolderForm(r) {
     if (!r) return '';
     return `<form class="inline-form ca-holder" data-form="ca-holder" data-id="${r.id}">
-      <label class="small">${esc(t('caHolder'))}<select name="holder">${caHolderOpts(r.issued, r.uid)}</select></label>
+      <label class="small">${esc(t('caHolder'))}<select name="holder" data-change="ca-holder-sel">${caHolderOpts(r.issued, r.uid, !r.uid && !!(r.person && r.person.name))}</select></label>
+      ${caManualFields(r.person, !r.uid && !!(r.person && r.person.name))}
       <button class="btn small primary">${esc(t('save'))}</button><button type="button" class="btn small" data-action="ca-holder-close">${esc(t('cancel'))}</button>
       ${(r.holderLog || []).length ? `<small class="muted span-all">${esc(t('caHolderLog'))}: ${(r.holderLog || []).map(h => `${fmtDate(new Date(h.at).toLocaleDateString('sv'))} «${h.from || '—'}» → «${h.to || '—'}»`).map(esc).join(' · ')}</small>` : ''}</form>`;
   }
@@ -1628,9 +1653,10 @@
     const lines = rows.map(x => ({ cat: x.cat, series: caSeries(x.cat), amount: x.amount, desc: caLineDesc(x.cat, x.desc) }));
     const method = f.method.value, date = f.date.value;
     const always = method !== 'cash', want = always || f.receipt.checked;
-    // intestatario: un tesserato scelto; altrimenti senza nome
-    const uid = f.holder.value;
-    const person = caPerson(uid);
+    // intestatario: una persona scelta, un nome scritto a mano oppure nessuno
+    const hp = caFormPerson(f);
+    if (hp.err) return warn(hp.err);
+    const uid = hp.uid, person = hp.person;
     const p = { date, method, lines, uid, person, receipt: { Q: want, C: want }, causale: { Q: caCausale('Q', lines.filter(l => l.series === 'Q')), C: caCausale('C', lines.filter(l => l.series === 'C')) } };
     const tq = round2(lines.filter(l => l.series === 'Q').reduce((s, l) => s + l.amount, 0)), tc = round2(lines.filter(l => l.series === 'C').reduce((s, l) => s + l.amount, 0));
     const insN = f.insN && f.insN.value ? parseInt(f.insN.value, 10) : 0;
@@ -1681,7 +1707,9 @@
     'ca-holder': f => {
       const r = receiptById(f.dataset.id);
       if (!r) return;
-      const uid = f.holder.value, person = caPerson(uid);
+      const hp = caFormPerson(f);
+      if (hp.err) return warn(hp.err);
+      const uid = hp.uid, person = hp.person;
       if (uid && !isTess(uid, r.issued)) return warn('caNotTess');
       window.Cloud.setReceiptHolder(r, uid, person).then(() => { ui.caHolder = null; ui.flash = { text: t('caHolderSaved') }; render(); }).catch(trErr);
     }
@@ -1972,6 +2000,7 @@
       const m = memberByUid(f.uid.value);
       if (!m) return;
       const ad = { id: m.uid, first: m.first, last: m.last, tess: { [seasonOf(todayStr())]: f.tess.checked }, created: Date.now(), updated: Date.now() };
+      if (f.cf.value.trim()) ad.cf = f.cf.value.trim().toUpperCase();
       if (f.certExp.value) ad.certExp = f.certExp.value;
       const tids = [...f.querySelectorAll('[name=tid]:checked')].map(x => x.value);
       setAthleteTrainings(m.uid, f.dataset.m, tids, ad).then(ok => { if (!ok) return; (ui.keep || {})['ath-new'] = false; ui.athEdit = m.uid; ui.flash = { text: t('athCreated') }; render(); })
@@ -3710,6 +3739,14 @@
       case 'pay-period': el.form.amount.value = el.value === 'quarter' ? el.dataset.q : el.dataset.m; break;
       case 'fp-all': if (el.checked) el.form.querySelectorAll('[name=lv]:not([value=all])').forEach(x => { x.checked = false; }); break;
       case 'fp-lv': { const any = [...el.form.querySelectorAll('[name=lv]:not([value=all])')].some(x => x.checked); el.form.querySelector('[name=lv][value=all]').checked = !any; break; }
+      case 'ca-holder-sel': {
+        const manual = el.value === CA_MANUAL;
+        el.form.querySelectorAll('.ca-manual').forEach(x => { x.hidden = !manual; });
+        // persona scelta: il suo codice fiscale (se c'è) nel campo
+        const cfIn = el.form.querySelector('[name=mCf]');
+        if (cfIn && !manual) { const p = caPerson(el.value); cfIn.value = (p && p.cf) || ''; }
+        break;
+      }
       case 'ca-method': {
         const fm = el.form, cash = el.value === 'cash';
         fm.querySelector('.ca-rc').hidden = !cash; fm.querySelector('.ca-rc-note').hidden = cash;

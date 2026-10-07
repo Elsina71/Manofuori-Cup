@@ -203,6 +203,8 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   "prepagati" nella scheda e risultano pagati quando si compone il gruppo. Annullando la ricevuta tornano da pagare.
 - **Pagamento spot** (presenze del giorno, spot confermati): importo dal prezzo dello spot; un recupero gratuito (0 €)
   si segna pagato senza ricevuta. Se mancano i dati per la ricevuta, si compilano nel modulo e si salvano nella scheda.
+- **Codice fiscale** nella scheda corsista (anche nel modulo di creazione; in testa alla scheda, o "CF mancante"):
+  compare nelle ricevute.
 - **Ricevuta PDF** (jsPDF incluso in `vendor/jspdf`): numero progressivo che riparte ogni anno (`counters`),
   intestazione dell'associazione, dati del socio, importo in cifre e in lettere, causale
   "Quota sociale allenamenti - mese di …" o "… - allenamento del gg/mm/aaaa", modalità, spazio per timbro e firma.
@@ -227,7 +229,10 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   (bevande, altro). Ricevute separate: serie Q `n/Q/anno` (contatore `receipts-AAAA`, che prosegue la numerazione delle
   ricevute precedenti) e serie C `n/C/anno` (`receiptsC-AAAA`); ripartono ogni anno. Carta e bonifico: ricevuta sempre;
   contanti: a scelta. Intestatario facoltativo (ricevuta senza nome con spazi da compilare) e assegnabile dopo dall'admin
-  (persona registrata o nome scritto a mano; le modifiche restano registrate). Inserimento con numero e data scelti: le
+  (persona registrata o nome scritto a mano; le modifiche restano registrate). Già al momento dell'incasso
+  l'intestatario si può **scrivere a mano** (nome e cognome, Sig./Sig.ra) con il **codice fiscale** (16 caratteri, o 11 cifre
+  di partita IVA); per una persona scelta dall'elenco il codice fiscale si prende dalla scheda e si può correggere.
+  L'admin cambia il **numero di una ricevuta** anche dall'elenco degli incassi (*Cambia numero*). Inserimento con numero e data scelti: le
   ricevute successive della stessa serie scalano di uno. Annullamento dell'incasso (ricevute ANNULLATE,
   piani, spot e pacchetti di nuovo da pagare). Resoconto mensile (totali Q/C, per voce e modalità) e prospetto Excel.
   I pagamenti degli allenamenti registrati dalla scheda corsista sono anche incassi della cassa.
