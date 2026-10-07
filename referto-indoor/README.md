@@ -82,8 +82,10 @@ Il referto è pronto per essere aperto **su ogni singola partita** di un torneo 
   in `live/{id}`: `status` (`live`/`finished`), `sets` `[{a, b}]`, `setsWon`, `cur` (set in corso),
   `serving`, `winner`, `outcome`. Squadra `a` = squadra A della gara.
 
-Per integrarlo basta copiare la cartella `referto-indoor/` nell'app (accanto a `referto/`) e, nella pagina
-della gara, aggiungere il pulsante che crea `referti/{torneo}_{gara}` con `info` e apre il link.
+Il referto è già integrato nell'app Manofuori Cup: il pulsante **E-scoresheet** sulla gara crea
+`referti/{torneo}_{gara}` con `info` e apre il link. Questa cartella è la **versione principale** del referto:
+le modifiche si fanno qui, nel repository `Elsina71/Manofuori-Cup` (il branch di sviluppo iniziale in
+`Repository-principale` non viene più aggiornato). Dopo ogni modifica alzare `CACHE` in `sw.js`.
 
 ## Come si apre in locale
 
