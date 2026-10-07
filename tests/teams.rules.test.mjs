@@ -52,6 +52,12 @@ await t('pierpaolomurgioni (confermato) è admin principale', assertSucceeds(get
 await t('pierpaolomurgioni toglie un admin', assertSucceeds(setDoc(doc(adm, 'admins', 'cap'), { name: 'C', by: 'x', at: 4 }).then(() => deleteDoc(doc(pm, 'admins', 'cap')))));
 await t('l\'admin principale toglie un admin', assertSucceeds(deleteDoc(doc(adm, 'admins', 'other'))));
 await t('tolto: non è più admin', assertFails(getDoc(doc(oth, 'admins', 'probe'))));
+// timbro e firma delle ricevute: li carica l'admin, li leggono gli utenti collegati, non chi non ha fatto l'accesso
+await t('admin carica timbro e firma', assertSucceeds(setDoc(doc(adm, 'private', 'receiptSign'), { stamp: 'data:image/png;base64,AAA', updated: 1 })));
+await t('utente collegato legge timbro e firma', assertSucceeds(getDoc(doc(cap, 'private', 'receiptSign'))));
+await t('senza accesso non si leggono', assertFails(getDoc(doc(anon, 'private', 'receiptSign'))));
+await t('utente non admin non li cambia', assertFails(setDoc(doc(cap, 'private', 'receiptSign'), { stamp: 'x' })));
+await t('altri documenti privati no', assertFails(getDoc(doc(cap, 'private', 'altro'))));
 await t('capitano crea squadra in attesa con rosa', assertSucceeds(batchSave(cap, 't1', team, [{ num: 7, last: 'R', first: 'M', g: 'M' }])));
 await t('utente registrato non abilitato come capitano: niente iscrizione', assertFails(setDoc(doc(other, 'teams', 't6'), { ...team, captainUid: 'other' })));
 await t('capitano non crea squadra già ammessa', assertFails(setDoc(doc(cap, 'teams', 't2'), { ...team, status: 'ok' })));

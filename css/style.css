@@ -1218,3 +1218,10 @@ li.is-void { opacity: .6; }
 /* icona del tema nella testata: bianca sulle testate colorate */
 [data-theme="gialloblu"] .theme-link, [data-theme="azzurri"] .theme-link, [data-theme="tramonto"] .theme-link, [data-theme="pallapazza"] .theme-link { color: #fff; }
 [data-theme="gialloblu"] .theme-link:hover, [data-theme="azzurri"] .theme-link:hover, [data-theme="tramonto"] .theme-link:hover, [data-theme="pallapazza"] .theme-link:hover { background: rgba(255, 255, 255, .18); }
+
+/* timbro e firma delle ricevute (Impostazioni) */
+.sign-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.sign-prev { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; padding: 10px; border: 1px dashed var(--border); border-radius: 10px; }
+.sign-prev img { max-width: 100%; max-height: 110px; background: #fff; border-radius: 6px; }
+.parent-box { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 0; }
+.parent-box legend { font-weight: 700; padding: 0 6px; }

@@ -785,12 +785,29 @@
       ${pricesCard()}`;
   }
 
+  // dati del genitore responsabile (corsista minorenne): la ricevuta è intestata a lui o a lei
+  function parentInputs(a, hidden) {
+    return `<fieldset class="span-all grid-form parent-box" ${hidden ? 'hidden' : ''}><legend>${esc(t('athParent'))}</legend>
+      <p class="muted small span-all">${esc(t('athParentHelp'))}</p>
+      <label>${esc(t('firstName'))}<input name="parentFirst" maxlength="60" value="${esc(a.parentFirst || '')}"></label>
+      <label>${esc(t('lastName'))}<input name="parentLast" maxlength="60" value="${esc(a.parentLast || '')}"></label>
+      <label>${esc(t('caManualTitle'))}<select name="parentGender"><option value="">${esc(t('caManualTitleAny'))}</option>
+        <option value="M" ${a.parentGender === 'M' ? 'selected' : ''}>${esc(t('caManualMr'))}</option><option value="F" ${a.parentGender === 'F' ? 'selected' : ''}>${esc(t('caManualMrs'))}</option></select></label>
+      <label>${esc(t('athParentAddress'))}<input name="parentAddress" maxlength="100" value="${esc(a.parentAddress || '')}" placeholder="${esc(t('athAddressPh'))}"></label>
+      <label>${esc(t('athCity'))}<input name="parentCity" maxlength="60" value="${esc(a.parentCity || '')}"></label>
+      <label>${esc(t('athParentCf'))}<input name="parentCf" maxlength="16" value="${esc(a.parentCf || '')}" autocapitalize="characters" pattern="[A-Za-z0-9]{16}"></label>
+    </fieldset>`;
+  }
+  const readParent = f => ({ parentFirst: f.parentFirst.value.trim(), parentLast: f.parentLast.value.trim(), parentGender: f.parentGender.value,
+    parentAddress: f.parentAddress.value.trim(), parentCity: f.parentCity.value.trim(), parentCf: f.parentCf.value.trim().toUpperCase() });
+
   function athleteCard(a, m, month) {
     const name = m ? personName(m) : `${a.last || ''} ${a.first || ''}`.trim() || '?';
     const p = planOf(a.id, month);
     const editing = ui.athEdit === a.id;
     const planLine = p ? `${esc(t('planN', { n: p.n }))} · ${esc(planDesc(p).join(' / '))}` : esc(t('planNone'));
-    const head = `<div class="ath-head"><div><strong>${esc(name)}</strong> ${a.cf ? `<span class="badge cf-badge" title="${esc(t('athCf'))}">${esc(t('cfShort'))} ${esc(a.cf)}</span>` : `<span class="badge tess-no">${esc(t('cfMissing'))}</span>`} ${tessBadge(a)} ${certBadge(a)}
+    const head = `<div class="ath-head"><div><strong>${esc(name)}</strong> ${a.minor ? `<span class="badge">${esc(t('athMinorBadge'))}</span>` : ''} ${a.cf ? `<span class="badge cf-badge" title="${esc(t('athCf'))}">${esc(t('cfShort'))} ${esc(a.cf)}</span>` : `<span class="badge tess-no">${esc(t('cfMissing'))}</span>`}
+        ${a.minor ? `<br><small class="muted">${esc(t('athParentShort'))}: ${esc(`${a.parentFirst || ''} ${a.parentLast || ''}`.trim() || '—')}${a.parentCf ? ` · ${esc(t('cfShort'))} ${esc(a.parentCf)}` : ` · <span class="badge tess-no">${esc(t('cfMissing'))}</span>`}</small>` : ''} ${tessBadge(a)} ${certBadge(a)}
         <br><small class="muted">${planLine}${p ? ` · <b>${esc(euro(p.price))}</b>${p.manual ? ` <span class="badge">${esc(t('priceManual'))}</span>` : ''} ${payBadge(p)}` : ''}</small>
         ${packsOf(a.id).length ? `<br><small class="muted"><i class="ti ti-ticket" aria-hidden="true"></i> ${activePack(a.id) ? esc(t('packLeftShort', { l: packsOf(a.id).reduce((s, k) => s + packLeft(k), 0) })) : esc(t('packNoneLeft'))}</small>` : ''}</div>
         <button class="btn small" data-action="ath-edit" data-uid="${a.id}">${esc(t(editing ? 'close' : 'athOpen'))}</button></div>`;
@@ -801,11 +818,13 @@
         <h3 class="span-all">${esc(t('athData'))}</h3>
         <p class="muted small span-all"><i class="ti ti-shield-lock" aria-hidden="true"></i> ${t('athDataNote')}</p>
         <label>${esc(t('athBirthPlace'))}<input name="birthPlace" maxlength="60" value="${esc(a.birthPlace || '')}"></label>
-        <label>${esc(t('athBirthDate'))}<input type="date" name="birthDate" value="${esc(a.birthDate || '')}"></label>
+        <label>${esc(t('athBirthDate'))}<input type="date" name="birthDate" data-change="ath-birth" value="${esc(a.birthDate || '')}"></label>
         <label>${esc(t('athCity'))}<input name="city" maxlength="60" value="${esc(a.city || '')}"></label>
         <label>${esc(t('athAddress'))}<input name="address" maxlength="100" value="${esc(a.address || '')}" placeholder="${esc(t('athAddressPh'))}"></label>
         <label>${esc(t('athCf'))}<input name="cf" maxlength="16" value="${esc(a.cf || '')}" autocapitalize="characters" pattern="[A-Za-z0-9]{16}"></label>
         <label>${esc(t('certExp'))}<input type="date" name="certExp" value="${esc(a.certExp || '')}"></label>
+        <label class="check span-all"><input type="checkbox" name="minor" data-change="ath-minor" ${a.minor ? 'checked' : ''}> <strong>${esc(t('athMinor'))}</strong></label>
+        ${parentInputs(a, !a.minor)}
         <label class="check span-all"><input type="checkbox" name="tess" ${a.tess && a.tess[s] ? 'checked' : ''}> ${esc(t('tessLabel', { s }))}</label>
         <div class="form-actions span-all"><button class="btn primary">${esc(t('save'))}</button></div>
       </form>
@@ -1211,8 +1230,22 @@
     return `${s}/${String(c).padStart(2, '0')}`;
   }
   const PERSON_FIELDS = ['birthPlace', 'birthDate', 'city', 'address', 'cf'];
-  const missingPerson = a => PERSON_FIELDS.filter(k => !(a && a[k]));
-  const personOf = (uid, a) => { const m = memberByUid(uid); return { name: m ? `${m.first} ${m.last}` : `${(a && a.first) || ''} ${(a && a.last) || ''}`.trim(), gender: (m && m.gender) || 'M', birthPlace: a.birthPlace, birthDate: a.birthDate, city: a.city, address: a.address, cf: a.cf }; };
+  // corsista minorenne: la ricevuta è intestata al genitore (nome, cognome, residenza, codice fiscale);
+  // del minore servono luogo e data di nascita e codice fiscale
+  const PARENT_FIELDS = ['parentFirst', 'parentLast', 'parentAddress', 'parentCity', 'parentCf'];
+  const MINOR_FIELDS = ['birthPlace', 'birthDate', 'cf'].concat(PARENT_FIELDS);
+  const fieldsFor = a => (a && a.minor ? MINOR_FIELDS : PERSON_FIELDS);
+  const missingPerson = a => fieldsFor(a).filter(k => !(a && a[k]));
+  const isUnder18 = d => { if (!d) return false; const b = new Date(d + 'T12:00:00'), n = new Date(); let y = n.getFullYear() - b.getFullYear(); if (n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) y--; return y < 18; };
+  // persona per la ricevuta da una scheda (o dalla sua copia per la cassa): name e gender del corsista
+  function personFrom(name, gender, a) {
+    a = a || {};
+    if (a.minor) return { name: `${a.parentFirst || ''} ${a.parentLast || ''}`.trim(), gender: a.parentGender || '', birthPlace: '', birthDate: '',
+      city: a.parentCity || '', address: a.parentAddress || '', cf: a.parentCf || '',
+      minor: { name, gender: gender || '', birthPlace: a.birthPlace || '', birthDate: a.birthDate || '', cf: a.cf || '' } };
+    return { name, gender: gender || 'M', birthPlace: a.birthPlace || '', birthDate: a.birthDate || '', city: a.city || '', address: a.address || '', cf: a.cf || '' };
+  }
+  const personOf = (uid, a) => { const m = memberByUid(uid); return personFrom(m ? `${m.first} ${m.last}` : `${(a && a.first) || ''} ${(a && a.last) || ''}`.trim(), (m && m.gender) || 'M', a); };
   const causaleMonth = m => `Quota sociale allenamenti - mese di ${itMonth(m)}`;
   const causaleSpot = d => `Quota sociale allenamenti - allenamento del ${itDate(d)}`;
   const paidLine = (p, pd) => { pd = pd || (p && p.paid); return pd ? `${esc(t('paidOn', { d: fmtDate(pd.date), m: t('pay_' + pd.method) }))}${pd.quarter ? ` · ${esc(t('payQuarterOf', { a: monthLabel(pd.months[0]), b: monthLabel(pd.months[2]) }))}` : ''}${pd.rn ? ` · ${esc(t('receiptN', { n: rnFmt(pd.rn) }))}` : ''}` : ''; };
@@ -1251,12 +1284,13 @@
       <label>${esc(t('payMethod'))}<select name="method">${PAY_METHODS.map(x => `<option value="${x}">${esc(t('pay_' + x))}</option>`).join('')}</select></label>
       <label>${esc(t('payAmount'))}<input type="number" name="amount" min="0" step="0.01" required value="${amount != null ? amount : ''}" inputmode="decimal"></label>
       <label class="check span-all"><input type="checkbox" name="receipt"> ${esc(t('caReceiptCash'))}</label>
-      ${miss.length ? `<p class="note warn span-all">${esc(t('payNeedData'))} ${t('athDataNote')}</p>
+      ${miss.length ? `<p class="note warn span-all">${esc(t(a.minor ? 'payNeedDataMinor' : 'payNeedData'))} ${t('athDataNote')}</p>
         <label>${esc(t('athBirthPlace'))}<input name="birthPlace" maxlength="60" value="${esc(a.birthPlace || '')}"></label>
         <label>${esc(t('athBirthDate'))}<input type="date" name="birthDate" value="${esc(a.birthDate || '')}"></label>
-        <label>${esc(t('athCity'))}<input name="city" maxlength="60" value="${esc(a.city || '')}"></label>
-        <label>${esc(t('athAddress'))}<input name="address" maxlength="100" value="${esc(a.address || '')}" placeholder="${esc(t('athAddressPh'))}"></label>
-        <label>${esc(t('athCf'))}<input name="cf" maxlength="16" value="${esc(a.cf || '')}" pattern="[A-Za-z0-9]{16}"></label>` : ''}
+        ${a.minor ? '' : `<label>${esc(t('athCity'))}<input name="city" maxlength="60" value="${esc(a.city || '')}"></label>
+        <label>${esc(t('athAddress'))}<input name="address" maxlength="100" value="${esc(a.address || '')}" placeholder="${esc(t('athAddressPh'))}"></label>`}
+        <label>${esc(t('athCf'))}<input name="cf" maxlength="16" value="${esc(a.cf || '')}" pattern="[A-Za-z0-9]{16}"></label>
+        ${a.minor ? parentInputs(a, false) : ''}` : ''}
       <div class="form-actions span-all"><button type="button" class="btn" data-action="pay-close">${esc(t('cancel'))}</button><button class="btn primary"><i class="ti ti-receipt" aria-hidden="true"></i> ${esc(t('paySave'))}</button></div>
     </form>`;
   }
@@ -1286,8 +1320,10 @@
     });
     return jsPdfPromise;
   }
-  function drawReceipt(pdf, r) {
-    const p = r.person || {}, F = p.gender === 'F', L = 22, named = !!p.name, C = rSeries(r) === 'C';
+  // Testo per le detrazioni fiscali (ricevute per minori)
+  const DETRAZIONE = "L'importo corrisposto dà diritto a una detrazione d'imposta IRPEF pari al 19% dell'importo pagato fino a un massimo di 210,00 euro su base annua e complessivo per ciascuna persona che effettui il pagamento, come disposto dall'art. 15, I comma, lettera i-quinquies del T.U.I.R. e relativo decreto di attuazione del 28/03/2007.";
+  function drawReceipt(pdf, r, sign) {
+    const p = r.person || {}, F = p.gender === 'F', L = 22, named = !!p.name, C = rSeries(r) === 'C', mn = named && p.minor && p.minor.name ? p.minor : null;
     let y = 22;
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14); pdf.text(ASSOC[0], L, y);
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10.5);
@@ -1298,27 +1334,43 @@
     if (C) { pdf.setFontSize(9.5); pdf.text('Ricevuta non fiscale', 188, y, { align: 'right' }); pdf.setFontSize(11.5); }
     y += 13; pdf.text(named && p.gender ? `Si attesta che ${F ? 'la Sig.ra' : 'il Sig.'}:` : 'Si attesta che il/la Sig./Sig.ra:', L, y);
     const blank = '______________________________';
-    const rows = named ? [['Nome e Cognome', p.name], [!p.gender ? 'Nato/a a' : F ? 'Nata a' : 'Nato a', p.birthPlace || p.birthDate ? `${p.birthPlace || ''} il ${itDate(p.birthDate)}` : ''], ['Residente a', p.city || p.address ? `${p.city || ''}, ${p.address || ''}` : ''], ['Codice Fiscale', p.cf || '']]
+    const residence = p.city || p.address ? `${p.city || ''}, ${p.address || ''}` : '';
+    const rows = mn ? [['Nome e Cognome', p.name], ['Residente a', residence], ['Codice Fiscale', p.cf || '']]
+      : named ? [['Nome e Cognome', p.name], [!p.gender ? 'Nato/a a' : F ? 'Nata a' : 'Nato a', p.birthPlace || p.birthDate ? `${p.birthPlace || ''} il ${itDate(p.birthDate)}` : ''], ['Residente a', residence], ['Codice Fiscale', p.cf || '']]
       : [['Nome e Cognome', blank], ['Codice Fiscale', blank]];
-    rows.forEach(([k, v]) => { y += 8; pdf.text('•', L + 3, y); pdf.setFont('helvetica', 'bold'); pdf.text(`${k}:`, L + 8, y); const w = pdf.getTextWidth(`${k}: `); pdf.setFont('helvetica', 'normal'); pdf.text(String(v || ''), L + 8 + w, y); });
-    y += 13; pdf.text(`ha versato in data ${itDate(r.payDate)} la somma complessiva di:`, L, y);
+    const bullets = list => list.forEach(([k, v]) => { y += 8; pdf.text('•', L + 3, y); pdf.setFont('helvetica', 'bold'); pdf.text(`${k}:`, L + 8, y); const w = pdf.getTextWidth(`${k}: `); pdf.setFont('helvetica', 'normal'); pdf.text(String(v || ''), L + 8 + w, y); });
+    bullets(rows);
+    const son = mn && mn.gender === 'F' ? 'della figlia' : mn && mn.gender === 'M' ? 'del figlio' : 'del figlio/della figlia';
+    if (mn) {
+      y += 11; pdf.text(`genitore ${mn.gender === 'F' ? 'della minore' : mn.gender === 'M' ? 'del minore' : 'del/della minore'}:`, L, y);
+      bullets([['Nome e Cognome', mn.name], [mn.gender === 'F' ? 'Nata a' : mn.gender === 'M' ? 'Nato a' : 'Nato/a a', mn.birthPlace || mn.birthDate ? `${mn.birthPlace || ''} il ${itDate(mn.birthDate)}` : ''], ['Codice Fiscale', mn.cf || '']]);
+    }
+    y += 13; pdf.text(mn ? `ha versato in data ${itDate(r.payDate)}, per conto ${son}, la somma complessiva di:` : `ha versato in data ${itDate(r.payDate)} la somma complessiva di:`, L, y);
     y += 8; pdf.text('•', L + 3, y); pdf.setFont('helvetica', 'bold'); pdf.text(`Euro ${euroIt(r.amount)}`, L + 8, y); pdf.setFont('helvetica', 'normal');
     y += 8; pdf.text('•', L + 3, y); pdf.text(`(Euro ${euroWords(r.amount)})`, L + 8, y);
     y += 13; pdf.setFont('helvetica', 'bold'); pdf.text('Causale:', L, y); pdf.setFont('helvetica', 'normal');
     y += 7; const cl = pdf.splitTextToSize(`${r.causale}.`, 166); pdf.text(cl, L, y); y += (cl.length - 1) * 5.5;
     if ((r.lines || []).length > 1) r.lines.forEach(l => { y += 6.5; pdf.text(`- ${l.desc}: Euro ${euroIt(l.amount)}`, L + 4, y); });
     y += 11; pdf.setFontSize(10); pdf.text(`Modalità di pagamento: ${PAY_IT[r.method] || r.method}`, L, y);
-    // spazio per timbro e firma (verranno aggiunti)
+    // ricevute per minori: testo per le detrazioni fiscali
+    if (mn) { y += 9; pdf.setFontSize(8.5); const dl = pdf.splitTextToSize(DETRAZIONE, 166); pdf.text(dl, L, y); y += dl.length * 3.8; }
+    // timbro dell'associazione e firma del Presidente (immagini caricate dall'admin), sotto il testo
+    const top = Math.max(232, y + 8);
     pdf.setFontSize(10.5);
-    pdf.text("Timbro dell'associazione", L, 238); pdf.line(L, 262, L + 70, 262);
-    pdf.text('Il Presidente', 128, 238); pdf.line(128, 262, 188, 262);
+    pdf.text("Timbro dell'associazione", L, top); pdf.line(L, top + 26, L + 70, top + 26);
+    pdf.text('Il Presidente', 128, top); pdf.line(128, top + 26, 188, top + 26);
+    const img = (src, x, yy, maxW, maxH) => { try { const pr = pdf.getImageProperties(src), k = Math.min(maxW / pr.width, maxH / pr.height); pdf.addImage(src, 'PNG', x + (maxW - pr.width * k) / 2, yy + (maxH - pr.height * k) / 2, pr.width * k, pr.height * k); } catch (e) { console.warn(e); } };
+    if (sign && sign.stamp) img(sign.stamp, L, top + 2, 70, 22);
+    if (sign && sign.signature) img(sign.signature, 128, top + 2, 60, 23);
     if (r.void) { pdf.setTextColor(200, 0, 0); pdf.setFontSize(48); pdf.text('ANNULLATA', 105, 170, { align: 'center', angle: 25 }); pdf.setTextColor(0, 0, 0); }
   }
   const receiptFile = r => `ricevuta_${r.n}_${rSeries(r)}_${r.year}${(r.person || {}).name ? '_' + latinName(r.person.name) : ''}.pdf`;
   async function receiptsPdf(list) {
     const JsPDF = await loadJsPdf();
     const pdf = new JsPDF({ unit: 'mm', format: 'a4' });
-    list.forEach((r, i) => { if (i) pdf.addPage(); drawReceipt(pdf, r); });
+    // timbro e firma: se il database non risponde (es. senza rete) la ricevuta si crea lo stesso, senza immagini
+    const sign = await Promise.race([window.Cloud.receiptSign ? window.Cloud.receiptSign().catch(() => null) : null, new Promise(res => setTimeout(() => res(null), 4000))]);
+    list.forEach((r, i) => { if (i) pdf.addPage(); drawReceipt(pdf, r, sign); });
     return pdf;
   }
   function saveBlob(blob, name) {
@@ -1485,7 +1537,7 @@
       let athlete = null;
       if (f.cf) {   // dati mancanti compilati nel modulo: si salvano anche nella scheda
         athlete = {};
-        PERSON_FIELDS.forEach(k => { const v = f[k].value.trim(); if (v) { athlete[k] = k === 'cf' ? v.toUpperCase() : v; a[k] = athlete[k]; } });
+        PERSON_FIELDS.concat(PARENT_FIELDS, ['parentGender']).forEach(k => { if (!f[k]) return; const v = f[k].value.trim(); if (v) { athlete[k] = /cf$/i.test(k) ? v.toUpperCase() : v; a[k] = athlete[k]; } });
         const m = memberByUid(uid);
         if (m) Object.assign(athlete, { first: m.first, last: m.last });
         athlete.updated = Date.now();
@@ -1627,7 +1679,7 @@
   function caPerson(uid) {
     if (!uid) return null;
     const x = (S().tesserati || []).find(y => y.id === uid);
-    if (x) return { name: x.name, gender: x.gender || 'M', birthPlace: x.birthPlace || '', birthDate: x.birthDate || '', city: x.city || '', address: x.address || '', cf: x.cf || '' };
+    if (x) return personFrom(x.name, x.gender || 'M', x);
     const a = admin() && athleteOf(uid);
     // dati mancanti nella scheda: campi vuoti (il database non accetta valori indefiniti)
     if (a) return Object.fromEntries(Object.entries(personOf(uid, a)).map(([k, v]) => [k, v == null ? '' : v]));
@@ -2014,8 +2066,9 @@
     'ath-save': f => {
       const uid = f.dataset.uid, a = athleteOf(uid) || {}, m = memberByUid(uid), s = seasonOf(todayStr());
       const cf = f.cf.value.trim().toUpperCase();
-      const d = { birthPlace: f.birthPlace.value.trim(), birthDate: f.birthDate.value, city: f.city.value.trim(), address: f.address.value.trim(), cf,
-        certExp: f.certExp.value, tess: Object.assign({}, a.tess || {}, { [s]: f.tess.checked }), updated: Date.now() };
+      const d = Object.assign({ birthPlace: f.birthPlace.value.trim(), birthDate: f.birthDate.value, city: f.city.value.trim(), address: f.address.value.trim(), cf,
+        certExp: f.certExp.value, tess: Object.assign({}, a.tess || {}, { [s]: f.tess.checked }), updated: Date.now(), minor: f.minor.checked }, readParent(f));
+      if (d.minor && !(d.parentFirst && d.parentLast)) return warn('athParentNeed');
       if (m) Object.assign(d, { first: m.first, last: m.last });
       window.Cloud.saveAthlete(uid, d).then(() => { ui.flash = { text: t('athSaved') }; render(); }).catch(e => warn('regError', { code: e.code || e.message }));
     },
@@ -3114,6 +3167,40 @@
         : `<div class="empty"><i class="ti ti-shirt-sport" aria-hidden="true"></i> ${esc(t('tmNone'))}</div>`}`;
   }
 
+  // Timbro dell'associazione e firma del Presidente per le ricevute (solo admin). Non sono file pubblici del sito:
+  // stanno nel database (private/receiptSign) e li leggono solo gli utenti collegati, per stampare le ricevute.
+  function signCard() {
+    const sg = ui.signCache;
+    if (sg === undefined && window.Cloud.receiptSign) { ui.signCache = null; window.Cloud.receiptSign().then(x => { ui.signCache = x || {}; render(); }).catch(() => { ui.signCache = {}; render(); }); }
+    const prev = (k, lab) => `<div class="sign-prev"><strong>${esc(t(lab))}</strong>${sg && sg[k] ? `<img src="${sg[k]}" alt="${esc(t(lab))}">` : `<p class="muted small">${esc(t('signNone'))}</p>`}
+        <label class="btn small"><i class="ti ti-upload" aria-hidden="true"></i> ${esc(t('signUpload'))}<input type="file" accept="image/*" data-change="sign-file" data-k="${k}" hidden></label></div>`;
+    return `<div class="card" id="sign"><h2><i class="ti ti-signature" aria-hidden="true"></i> ${esc(t('signTitle'))}</h2>
+      <p class="muted small">${esc(t('signHelp'))}</p>
+      <div class="sign-grid">${prev('stamp', 'signStamp')}${prev('signature', 'signSignature')}</div></div>`;
+  }
+  // immagine caricata: ridotta, sfondo bianco reso trasparente, PNG
+  function signImage(file) {
+    return new Promise((resolve, reject) => {
+      const rd = new FileReader();
+      rd.onerror = reject;
+      rd.onload = () => {
+        const im = new Image();
+        im.onerror = reject;
+        im.onload = () => {
+          const k = Math.min(1, 700 / im.width), c = document.createElement('canvas');
+          c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+          const g = c.getContext('2d'); g.drawImage(im, 0, 0, c.width, c.height);
+          const d = g.getImageData(0, 0, c.width, c.height), px = d.data;
+          for (let i = 0; i < px.length; i += 4) { const l = (px[i] + px[i + 1] + px[i + 2]) / 3; if (l > 215) px[i + 3] = 0; else if (l > 160) px[i + 3] = Math.round(255 * (215 - l) / 55); }
+          g.putImageData(d, 0, 0);
+          resolve(c.toDataURL('image/png'));
+        };
+        im.src = rd.result;
+      };
+      rd.readAsDataURL(file);
+    });
+  }
+
   // Pagina dei livelli (#/livelli): solo admin generale e admin tornei.
   function viewLevels() {
     return `<div class="page-head"><a class="back" href="#/settings">← ${esc(t('settings'))}</a>
@@ -3473,6 +3560,7 @@
         <p class="muted small">${esc(t('payAdminIntro'))}</p><a class="btn primary" href="#/payments">${esc(t('payAdminTitle'))} →</a></div>` : ''}
       ${tourAdmin() ? `<div class="card"><h2><i class="ti ti-stairs-up" aria-hidden="true"></i> ${esc(t('tmLevelsTitle'))}</h2>
         <p class="muted small">${esc(teamLevels().join(' · '))}</p><a class="btn primary" href="#/livelli">${esc(t('levelsOpen'))} →</a></div>` : ''}
+      ${admin() ? signCard() : ''}
       ${tourAdmin() ? scorersCard() : ''}
       ${designCard()}
       ${themeCard()}`;
@@ -3739,6 +3827,24 @@
       case 'pay-period': el.form.amount.value = el.value === 'quarter' ? el.dataset.q : el.dataset.m; break;
       case 'fp-all': if (el.checked) el.form.querySelectorAll('[name=lv]:not([value=all])').forEach(x => { x.checked = false; }); break;
       case 'fp-lv': { const any = [...el.form.querySelectorAll('[name=lv]:not([value=all])')].some(x => x.checked); el.form.querySelector('[name=lv][value=all]').checked = !any; break; }
+      case 'ath-birth': {   // meno di 18 anni: corsista minorenne (si può togliere a mano)
+        const mi = el.form.querySelector('[name=minor]');
+        if (mi && isUnder18(el.value) && !mi.checked) { mi.checked = true; const box = el.form.querySelector('.parent-box'); if (box) box.hidden = false; }
+        break;
+      }
+      case 'ath-minor': {
+        const box = el.form.querySelector('.parent-box');
+        if (box) box.hidden = !el.checked;
+        break;
+      }
+      case 'sign-file': {
+        if (!admin() || !el.files || !el.files[0]) return;
+        signImage(el.files[0]).then(url => {
+          if (url.length > 450000) return warn('signTooBig');
+          return window.Cloud.saveReceiptSign(el.dataset.k, url).then(() => { ui.signCache = Object.assign({}, ui.signCache || {}, { [el.dataset.k]: url }); ui.flash = { text: t('signSaved') }; render(); });
+        }).catch(e => warn('regError', { code: e.code || e.message }));
+        break;
+      }
       case 'ca-holder-sel': {
         const manual = el.value === CA_MANUAL;
         el.form.querySelectorAll('.ca-manual').forEach(x => { x.hidden = !manual; });

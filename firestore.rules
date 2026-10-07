@@ -432,6 +432,12 @@ service cloud.firestore {
       allow read: if isCash();
       allow write: if isAdmin();
     }
+    // private/receiptSign: timbro dell'associazione e firma del Presidente (immagini) per le ricevute PDF.
+    // Non sono file pubblici del sito: li leggono solo gli utenti collegati, li carica l'admin generale.
+    match /private/{id} {
+      allow read: if request.auth != null && id == 'receiptSign';
+      allow write: if isAdmin() && id == 'receiptSign';
+    }
     match /counters/{id} {
       allow read, write: if isCash();
     }

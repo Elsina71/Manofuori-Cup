@@ -424,8 +424,12 @@ function tessMirror(a) {
   const m = (Store.state.members || []).find(x => x.uid === a.id);
   const seasons = Object.keys(a.tess || {}).filter(k => a.tess[k]).sort();
   if (!seasons.length) return null;
-  return { name: m ? `${m.first} ${m.last}` : `${a.first || ''} ${a.last || ''}`.trim(), gender: (m && m.gender) || 'M', birthPlace: a.birthPlace || '', birthDate: a.birthDate || '',
+  const x = { name: m ? `${m.first} ${m.last}` : `${a.first || ''} ${a.last || ''}`.trim(), gender: (m && m.gender) || 'M', birthPlace: a.birthPlace || '', birthDate: a.birthDate || '',
     city: a.city || '', address: a.address || '', cf: a.cf || '', seasons };
+  // minorenne: dati del genitore a cui si intesta la ricevuta
+  if (a.minor) Object.assign(x, { minor: true, parentFirst: a.parentFirst || '', parentLast: a.parentLast || '', parentGender: a.parentGender || '',
+    parentAddress: a.parentAddress || '', parentCity: a.parentCity || '', parentCf: a.parentCf || '' });
+  return x;
 }
 function syncTess() {
   if (!isAdmin || !athLoaded || !tessDocs || tessSyncing) return;
@@ -644,7 +648,19 @@ const ctrRef = (series, year) => doc(db, 'counters', (series === 'C' ? 'receipts
 const rnOf = (series, n, year) => `${n}/${series}/${year}`;
 // p = { date, method, lines: [{ cat, series, desc, amount, ref? }], receipt: { Q, C } (quali ricevute emettere),
 //   uid, person (intestatario, può mancare), causale: { Q, C } }
-const cleanPerson = x => (x ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, v == null ? '' : v])) : null);
+const cleanPerson = x => (x ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, v == null ? '' : v && typeof v === 'object' ? cleanPerson(v) : v])) : null);
+
+// Timbro e firma per le ricevute (private/receiptSign): li leggono gli utenti collegati, li carica l'admin.
+let signPromise = null;
+function receiptSign() {
+  if (!user) return Promise.resolve(null);
+  if (!signPromise) signPromise = getDoc(doc(db, 'private', 'receiptSign')).then(d => (d.exists() ? d.data() : null)).catch(e => { signPromise = null; throw e; });
+  return signPromise;
+}
+function saveReceiptSign(k, url) {
+  signPromise = null;
+  return setDoc(doc(db, 'private', 'receiptSign'), { [k]: url, updated: Date.now(), by: user.uid }, { merge: true });
+}
 function recordIncasso(p) {
   p = Object.assign({}, p, { person: cleanPerson(p.person) });
   const year = p.date.slice(0, 4);
@@ -712,6 +728,7 @@ function setReceiptHolder(r, uid, person) {
 // Registra un pagamento: ricevuta numerata (se importo > 0), "paid" sul piano o sullo spot, scheda aggiornata.
 // p = { kind: 'month'|'spot'|'pack', ref (id piano o spot), uid, amount, method, payDate, issued, causale, month|spotDate, person, athlete }
 function recordPayment(p) {
+  p = Object.assign({}, p, { person: cleanPerson(p.person) });
   const year = p.issued.slice(0, 4);
   return runTransaction(db, async tr => {
     const cref = ctrRef('Q', year);
@@ -1134,6 +1151,8 @@ window.Cloud = {
   saveEditorial,
   register,
   updateProfile,
+  receiptSign,
+  saveReceiptSign,
   completeProfile,
   adminUpdateMember,
   sendMessage,

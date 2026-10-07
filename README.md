@@ -203,6 +203,13 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   "prepagati" nella scheda e risultano pagati quando si compone il gruppo. Annullando la ricevuta tornano da pagare.
 - **Pagamento spot** (presenze del giorno, spot confermati): importo dal prezzo dello spot; un recupero gratuito (0 €)
   si segna pagato senza ricevuta. Se mancano i dati per la ricevuta, si compilano nel modulo e si salvano nella scheda.
+- **Corsisti minorenni** (scheda corsista → *Corsista minorenne*, spuntata da sola se dalla data di nascita risultano meno
+  di 18 anni): dati del genitore responsabile (nome, cognome, Sig./Sig.ra, via e numero, città, codice fiscale). La
+  ricevuta è intestata al genitore, riporta i dati del minore (nome, luogo e data di nascita, codice fiscale), dice che il
+  pagamento è "per conto del figlio/della figlia" e in fondo ha il testo per la detrazione IRPEF del 19%.
+- **Timbro e firma** (*Impostazioni → Timbro e firma delle ricevute*, admin): immagini caricate dall'admin (sfondo bianco
+  reso trasparente), stampate su tutte le ricevute. Stanno nel database (`private/receiptSign`, leggibile solo dagli
+  utenti collegati), non tra i file pubblici del sito.
 - **Codice fiscale** nella scheda corsista (anche nel modulo di creazione; in testa alla scheda, o "CF mancante"):
   compare nelle ricevute.
 - **Ricevuta PDF** (jsPDF incluso in `vendor/jspdf`): numero progressivo che riparte ogni anno (`counters`),
