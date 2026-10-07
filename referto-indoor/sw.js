@@ -1,5 +1,5 @@
 // Service worker: il referto funziona anche senza connessione in palestra
-const CACHE = 'mf-indoor-scoresheet-v4';
+const CACHE = 'mf-indoor-scoresheet-v5';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'css/style.css', 'js/rules.js', 'js/pdf.js', 'js/app.js', 'img/icon.svg',
   'vendor/jspdf.umd.min.js', 'fonts/Roboto-Regular.ttf', 'fonts/Roboto-Bold.ttf'];
 

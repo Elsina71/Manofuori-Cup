@@ -484,6 +484,8 @@
       </section>`;
     };
 
+    // set già giocati, con i punti nello stesso ordine delle squadre in campo (sinistra – destra)
+    const prev = st.sets.filter(x => x.index < set.index && x.winner);
     const recent = set.rallies.slice(-8).reverse();
     const nextSw = set.midSwitch && !set.switched ? ` · cambio campo a ${set.midSwitch}` : '';
     $app.innerHTML = `
@@ -491,6 +493,7 @@
         <div class="scorebar">
           <div><b>Set ${set.index + 1}</b> <span class="muted">a ${set.target}${S.cap ? ` (max ${S.cap})` : ''}</span></div>
           <div class="sets-won">Set <b>${st.setsWon[L]}</b> – <b>${st.setsWon[Rt]}</b></div>
+          ${prev.length ? `<div class="sets-prev" aria-label="Set precedenti">${prev.map(p => `<span class="sp"><span class="muted">${p.index + 1}°</span> <span class="${p.winner === L ? 'w' : ''}">${p.score[L]}</span>–<span class="${p.winner === Rt ? 'w' : ''}">${p.score[Rt]}</span></span>`).join('')}</div>` : ''}
           <div class="muted small">inizio ${hhmm(set.startTime)}${nextSw}</div>
         </div>
         <div class="court">${panel(L, 'left')}${panel(Rt, 'right')}</div>

@@ -132,6 +132,9 @@ textarea { resize: vertical; }
 /* gara in corso */
 .scorebar { display: flex; justify-content: space-between; align-items: center; gap: .6rem; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: .5rem .8rem; margin-bottom: .6rem; }
 .sets-won { font-size: 1.05rem; }
+.sets-prev { display: flex; flex-wrap: wrap; gap: .35rem .8rem; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.sets-prev .sp { white-space: nowrap; }
+.sets-prev .w { font-weight: 700; }
 .court { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; align-items: stretch; }
 .team-panel { background: var(--card); border: 2px solid var(--line); border-radius: var(--radius); padding: .5rem; display: flex; flex-direction: column; gap: .5rem; min-width: 0; }
 .team-panel.team-A { border-color: color-mix(in srgb, var(--a) 45%, var(--line)); }
