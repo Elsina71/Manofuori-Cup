@@ -86,14 +86,25 @@ let rolesUnsub = null;
 function listenRoles() {
   if (rolesUnsub) { rolesUnsub(); rolesUnsub = null; }
   Store.applyRemote('roles', {});
+  Store.applyRemote('admins', {});
   if (!isAdmin) {
     if (user && member) rolesUnsub = onSnapshot(doc(db, 'roles', user.uid), snap => { roles = snap.exists() ? snap.data() : {}; refresh(); }, () => {});
     return;
   }
-  rolesUnsub = onSnapshot(collection(db, 'roles'), snap => {
+  const u1 = onSnapshot(collection(db, 'roles'), snap => {
     Store.applyRemote('roles', Object.fromEntries(snap.docs.map(d => [d.id, d.data()])));
     refresh();
   }, onError);
+  // altri admin generali (raccolta admins)
+  const u2 = onSnapshot(collection(db, 'admins'), snap => {
+    Store.applyRemote('admins', Object.fromEntries(snap.docs.map(d => [d.id, d.data()])));
+    refresh();
+  }, onError);
+  rolesUnsub = () => { u1(); u2(); };
+}
+// Solo admin generale: nomina o toglie un altro admin generale (non se stesso).
+function setAdmin(uid, on, name) {
+  return on ? setDoc(doc(db, 'admins', uid), { name: name || '', by: user.uid, at: Date.now() }) : deleteDoc(doc(db, 'admins', uid));
 }
 function setRole(uid, role, on, name) {
   return setDoc(doc(db, 'roles', uid), { [role]: !!on, name: name || '', updated: Date.now(), by: user.uid }, { merge: true });
@@ -1165,6 +1176,7 @@ window.Cloud = {
   get tourAdmin() { return canTour(); },
   get cashier() { return isAdmin || !!roles.cash; },
   setRole,
+  setAdmin,
   push,
   login: (email, password) => signInWithEmailAndPassword(auth, email, password),
   logout: () => { member = null; return signOut(auth); },

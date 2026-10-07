@@ -34,6 +34,16 @@ const adm = env.authenticatedContext('Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2', { email_ver
 await t('admin corregge nome e cognome di un utente', assertSucceeds(updateDoc(doc(adm, 'members', 'other'), { first: 'Anna Maria', last: 'Rossi', gender: 'F' })));
 await t('admin: nome vuoto rifiutato', assertFails(updateDoc(doc(adm, 'members', 'other'), { first: '' })));
 await t('utente non cambia il nome di un altro', assertFails(updateDoc(doc(cap, 'members', 'other'), { first: 'X' })));
+// altri admin generali (admins/{uid}), nominati da un admin generale
+const oth = env.authenticatedContext('other', { email_verified: true }).firestore();
+await t('utente normale non si nomina admin', assertFails(setDoc(doc(oth, 'admins', 'other'), { name: 'X', by: 'other', at: 1 })));
+await t('utente normale non è admin', assertFails(getDoc(doc(oth, 'admins', 'probe'))));
+await t('admin generale nomina un altro admin', assertSucceeds(setDoc(doc(adm, 'admins', 'other'), { name: 'Anna Maria Rossi', by: 'Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2', at: 1 })));
+await t('il nuovo admin è admin generale', assertSucceeds(getDoc(doc(oth, 'admins', 'probe'))));
+await t('il nuovo admin vede l\'elenco degli admin', assertSucceeds(getDocs(collection(oth, 'admins'))));
+await t('un admin non toglie se stesso', assertFails(deleteDoc(doc(oth, 'admins', 'other'))));
+await t('admin generale toglie un admin', assertSucceeds(deleteDoc(doc(adm, 'admins', 'other'))));
+await t('tolto: non è più admin', assertFails(getDoc(doc(oth, 'admins', 'probe'))));
 await t('capitano crea squadra in attesa con rosa', assertSucceeds(batchSave(cap, 't1', team, [{ num: 7, last: 'R', first: 'M', g: 'M' }])));
 await t('utente registrato non abilitato come capitano: niente iscrizione', assertFails(setDoc(doc(other, 'teams', 't6'), { ...team, captainUid: 'other' })));
 await t('capitano non crea squadra già ammessa', assertFails(setDoc(doc(cap, 'teams', 't2'), { ...team, status: 'ok' })));

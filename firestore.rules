@@ -447,9 +447,15 @@ service cloud.firestore {
 
     // Chi è admin lo decide solo il database: l'app chiede il documento "probe" (o il proprio) e,
     // se la lettura è permessa, l'utente è admin. Nessun UID nel codice pubblico.
+    // admins/{uid}: altri admin generali, nominati da un admin generale (Utenti registrati → Ruoli).
+    // L'account principale e le email in isAdmin() restano admin in ogni caso.
     match /admins/{uid} {
       allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
-      allow list, write: if false;
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && uid != 'probe' && uid != request.auth.uid
+        && request.resource.data.keys().hasOnly(['name', 'by', 'at'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 130;
+      allow delete: if isAdmin() && uid != request.auth.uid;
     }
   }
 }

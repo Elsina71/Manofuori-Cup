@@ -5,7 +5,7 @@ const Store = (() => {
   }
 
   function empty() {
-    return { version: 4, notice: '', noticeUntil: '', editorial: [null, null], members: [], messages: [], inbox: [], nicks: {}, accounts: {}, manualVerified: {}, emailVerified: {}, vtours: [], vmatches: [], teams: [], rosters: [], levels: null, freeplay: [], fpreg: [], fpanon: [], trainings: [], coaches: [], athletes: [], groups: [], plans: [], packs: [], occ: [], att: [], spots: [], receipts: [], roles: {}, incassi: [], tesserati: [], occfree: {}, prices: null, bans: {}, notices: [], live: {} };
+    return { version: 4, notice: '', noticeUntil: '', editorial: [null, null], members: [], messages: [], inbox: [], nicks: {}, accounts: {}, manualVerified: {}, emailVerified: {}, vtours: [], vmatches: [], teams: [], rosters: [], levels: null, freeplay: [], fpreg: [], fpanon: [], trainings: [], coaches: [], athletes: [], groups: [], plans: [], packs: [], occ: [], att: [], spots: [], receipts: [], roles: {}, admins: {}, incassi: [], tesserati: [], occfree: {}, prices: null, bans: {}, notices: [], live: {} };
   }
 
   let state = empty();
@@ -16,7 +16,7 @@ const Store = (() => {
   }
 
   // Raccolte copiate così come arrivano dal database.
-  const PLAIN = ['roles', 'vtours', 'vmatches', 'teams', 'rosters', 'incassi', 'tesserati', 'occfree', 'manualVerified', 'emailVerified', 'freeplay', 'fpreg', 'fpanon',
+  const PLAIN = ['roles', 'admins', 'vtours', 'vmatches', 'teams', 'rosters', 'incassi', 'tesserati', 'occfree', 'manualVerified', 'emailVerified', 'freeplay', 'fpreg', 'fpanon',
     'trainings', 'coaches', 'athletes', 'groups', 'plans', 'packs', 'occ', 'att', 'spots', 'receipts', 'bans', 'notices', 'members', 'messages', 'inbox', 'accounts'];
 
   function applyRemote(kind, value) {

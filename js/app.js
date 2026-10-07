@@ -385,7 +385,7 @@
     return `<div class="card" id="roles"><h2><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('rolesTitle'))}</h2>
       <p class="muted small">${esc(t('rolesHelp'))}</p>
       <ul class="reg-list">
-        ${row('crown', t('role_general'), t('roleHelp_general'), ['pierpaolomurgioni@gmail.com'])}
+        ${row('crown', t('role_general'), t('roleHelp_general'), ['pierpaolomurgioni@gmail.com'].concat(Object.entries(S().admins || {}).map(([uid, v]) => { const m = memberByUid(uid); return m ? personName(m) : v.name || uid; }).sort()))}
         ${row('shirt-sport', t('role_captain'), t('roleHelp_captain'), who('captain'))}
         ${row('trophy', t('role_tour'), t('roleHelp_tour'), who('tour'))}
         ${row('cash-register', t('role_cash'), t('roleHelp_cash'), who('cash'))}
@@ -426,6 +426,7 @@
             <button class="btn small danger" data-action="user-delete" data-uid="${m.uid}"><i class="ti ti-user-x" aria-hidden="true"></i> ${esc(t('userDelete'))}</button>
             <span class="ban-row">${verifyBadge(m.uid)} ${m.privacyAt ? `<span class="badge st-done" title="${esc(t('privacyAcceptedOn', { d: fmtDate(new Date(m.privacyAt).toLocaleDateString('sv')) }))}"><i class="ti ti-shield-check" aria-hidden="true"></i> ${esc(t('privacyOkBadge'))}</span>` : `<span class="badge tess-no">${esc(t('privacyNoBadge'))}</span>`}${m.deleteReq ? ` <span class="badge st-full">${esc(t('deleteRequested', { d: fmtDate(new Date(m.deleteReq).toLocaleDateString('sv')) }))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('rolesTitle'))}:
+              ${generalAdminBox(m)}
               ${['captain', 'tour', 'cash'].map(r => `<label class="check"><input type="checkbox" data-change="role" data-uid="${m.uid}" data-role="${r}" ${((S().roles || {})[m.uid] || {})[r] ? 'checked' : ''}> ${esc(t('role_' + r))}</label>`).join('')}
               ${coachOf(m.uid) ? `<span class="badge">${esc(t('role_coach'))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-ban" aria-hidden="true"></i> ${esc(t('banTitle'))}:
@@ -435,6 +436,15 @@
             <button class="btn small">${esc(t('save'))}</button>
           </form>
         </li>`; }).join('') || `<li class="muted">${esc(t('noMembers'))}</li>`}</ul></div>`;
+  }
+
+  // Casella "Admin generale" nella scheda dell'utente. Fissi (email nelle regole del database) e se stessi: non modificabili.
+  const FIXED_ADMIN_EMAILS = ['pierpaolomurgioni@gmail.com'];
+  function generalAdminBox(m) {
+    const email = ((S().accounts || {})[m.uid] || '').toLowerCase();
+    const fixed = FIXED_ADMIN_EMAILS.includes(email) || m.uid === myUid();
+    const on = fixed || !!(S().admins || {})[m.uid];
+    return `<label class="check" ${fixed ? `title="${esc(t('adminFixed'))}"` : ''}><input type="checkbox" data-change="admin-role" data-uid="${m.uid}" ${on ? 'checked' : ''} ${fixed ? 'disabled' : ''}> <strong>${esc(t('role_general'))}</strong></label>`;
   }
 
   // Correzione di nome, cognome e sesso di un utente (solo admin generale).
@@ -3681,6 +3691,15 @@
         window.Cloud.setRole(el.dataset.uid, el.dataset.role, el.checked, m ? personName(m) : '')
           .then(() => { ui.flash = { text: t(el.checked ? 'roleGiven' : 'roleRemoved', { r: t('role_' + el.dataset.role), n: m ? personName(m) : '' }) }; render(); })
           .catch(err => warn('regError', { code: err.code || err.message }));
+        break;
+      }
+      case 'admin-role': {
+        if (!admin()) return;
+        const m = memberByUid(el.dataset.uid), n = m ? personName(m) : '';
+        if (!confirmed(el.checked ? 'adminGrantConfirm' : 'adminRevokeConfirm', { n })) { el.checked = !el.checked; return; }
+        window.Cloud.setAdmin(el.dataset.uid, el.checked, n)
+          .then(() => { ui.flash = { text: t(el.checked ? 'roleGiven' : 'roleRemoved', { r: t('role_general'), n }) }; render(); })
+          .catch(err => { el.checked = !el.checked; warn('regError', { code: err.code || err.message }); });
         break;
       }
       case 'ban': {
