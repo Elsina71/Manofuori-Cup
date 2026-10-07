@@ -77,6 +77,7 @@
     else if (r[0] === 'mine') { nav = 'mine'; html = viewMineVolley(); }
     else if (r[0] === 'me') { nav = 'me'; html = viewProfile(); }
     else if (r[0] === 'teams') { nav = 'teams'; html = viewTeams(); }
+    else if (r[0] === 'tema') { nav = 'settings'; html = viewTheme(); }
     else if (r[0] === 'livelli' && tourAdmin()) { nav = 'settings'; html = viewLevels(); }
     else if (r[0] === 'gare') { nav = 'gare'; html = viewMyMatches(); }
     else if (r[0] === 'tornei' || r[0] === 'tournaments') { html = viewVTours(); }
@@ -385,7 +386,7 @@
     return `<div class="card" id="roles"><h2><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('rolesTitle'))}</h2>
       <p class="muted small">${esc(t('rolesHelp'))}</p>
       <ul class="reg-list">
-        ${row('crown', t('role_general'), t('roleHelp_general'), ['pierpaolomurgioni@gmail.com'].concat(Object.entries(S().admins || {}).map(([uid, v]) => { const m = memberByUid(uid); return m ? personName(m) : v.name || uid; }).sort()))}
+        ${row('crown', t('role_general'), t('roleHelp_general'), OWNER_EMAILS.map(e => `${e} (${t('adminOwner')})`).concat(Object.entries(S().admins || {}).map(([uid, v]) => { const m = memberByUid(uid); return m ? personName(m) : v.name || uid; }).sort()))}
         ${row('shirt-sport', t('role_captain'), t('roleHelp_captain'), who('captain'))}
         ${row('trophy', t('role_tour'), t('roleHelp_tour'), who('tour'))}
         ${row('cash-register', t('role_cash'), t('roleHelp_cash'), who('cash'))}
@@ -438,13 +439,17 @@
         </li>`; }).join('') || `<li class="muted">${esc(t('noMembers'))}</li>`}</ul></div>`;
   }
 
-  // Casella "Admin generale" nella scheda dell'utente. Fissi (email nelle regole del database) e se stessi: non modificabili.
-  const FIXED_ADMIN_EMAILS = ['pierpaolomurgioni@gmail.com'];
+  // Casella "Admin generale" nella scheda dell'utente. Gli admin principali non si toccano; un admin non cambia se stesso;
+  // nominare può ogni admin generale, togliere il ruolo solo un admin principale (lo controllano anche le regole).
+  const OWNER_EMAILS = ['manofuori@gmail.com', 'pierpaolomurgioni@gmail.com'];
+  const isOwnerEmail = e => OWNER_EMAILS.includes(String(e || '').toLowerCase());
+  const iAmOwner = () => !!(window.Cloud && window.Cloud.user && isOwnerEmail(window.Cloud.user.email));
   function generalAdminBox(m) {
-    const email = ((S().accounts || {})[m.uid] || '').toLowerCase();
-    const fixed = FIXED_ADMIN_EMAILS.includes(email) || m.uid === myUid();
-    const on = fixed || !!(S().admins || {})[m.uid];
-    return `<label class="check" ${fixed ? `title="${esc(t('adminFixed'))}"` : ''}><input type="checkbox" data-change="admin-role" data-uid="${m.uid}" ${on ? 'checked' : ''} ${fixed ? 'disabled' : ''}> <strong>${esc(t('role_general'))}</strong></label>`;
+    const owner = isOwnerEmail((S().accounts || {})[m.uid]);
+    const on = owner || !!(S().admins || {})[m.uid] || (m.uid === myUid() && admin());
+    const locked = owner || m.uid === myUid() || (on && !iAmOwner());
+    const why = owner ? 'adminOwnerFixed' : m.uid === myUid() ? 'adminSelfFixed' : 'adminOnlyOwnerRevokes';
+    return `<label class="check" ${locked ? `title="${esc(t(why))}"` : ''}><input type="checkbox" data-change="admin-role" data-uid="${m.uid}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}> <strong>${esc(t('role_general'))}</strong>${owner ? ` <span class="badge">${esc(t('adminOwner'))}</span>` : ''}</label>`;
   }
 
   // Correzione di nome, cognome e sesso di un utente (solo admin generale).
@@ -3236,11 +3241,17 @@
     </div>`;
   }
 
-  function themeCard() {
+  // Pagina del tema (#/tema), dall'icona della tavolozza nella testata: per tutti, anche senza account.
+  function viewTheme() {
+    return `<div class="page-head"><a class="back" href="#/">← ${esc(t('navHome'))}</a>
+      <h1><i class="ti ti-palette" aria-hidden="true"></i> ${esc(t('themeTitle'))}</h1></div>${themeCard(true)}`;
+  }
+
+  function themeCard(page) {
     if (THEMES.length < 2) return '';
     const cur = currentTheme();
     return `<div class="card" id="theme">
-      <h2><i class="ti ti-palette" aria-hidden="true"></i> ${esc(t('themeTitle'))}</h2>
+      ${page ? '' : `<h2><i class="ti ti-palette" aria-hidden="true"></i> ${esc(t('themeTitle'))}</h2>`}
       <p class="muted small">${esc(t('themeHelp'))}</p>
       <div class="theme-grid">${THEMES.map(([id, p, bg, a]) => `
         <button class="theme-opt" data-action="set-theme" data-theme-id="${id}" aria-pressed="${cur === id}">

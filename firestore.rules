@@ -5,16 +5,18 @@ rules_version = '2';
 // La raccolta "admins" si gestisce solo dalla console Firebase.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ADMIN GENERALE: accesso e scrittura su tutto. Sono gli account con queste email (confermate col link
-    // oppure a mano da un admin in "Utenti registrati"),
-    // l'account principale e gli eventuali altri inseriti nella raccolta "admins".
-    function isAdmin() {
+    // ADMIN PRINCIPALI: manofuori@gmail.com (account principale) e pierpaolomurgioni@gmail.com, con email confermata.
+    // Nessuno toglie loro il ruolo; sono gli unici che possono togliere il ruolo di admin generale agli altri.
+    function isOwner() {
       return request.auth != null
         && (request.auth.uid in ['Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2']
-            || (request.auth.token.email is string && request.auth.token.email.lower() in ['pierpaolomurgioni@gmail.com']
+            || (request.auth.token.email is string && request.auth.token.email.lower() in ['manofuori@gmail.com', 'pierpaolomurgioni@gmail.com']
                 && (request.auth.token.email_verified == true
-                    || exists(/databases/$(database)/documents/verified/$(request.auth.uid))))
-            || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+                    || exists(/databases/$(database)/documents/verified/$(request.auth.uid)))));
+    }
+    // ADMIN GENERALE: accesso e scrittura su tutto. L'admin principale e chi è nominato nella raccolta "admins".
+    function isAdmin() {
+      return isOwner() || (request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
     // Ruoli assegnati dagli admin generali: roles/{uid} = { tour: admin tornei, cash: cassa, captain: capitano }.
     function hasRole(r) {
@@ -447,15 +449,15 @@ service cloud.firestore {
 
     // Chi è admin lo decide solo il database: l'app chiede il documento "probe" (o il proprio) e,
     // se la lettura è permessa, l'utente è admin. Nessun UID nel codice pubblico.
-    // admins/{uid}: altri admin generali, nominati da un admin generale (Utenti registrati → Ruoli).
-    // L'account principale e le email in isAdmin() restano admin in ogni caso.
+    // admins/{uid}: altri admin generali. Li nomina un admin generale (Utenti registrati → Ruoli);
+    // li tolgono solo gli admin principali.
     match /admins/{uid} {
       allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
       allow create, update: if isAdmin() && uid != 'probe' && uid != request.auth.uid
         && request.resource.data.keys().hasOnly(['name', 'by', 'at'])
         && request.resource.data.name is string && request.resource.data.name.size() <= 130;
-      allow delete: if isAdmin() && uid != request.auth.uid;
+      allow delete: if isOwner() && uid != request.auth.uid;
     }
   }
 }

@@ -210,9 +210,10 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   spot e trimestrali si aggiornano (avviso se un numero risulterebbe doppio).
 - Il corsista scarica dal profilo solo le proprie ricevute (`receipts`: admin e interessato).
 - **Ruoli** (pagina Utenti → "Ruoli e accessi"):
-  - *Admin generale*: tutto. Sono l'account principale, pierpaolomurgioni@gmail.com con email confermata (nelle
-    regole del database) e chi un admin generale nomina con la casella **Admin generale** accanto all'utente
-    (raccolta `admins`; vale dal prossimo accesso). Un admin non può togliere se stesso; quelli fissi non si tolgono.
+  - *Admin generale*: tutto. Gli **admin principali** sono manofuori@gmail.com (account principale) e
+    pierpaolomurgioni@gmail.com, con email confermata (nelle regole del database): nessuno può togliere loro il ruolo e
+    sono gli unici che possono toglierlo agli altri. Gli altri admin generali li nomina un admin generale con la casella
+    **Admin generale** accanto all'utente (raccolta `admins`; vale dal prossimo accesso). Nessun admin cambia il proprio ruolo.
   - *Admin tornei* (`roles/{uid}.tour`): tornei, squadre (ammissione), livelli, calendari e risultati. I livelli stanno
     in `data/tour` (separati da `data/settings`, che resta dell'admin generale).
   - *Capitano* (`roles/{uid}.captain`): può iscrivere e gestire la propria squadra.
@@ -280,7 +281,7 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 
 ## Temi grafici e colori
 
-Ogni utente sceglie il tema da *Impostazioni → Tema*; la scelta resta solo su quel dispositivo (con il consenso alle
+Ogni utente sceglie il tema dall'icona della tavolozza nella testata (pagina `#/tema`) o da *Impostazioni → Tema*; la scelta resta solo su quel dispositivo (con il consenso alle
 preferenze nell'avviso cookie, altrimenti vale per la visita). Temi: **Neutro** (predefinito), **Palestra**,
 **Gialloblù**, **Notte di gara** (scuro), **Fenicottero**, **Azzurri**, **Tramonto** e tre cartoon: **Fumetto**,
 **Lavagna del coach** (scuro) e **Palla pazza**. Ogni tema cambia colori, carattere dei titoli, testata, barra in basso

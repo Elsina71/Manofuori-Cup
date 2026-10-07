@@ -21,8 +21,8 @@ const team = { name: 'Fenicotteri', level: 'MASTER', kind: 'X', captainUid: 'cap
 let ok = 0, ko = 0;
 const t = async (name, p) => { try { await p; ok++; console.log('✔', name); } catch (e) { ko++; console.log('✘', name, e.message.slice(0, 120)); } };
 const batchSave = (db, id, tm, players, upd) => { const b = writeBatch(db); upd ? b.update(doc(db, 'teams', id), tm) : b.set(doc(db, 'teams', id), tm); b.set(doc(db, 'rosters', id), { captainUid: 'cap', players, updated: 2 }); return b.commit(); };
-// admin generale per email: serve l'email confermata (col link o a mano: verified/{uid})
-const pp = env.authenticatedContext('pp', { email: 'PierpaoloMurgioni@gmail.com', email_verified: false }).firestore();
+// admin principali per email (manofuori@gmail.com, pierpaolomurgioni@gmail.com): serve l'email confermata (col link o a mano: verified/{uid})
+const pp = env.authenticatedContext('pp', { email: 'ManoFuori@gmail.com', email_verified: false }).firestore();
 await t('email admin non confermata: non è admin', assertFails(getDoc(doc(pp, 'admins', 'probe'))));
 await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'verified', 'pp'), { by: 'admin', at: 1 }));
 await t('email admin confermata a mano: è admin', assertSucceeds(getDoc(doc(pp, 'admins', 'probe'))));
@@ -42,7 +42,15 @@ await t('admin generale nomina un altro admin', assertSucceeds(setDoc(doc(adm, '
 await t('il nuovo admin è admin generale', assertSucceeds(getDoc(doc(oth, 'admins', 'probe'))));
 await t('il nuovo admin vede l\'elenco degli admin', assertSucceeds(getDocs(collection(oth, 'admins'))));
 await t('un admin non toglie se stesso', assertFails(deleteDoc(doc(oth, 'admins', 'other'))));
-await t('admin generale toglie un admin', assertSucceeds(deleteDoc(doc(adm, 'admins', 'other'))));
+await t('un admin (non principale) nomina un altro admin', assertSucceeds(setDoc(doc(oth, 'admins', 'cap'), { name: 'Capitano', by: 'other', at: 2 })));
+await t('un admin (non principale) non toglie un altro admin', assertFails(deleteDoc(doc(oth, 'admins', 'cap'))));
+await t('l\'admin principale toglie quell\'admin', assertSucceeds(deleteDoc(doc(adm, 'admins', 'cap'))));
+await t('l\'admin principale per email (confermato) toglie un admin', assertSucceeds(setDoc(doc(adm, 'admins', 'cap'), { name: 'C', by: 'x', at: 3 }).then(() => deleteDoc(doc(pp, 'admins', 'cap')))));
+await t('nessuno toglie l\'admin principale (non è nella raccolta: resta admin)', assertSucceeds(deleteDoc(doc(oth, 'admins', 'Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2')).catch(() => 0).then(() => getDoc(doc(adm, 'admins', 'probe')))));
+const pm = env.authenticatedContext('pm', { email: 'pierpaolomurgioni@gmail.com', email_verified: true }).firestore();
+await t('pierpaolomurgioni (confermato) è admin principale', assertSucceeds(getDoc(doc(pm, 'admins', 'probe'))));
+await t('pierpaolomurgioni toglie un admin', assertSucceeds(setDoc(doc(adm, 'admins', 'cap'), { name: 'C', by: 'x', at: 4 }).then(() => deleteDoc(doc(pm, 'admins', 'cap')))));
+await t('l\'admin principale toglie un admin', assertSucceeds(deleteDoc(doc(adm, 'admins', 'other'))));
 await t('tolto: non è più admin', assertFails(getDoc(doc(oth, 'admins', 'probe'))));
 await t('capitano crea squadra in attesa con rosa', assertSucceeds(batchSave(cap, 't1', team, [{ num: 7, last: 'R', first: 'M', g: 'M' }])));
 await t('utente registrato non abilitato come capitano: niente iscrizione', assertFails(setDoc(doc(other, 'teams', 't6'), { ...team, captainUid: 'other' })));
