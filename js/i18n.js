@@ -580,6 +580,7 @@ const I18n = (() => {
       tmKind_X: "Mista",
       tmKind_M: "Maschile",
       tmKind_F: "Femminile",
+      levelsOpen: "Gestisci i livelli",
       tmCaptain: "Capitano",
       tmCaptainHelp: "Account dell'app: potrà modificare squadra e rosa. Facoltativo.",
       tmCaptainName: "Capitano (se non ha l'account)",

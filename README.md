@@ -123,8 +123,8 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   l'admin e gli scorer (per il referto). L'admin vede anche le squadre in attesa, le modifica e le
   elimina; può anche **iscrivere lui le squadre** (entrano già ammesse), con il capitano scelto tra gli utenti dell'app
   oppure solo con il nome se non ha l'account.
-- **Livelli**: DINOS, MASTER, SUPER MASTER, SUPER 10 (dal meno al più forte), modificabili dall'admin tornei in fondo
-  alla pagina Squadre (salvati in `data/tour`).
+- **Livelli**: DINOS, MASTER, SUPER MASTER, SUPER 10 (dal meno al più forte), modificabili solo dall'admin generale e
+  dall'admin tornei nella pagina **Livelli** (`#/livelli`, da *Impostazioni → Gestisci i livelli*; salvati in `data/tour`).
 - Database: `teams/{id}` (pubblico) e `rosters/{id}` (rosa: capitano, admin e scorer). Test delle regole:
   `tests/teams.rules.test.mjs` (istruzioni in cima al file).
 

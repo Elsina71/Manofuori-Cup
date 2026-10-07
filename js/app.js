@@ -77,6 +77,7 @@
     else if (r[0] === 'mine') { nav = 'mine'; html = viewMineVolley(); }
     else if (r[0] === 'me') { nav = 'me'; html = viewProfile(); }
     else if (r[0] === 'teams') { nav = 'teams'; html = viewTeams(); }
+    else if (r[0] === 'livelli' && tourAdmin()) { nav = 'settings'; html = viewLevels(); }
     else if (r[0] === 'gare') { nav = 'gare'; html = viewMyMatches(); }
     else if (r[0] === 'tornei' || r[0] === 'tournaments') { html = viewVTours(); }
     else if (r[0] === 'vt' && vtById(r[1])) { html = viewVTour(vtById(r[1]), r[2]); }
@@ -3050,14 +3051,18 @@
       ${pending ? `<p class="note warn"><i class="ti ti-clock" aria-hidden="true"></i> ${esc(t('tmPendingAdmin', { n: pending }))}</p>` : ''}
       ${groups.length ? groups.map(g => `<section class="feat-block"><h2>${esc(g.l)} <small class="muted">(${g.list.length})</small></h2>
         <div class="ch-grid">${g.list.map(teamCard).join('')}</div></section>`).join('')
-        : `<div class="empty"><i class="ti ti-shirt-sport" aria-hidden="true"></i> ${esc(t('tmNone'))}</div>`}
-      ${tourAdmin() ? levelsCard() : ''}`;
+        : `<div class="empty"><i class="ti ti-shirt-sport" aria-hidden="true"></i> ${esc(t('tmNone'))}</div>`}`;
+  }
+
+  // Pagina dei livelli (#/livelli): solo admin generale e admin tornei.
+  function viewLevels() {
+    return `<div class="page-head"><a class="back" href="#/settings">← ${esc(t('settings'))}</a>
+      <h1><i class="ti ti-stairs-up" aria-hidden="true"></i> ${esc(t('tmLevelsTitle'))}</h1></div>${levelsCard()}`;
   }
 
   // Livelli (admin tornei): uno per riga, dal meno al più forte.
   function levelsCard() {
     return `<form class="card" data-form="levels-save" id="levels">
-      <h2><i class="ti ti-stairs-up" aria-hidden="true"></i> ${esc(t('tmLevelsTitle'))}</h2>
       <p class="muted small">${esc(t('tmLevelsHelp'))}</p>
       <textarea name="levels" rows="5">${esc(teamLevels().join('\n'))}</textarea>
       <div class="form-actions"><button class="btn primary">${esc(t('save'))}</button></div>
@@ -3377,6 +3382,8 @@
         <p class="muted small">${esc(t('rpIntro'))}</p><a class="btn primary" href="#/report">${esc(t('rpTitle'))} →</a></div>` : ''}
       ${admin() ? `<div class="card"><h2><i class="ti ti-cash-register" aria-hidden="true"></i> ${esc(t('payAdminTitle'))}</h2>
         <p class="muted small">${esc(t('payAdminIntro'))}</p><a class="btn primary" href="#/payments">${esc(t('payAdminTitle'))} →</a></div>` : ''}
+      ${tourAdmin() ? `<div class="card"><h2><i class="ti ti-stairs-up" aria-hidden="true"></i> ${esc(t('tmLevelsTitle'))}</h2>
+        <p class="muted small">${esc(teamLevels().join(' · '))}</p><a class="btn primary" href="#/livelli">${esc(t('levelsOpen'))} →</a></div>` : ''}
       ${tourAdmin() ? scorersCard() : ''}
       ${designCard()}
       ${themeCard()}`;
