@@ -503,6 +503,7 @@ const I18n = (() => {
       deleteRequested: "cancellazione richiesta il {d}",
       athDataNote: "Dati richiesti per il tesseramento e per le ricevute fiscali, visibili solo all'amministrazione e all'interessato (vedi <a href=\"#/privacy\">Informativa privacy</a>).",
       userDelete: "Elimina utente",
+      userEditName: "Modifica nome",
       userDeleteConfirm: "Eliminare {n} ({e})?\n\nVerrà tolto da tutti i gruppi degli allenamenti e verranno cancellati piani, scheda corsista, profilo, email e impostazioni. Le ricevute restano conservate (obbligo fiscale). L'operazione non si può annullare.",
       userDeletedAlert: "{n} è stato eliminato dall'app.\n\nATTENZIONE: bisogna eliminare anche l'account di accesso da Firebase:\nconsole.firebase.google.com → progetto Firebase di Manofuori Cup → Authentication → Users → cerca {e} → menu ⋮ → Elimina account.\n\nPoi annota la cancellazione nel Registro dei trattamenti.",
       userDeleted: "{n} eliminato dall'app. Ricordati di eliminare l'account anche da Firebase.",

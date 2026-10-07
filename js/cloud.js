@@ -305,6 +305,16 @@ async function adminCreateUser(d) {
   return uid;
 }
 
+// Solo admin: corregge nome, cognome e sesso di un utente. Il nome compare anche, copiato, come capitano delle sue
+// squadre e nei gruppi degli allenamenti: si aggiorna anche lì.
+function adminUpdateMember(uid, d, teamIds, groupIds) {
+  const batch = writeBatch(db), now = Date.now(), name = `${d.first} ${d.last}`;
+  batch.update(doc(db, 'members', uid), { first: d.first, last: d.last, gender: d.gender });
+  teamIds.forEach(id => batch.update(doc(db, 'teams', id), { captainName: name, updated: now }));
+  groupIds.forEach(id => batch.update(doc(db, 'groups', id), { [`names.${uid}`]: name, updated: now }));
+  return batch.commit();
+}
+
 function updateProfile(data) {
   if (!member) return Promise.resolve();
   const prof = { first: data.first, last: data.last, gender: data.gender, created: member.created || Date.now() };
@@ -1094,6 +1104,7 @@ window.Cloud = {
   saveEditorial,
   register,
   updateProfile,
+  adminUpdateMember,
   sendMessage,
   deleteMessage,
   markRead,

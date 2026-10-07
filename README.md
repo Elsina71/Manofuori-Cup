@@ -56,6 +56,8 @@ la foto si carica dal telefono o dal computer e viene ridimensionata automaticam
   destinatari finché l'utente non preme *Ho letto*.
 - **Omonimi e alias**: gli utenti si distinguono per email. Se due utenti hanno stesso nome, cognome e sesso, l'admin
   riceve un avviso e assegna un **alias**, modificabile, che sostituisce il nome nelle liste.
+- **Correzione dei nomi** (*Impostazioni → Utenti registrati → Modifica nome*, solo admin generale): nome, cognome e
+  sesso dell'utente; il nuovo nome compare anche come capitano delle sue squadre e nei gruppi degli allenamenti.
 - **Privacy**: l'email la vedono solo l'utente e l'admin.
 - Database: `members/{uid}`, `accounts/{uid}` (email), `messages/{id}`, `inbox/{uid}`; alias in `data/settings`.
 

@@ -122,6 +122,8 @@ service cloud.firestore {
       // l'admin registra direttamente un utente
       allow create, update: if isAdmin()
         && request.resource.data.keys().hasOnly(['first', 'last', 'gender', 'created', 'privacyAt', 'privacyVer', 'deleteReq'])
+        && request.resource.data.first is string && request.resource.data.first.size() > 0 && request.resource.data.first.size() <= 60
+        && request.resource.data.last is string && request.resource.data.last.size() > 0 && request.resource.data.last.size() <= 60
         && request.resource.data.gender in ['M', 'F'];
     }
 

@@ -419,7 +419,8 @@
       <div class="toolbar"><input type="search" class="search" placeholder="${esc(t('search'))}" value="${esc(ui.userFilter || '')}" data-change="user-filter" aria-label="${esc(t('search'))}"></div>
       <div class="card"><ul class="reg-list users-list">${list.map(m => {
         return `<li class="${pend.has(m.uid) ? 'homonym' : ''} ${banOf(m.uid).tour ? 'banned' : ''}">
-          <span class="reg-names"><strong>${esc(personName(m))}</strong> <span class="badge g-${m.gender}">${esc(m.gender)}</span>
+          <span class="reg-names">${ui.userEdit === m.uid ? userEditForm(m) : `<strong>${esc(personName(m))}</strong> <span class="badge g-${m.gender}">${esc(m.gender)}</span>
+            <button class="btn small" data-action="user-edit" data-uid="${m.uid}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t('userEditName'))}</button>`}
             ${homs.has(m.uid) ? `<span class="badge warn-b">${esc(t('homonym'))}</span>` : ''}<br>
             <small class="muted">${esc(acc[m.uid] || '—')}</small>
             <button class="btn small danger" data-action="user-delete" data-uid="${m.uid}"><i class="ti ti-user-x" aria-hidden="true"></i> ${esc(t('userDelete'))}</button>
@@ -434,6 +435,16 @@
             <button class="btn small">${esc(t('save'))}</button>
           </form>
         </li>`; }).join('') || `<li class="muted">${esc(t('noMembers'))}</li>`}</ul></div>`;
+  }
+
+  // Correzione di nome, cognome e sesso di un utente (solo admin generale).
+  function userEditForm(m) {
+    return `<form class="grid-form user-edit" data-form="user-edit-save" data-uid="${m.uid}">
+      <label>${esc(t('firstName'))}<input name="first" required maxlength="60" value="${esc(m.first || '')}"></label>
+      <label>${esc(t('lastName'))}<input name="last" required maxlength="60" value="${esc(m.last || '')}"></label>
+      <label>${esc(t('gender'))}<select name="gender" required><option value="M" ${sel(m.gender, 'M')}>${esc(t('male'))}</option><option value="F" ${sel(m.gender, 'F')}>${esc(t('female'))}</option></select></label>
+      <div class="form-actions"><button type="button" class="btn small" data-action="user-edit" data-uid="">${esc(t('cancel'))}</button><button class="btn small primary">${esc(t('save'))}</button></div>
+    </form>`;
   }
 
   // ====================================================================
@@ -3426,6 +3437,7 @@
       if (!fp || !confirmed('fpDeleteConfirm', { n: fp.name })) return;
       window.Cloud.deleteFreeplay(fp, fpRegs(fp), fpAnons(fp)).then(() => { ui.flash = { text: t('fpDeleted') }; render(); }).catch(fpErr);
     },
+    'user-edit': el => { ui.userEdit = el.dataset.uid || null; render(); },
     'user-delete': el => {
       const m = memberByUid(el.dataset.uid);
       if (!m) return;
@@ -3529,6 +3541,14 @@
         .catch(e => { btn.disabled = false; warn(e.code === 'auth/email-already-in-use' ? 'userCreateExists' : e.code === 'auth/weak-password' ? 'registerWeak' : 'regError', { code: e.code || e.message }); });
     },
     'msg-send': f => sendMessageForm(f),
+    'user-edit-save': f => {
+      const uid = f.dataset.uid, d = { first: f.first.value.trim(), last: f.last.value.trim(), gender: f.gender.value };
+      if (!d.first || !d.last || !['M', 'F'].includes(d.gender)) return warn('errRegFields');
+      const teamIds = (S().teams || []).filter(x => x.captainUid === uid).map(x => x.id);
+      const groupIds = (S().groups || []).filter(g => (g.uids || []).includes(uid)).map(g => g.id);
+      window.Cloud.adminUpdateMember(uid, d, teamIds, groupIds).then(() => { ui.userEdit = null; ui.flash = { text: t('saved') }; render(); })
+        .catch(e => warn('regError', { code: e.code || e.message }));
+    },
     'nick-save': f => {
       const uid = f.dataset.uid, nick = f.nick.value.trim();
       const taken = Object.entries(S().nicks || {}).find(([u, n]) => u !== uid && n && n.toLowerCase() === nick.toLowerCase());
