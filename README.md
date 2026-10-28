@@ -106,6 +106,8 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   segnapunti sono facoltativi; le gare restano solo su quel dispositivo (con backup in JSON) e non vanno in calendario.
   **Prova con una gara di esempio** (`referto-indoor/?demo=1`, o il pulsante *Gara di esempio* nel referto) crea una gara già
   compilata con due squadre e giocatori inventati, tutto modificabile.
+- Nel referto, nella schermata delle formazioni, **↻ Avanti / ↺ Indietro** ruotano la formazione di una squadra (avanti:
+  P2 va al servizio in P1, P1 va in P6).
 - **Le mie gare** (menu e profilo): calendario e risultati delle squadre di cui si è capitano o giocatore. Il capitano
   collega i giocatori della rosa al loro account dell'app (colonna *Account app*; l'app propone l'utente con lo stesso
   nome e cognome); `teams.memberUids` contiene solo gli id degli account, la rosa resta privata.

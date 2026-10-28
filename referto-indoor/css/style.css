@@ -227,3 +227,7 @@ textarea { resize: vertical; }
 .pos-live .lib-tag { font-size: .7rem; font-weight: 800; color: var(--ok); }
 .btn.lib-on { border-color: var(--ok); color: var(--ok); }
 .badge.women { background: var(--woman); color: #fff; }
+
+/* formazioni: rotazione avanti / indietro */
+.rot-row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; justify-content: flex-end; margin-top: .4rem; }
+.rot-row .muted { margin-right: auto; }

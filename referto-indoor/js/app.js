@@ -409,7 +409,9 @@
     const court = (tm, side) => `<div class="lineup-court team-${tm}">
       <h3><span class="dot team-${tm}"></span> ${esc(teamName(m, tm))}${L.serving === tm ? ' · <span class="badge serve">al servizio</span>' : ''}</h3>
       <div class="net-label">rete</div><div class="court-grid">${GRID.map(p => pos(tm, p)).join('')}</div>
-      <p class="muted small">P1 = al servizio</p></div>`;
+      <div class="row rot-row"><span class="muted small">P1 = al servizio · rotazione:</span>
+        <button type="button" class="btn small" data-rot="${tm}" data-dir="-1" title="Rotazione indietro: P1 torna in P2">↺ Indietro</button>
+        <button type="button" class="btn small" data-rot="${tm}" data-dir="1" title="Rotazione avanti: P2 va al servizio in P1">↻ Avanti</button></div></div>`;
 
     const ready = L.serving && L.left && ['A', 'B'].every(tm => L.lineup[tm].every(x => x !== '') && new Set(L.lineup[tm]).size === 6);
     $app.innerHTML = `
@@ -446,6 +448,12 @@
     $app.querySelectorAll('[data-pos]').forEach(s => s.onchange = () => {
       const [tm, p] = s.dataset.pos.split('.');
       L.lineup[tm][+p] = s.value === '' ? '' : +s.value;
+      render();
+    });
+    // rotazione della formazione: avanti = come al cambio palla (P2→P1, P3→P2 … P1→P6), indietro = al contrario
+    $app.querySelectorAll('[data-rot]').forEach(b => b.onclick = () => {
+      const l = L.lineup[b.dataset.rot], d = +b.dataset.dir;
+      L.lineup[b.dataset.rot] = l.map((_, i) => l[(i + d + 6) % 6]);
       render();
     });
     document.getElementById('editBtn').onclick = () => go('setup');
