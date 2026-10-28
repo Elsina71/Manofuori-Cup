@@ -2508,7 +2508,10 @@
       + (closed.length ? `<section class="feat-block"><h2>${esc(t('vtClosedList'))}</h2><div class="cards past">${closed.map(vtCard).join('')}</div></section>` : '');
     return `<div class="page-head"><h1><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t('navTournaments'))}</h1><p class="muted">${esc(t('vtIntro'))}</p></div>
       ${form}
-      ${blocks || `<div class="empty"><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t(tourAdmin() ? 'vtNoneAdmin' : 'vtNone'))}</div>`}`;
+      ${blocks || `<div class="empty"><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t(tourAdmin() ? 'vtNoneAdmin' : 'vtNone'))}</div>`}
+      ${tourAdmin() || scorer() ? `<div class="card freeref-card"><h2><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('freeRefTitle'))}</h2>
+        <p class="muted small">${esc(t('freeRefHelp'))}</p>
+        <a class="btn primary" href="referto-indoor/" target="_blank" rel="noopener"><i class="ti ti-device-tablet" aria-hidden="true"></i> ${esc(t('freeRefOpen'))}</a></div>` : ''}`;
   }
 
   function viewVTour(tour, tab) {
