@@ -247,3 +247,13 @@ test('donne in campo: minimo anche diverso per squadra', () => {
   assert.equal(R.minWomenOf(S, 'A'), 2);
   assert.equal(R.minWomenOf(S, 'B'), 0);
 });
+
+test('set successivo: la formazione proposta ha chi è entrato con un cambio al posto di chi è uscito', () => {
+  // set 1: A cambia il 3 (posto III) con il 7, poi vince il set 25-0
+  const m = match([start('A', 'A'), ...pts('AA'), sub('A', 3, 7), ...pts('A'.repeat(23))], { mode: 'best', sets: 3, points: 25, lastPoints: 15 });
+  const st = R.replay(m);
+  assert.equal(st.phase, 'setEnd');
+  const d = R.nextSetDefaults(m, st);
+  assert.deepEqual(d.lineup.A, [1, 2, 7, 4, 5, 6]);
+  assert.deepEqual(d.lineup.B, LB);
+});

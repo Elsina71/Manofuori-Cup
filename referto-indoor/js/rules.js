@@ -399,7 +399,10 @@
     const idx = st.sets.length;
     const prev = st.sets[idx - 1];
     const toss = needsToss(S, idx);
-    const lineup = prev && prev.lineup ? both(t => prev.lineup[t].filter(n => !st.barredMatch[t][n])) : { A: [], B: [] };
+    // formazione proposta: chi era in campo alla fine del set precedente, nelle posizioni di partenza
+    // (chi è entrato con un cambio prende il posto di chi è uscito); squalificati ed espulsi lasciano il posto vuoto
+    const last = prev && (prev.occ || prev.lineup);
+    const lineup = last ? both(t => last[t].map(n => (n == null || st.barredMatch[t][n] ? '' : n))) : { A: [], B: [] };
     return {
       index: idx,
       needsToss: toss,
