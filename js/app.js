@@ -2511,7 +2511,8 @@
       ${blocks || `<div class="empty"><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t(tourAdmin() ? 'vtNoneAdmin' : 'vtNone'))}</div>`}
       ${`<div class="card freeref-card"><h2><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('freeRefTitle'))}</h2>
         <p class="muted small">${esc(t('freeRefHelp'))}</p>
-        <a class="btn primary" href="referto-indoor/" target="_blank" rel="noopener"><i class="ti ti-device-tablet" aria-hidden="true"></i> ${esc(t('freeRefOpen'))}</a></div>`}`;
+        <div class="btn-row"><a class="btn primary" href="referto-indoor/?demo=1" target="_blank" rel="noopener"><i class="ti ti-player-play" aria-hidden="true"></i> ${esc(t('freeRefDemo'))}</a>
+        <a class="btn" href="referto-indoor/" target="_blank" rel="noopener"><i class="ti ti-device-tablet" aria-hidden="true"></i> ${esc(t('freeRefOpen'))}</a></div></div>`}`;
   }
 
   function viewVTour(tour, tab) {

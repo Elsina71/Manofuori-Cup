@@ -58,6 +58,22 @@
     return m;
   }
 
+  // Gara di esempio per provare il referto: squadre e giocatori inventati, tutto modificabile nei dati gara.
+  function demoMatch() {
+    const m = emptyMatch();
+    Object.assign(m.header, { competition: 'Amichevole di prova', phase: 'Gara di esempio', matchNo: '1', time: '20:30', venue: 'Palestra comunale', court: '1' });
+    m.officials = { ref1: 'Paolo Deiana', ref2: '', scorer: 'Lucia Serra' };
+    m.settings = Object.assign({}, R.DEFAULT_SETTINGS, { mode: 'fixed', sets: 3, points: 25, lastPoints: 25 });
+    const team = (list, libero, captain) => list.map(([no, name, gender]) => ({ no, name, gender, libero: no === libero, captain: no === captain }));
+    m.teams.A = { name: 'Fenicotteri', color: '#d6336c', coach: 'Marco Pisu', players: team([
+      [1, 'Giulia Melis', 'F'], [3, 'Andrea Sanna', 'M'], [4, 'Francesca Porcu', 'F'], [7, 'Luca Cocco', 'M'], [8, 'Matteo Fadda', 'M'],
+      [9, 'Davide Loi', 'M'], [11, 'Stefano Atzori', 'M'], [12, 'Sara Murru', 'F'], [14, 'Roberto Piras', 'M'], [15, 'Elena Serra', 'F']], 15, 7) };
+    m.teams.B = { name: 'Gabbiani', color: '#1f63d1', coach: 'Anna Carta', players: team([
+      [2, 'Martina Pinna', 'F'], [5, 'Simone Mura', 'M'], [6, 'Alessio Usai', 'M'], [8, 'Chiara Floris', 'F'], [10, 'Nicola Lai', 'M'],
+      [11, 'Fabio Orrù', 'M'], [13, 'Paola Manca', 'F'], [16, 'Giorgio Cabras', 'M'], [17, 'Valentina Deidda', 'F'], [18, 'Michele Zedda', 'M']], 17, 10) };
+    return m;
+  }
+
   // ---------- utilità ----------
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const other = R.other;
@@ -186,6 +202,7 @@
         <p class="muted">Inserisci squadre e formazioni, indica il sorteggio e poi segna solo chi vince ogni azione: rotazioni, servizio, cambi di campo e fine set sono automatici.</p>
         <div class="row wrap">
           <button class="btn primary big" id="newBtn">+ Nuova gara</button>
+          <button class="btn big" id="demoBtn" title="Squadre e giocatori inventati, tutto modificabile">▶ Gara di esempio</button>
           ${list.length ? '<button class="btn" id="sameBtn">Nuova gara, stesso torneo</button>' : ''}
         </div>
       </section>
@@ -206,6 +223,7 @@
         <div class="row wrap"><button class="btn" id="expBtn">Esporta gare (JSON)</button><label class="btn">Importa…<input type="file" id="impFile" accept=".json,application/json" hidden></label></div>
       </section>`;
     document.getElementById('newBtn').onclick = () => { const m = emptyMatch(); db.matches[m.id] = m; save(); go('setup', m.id); };
+    document.getElementById('demoBtn').onclick = () => { const m = demoMatch(); db.matches[m.id] = m; save(); go('setup', m.id); };
     const same = document.getElementById('sameBtn');
     if (same) same.onclick = () => { const m = emptyMatch(list[0]); db.matches[m.id] = m; save(); go('setup', m.id); };
     $app.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { const m = db.matches[b.dataset.open]; go(viewFor(m), m.id); });
@@ -947,8 +965,13 @@
   document.getElementById('homeBtn').onclick = () => go('home');
   window.addEventListener('afterprint', () => { $print.innerHTML = ''; });
   const gid = new URLSearchParams(location.search).get('g');
+  const demo = new URLSearchParams(location.search).get('demo');
   if (gid) Cloud.open(gid);
-  else {
+  else if (demo) {
+    // dall'app (Tornei → Referto di prova): nuova gara di esempio già compilata; l'indirizzo torna quello normale
+    history.replaceState(null, '', location.pathname);
+    const m = demoMatch(); db.matches[m.id] = m; save(); go('setup', m.id);
+  } else {
     const live = Object.values(db.matches).filter(m => !m.closedAt && m.events.length && stateOf(m).phase !== 'matchEnd').sort((a, b) => b.updated.localeCompare(a.updated))[0];
     if (live) { ui.id = live.id; ui.view = viewFor(live); }
     render();

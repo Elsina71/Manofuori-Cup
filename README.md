@@ -104,6 +104,8 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
 - **Referto di prova / amichevole** (in fondo alla pagina Tornei, per tutti, anche senza accesso): apre il referto
   elettronico scollegato dai tornei (`referto-indoor/` senza gara). Squadre e giocatori si scrivono a mano, arbitri e
   segnapunti sono facoltativi; le gare restano solo su quel dispositivo (con backup in JSON) e non vanno in calendario.
+  **Prova con una gara di esempio** (`referto-indoor/?demo=1`, o il pulsante *Gara di esempio* nel referto) crea una gara già
+  compilata con due squadre e giocatori inventati, tutto modificabile.
 - **Le mie gare** (menu e profilo): calendario e risultati delle squadre di cui si è capitano o giocatore. Il capitano
   collega i giocatori della rosa al loro account dell'app (colonna *Account app*; l'app propone l'utente con lo stesso
   nome e cognome); `teams.memberUids` contiene solo gli id degli account, la rosa resta privata.
