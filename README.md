@@ -101,7 +101,7 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   (`live/{id}`, pubblico); alla **chiusura del referto** il risultato entra da solo nella gara e quindi in classifica (se
   l'invio non riesce resta il pulsante **Riporta il risultato del referto**); il PDF si archivia in `refertiPdf`. Il referto è facoltativo: i set si possono sempre
   inserire a mano. Gli scorer leggono le rose (servono al referto); per tutti gli altri restano private.
-- **Referto di prova / amichevole** (in fondo alla pagina Tornei, per admin tornei e scorer): apre il referto
+- **Referto di prova / amichevole** (in fondo alla pagina Tornei, per tutti, anche senza accesso): apre il referto
   elettronico scollegato dai tornei (`referto-indoor/` senza gara). Squadre e giocatori si scrivono a mano, arbitri e
   segnapunti sono facoltativi; le gare restano solo su quel dispositivo (con backup in JSON) e non vanno in calendario.
 - **Le mie gare** (menu e profilo): calendario e risultati delle squadre di cui si è capitano o giocatore. Il capitano
