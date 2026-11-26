@@ -132,7 +132,7 @@
   function go(view, id) {
     if (id !== undefined) ui.id = id;
     ui.view = view;
-    if (view !== 'lineup') ui.lineup = null;
+    if (view !== 'lineup') { ui.lineup = null; ui.fix = null; }
     render();
     window.scrollTo(0, 0);
   }
@@ -382,9 +382,14 @@
   const GRID = [3, 2, 1, 4, 5, 0];
 
   function renderLineup(m) {
-    const st = stateOf(m);
-    if (st.phase === 'play' || st.phase === 'matchEnd') { go(viewFor(m)); return; }
-    const d = R.nextSetDefaults(m, st);
+    // correzione dell'inizio del set in corso (ui.fix = posizione dell'evento "inizio set"): si riparte dallo stato
+    // prima di quel set, con i dati già scritti; le azioni registrate dopo restano
+    const fixIdx = ui.fix != null && m.events[ui.fix] && m.events[ui.fix].type === 'setStart' ? ui.fix : null;
+    const mPrev = fixIdx != null ? Object.assign({}, m, { events: m.events.slice(0, fixIdx) }) : m;
+    const st = stateOf(mPrev);
+    if (fixIdx == null && (st.phase === 'play' || st.phase === 'matchEnd')) { go(viewFor(m)); return; }
+    const d = R.nextSetDefaults(mPrev, st);
+    const src = fixIdx != null ? m.events[fixIdx] : (ui.prefill && ui.prefill.index === d.index ? ui.prefill.e : null);
     if (!ui.lineup || ui.lineup.index !== d.index) {
       ui.lineup = {
         index: d.index, needsToss: d.needsToss, winner: null, choice: null, otherChoice: null,
@@ -393,14 +398,16 @@
         lineup: { A: d.lineup.A.length === 6 ? d.lineup.A.slice() : ['', '', '', '', '', ''], B: d.lineup.B.length === 6 ? d.lineup.B.slice() : ['', '', '', '', '', ''] },
         // liberi della gara (al massimo 2): presi dalla lista, oppure scritti a mano prima del 1° set; fem: D/U scritti qui
         liberi: { A: [0, 1].map(i => liberi(m, 'A')[i] ?? ''), B: [0, 1].map(i => liberi(m, 'B')[i] ?? '') },
-        libLocked: { A: [0, 1].map(i => m.events.length > 0 && liberi(m, 'A')[i] != null), B: [0, 1].map(i => m.events.length > 0 && liberi(m, 'B')[i] != null) },
+        libLocked: { A: [0, 1].map(i => mPrev.events.length > 0 && liberi(m, 'A')[i] != null), B: [0, 1].map(i => mPrev.events.length > 0 && liberi(m, 'B')[i] != null) },
         fem: { A: {}, B: {} },
         // cambio di campo durante il set: punti a cui si cambia ('0' = nessuno); di regola solo nel set decisivo
         mid: '0'
       };
+      // dati dell'inizio set da correggere (o appena annullato): servizio, campo, formazioni, cambio a metà set
+      if (src) Object.assign(ui.lineup, { serving: src.serving, left: src.left, lineup: { A: src.lineup.A.slice(), B: src.lineup.B.slice() }, mid: String(src.midSwitch || 0) });
+      ui.prefill = null;
     }
     const L = ui.lineup;
-    if (L.needsToss) L.serving = R.servingFromChoice(L.winner, L.choice, L.otherChoice);
     const left = L.left || 'A', right = other(left);
     const opt = (key, val, label, on, cls) => `<button type="button" class="opt ${cls || ''} ${on ? 'on' : ''}" data-k="${key}" data-v="${val}">${label}</button>`;
     const teamOpts = key => ['A', 'B'].map(tm => opt(key, tm, esc(teamName(m, tm)), L[key] === tm, `team-${tm}`)).join('');
@@ -453,13 +460,10 @@
     const isReady = () => !!(L.serving && L.left && ['A', 'B'].every(tm => L.lineup[tm].every(x => x !== '')) && !problems().length);
     const ready = isReady();
     $app.innerHTML = `
-      <section class="card"><h1>Set ${d.index + 1}</h1>
+      <section class="card"><h1>Set ${d.index + 1}${fixIdx != null ? ' · correzione' : ''}</h1>
+        ${fixIdx != null ? '<p class="note">Correggi quello che serve (chi serve per prima, campo, formazioni, cambio a metà set) e salva: i punti e le azioni già registrati restano.</p>' : ''}
         ${L.needsToss ? `
-          <div class="q"><h3>Chi ha vinto il sorteggio?</h3><div class="opts">${teamOpts('winner')}</div></div>
-          ${L.winner ? `<div class="q"><h3>${esc(teamName(m, L.winner))} sceglie</h3><div class="opts">
-            ${opt('choice', 'serve', 'Servizio', L.choice === 'serve')}${opt('choice', 'receive', 'Ricezione', L.choice === 'receive')}${opt('choice', 'side', 'Campo', L.choice === 'side')}</div></div>` : ''}
-          ${L.choice === 'side' ? `<div class="q"><h3>${esc(teamName(m, other(L.winner)))} sceglie</h3><div class="opts">
-            ${opt('otherChoice', 'serve', 'Servizio', L.otherChoice === 'serve')}${opt('otherChoice', 'receive', 'Ricezione', L.otherChoice === 'receive')}</div></div>` : ''}
+          <div class="q"><h3>Chi ha scelto di servire per prima?</h3><div class="opts">${teamOpts('serving')}</div></div>
           <div class="q"><h3>Squadra alla sinistra del segnapunti</h3><div class="opts">${teamOpts('left')}</div></div>
         ` : `
           <p class="muted">Serve per prima la squadra che ha ricevuto per prima nel set precedente. Puoi correggere se serve.</p>
@@ -478,8 +482,8 @@
       <p class="error" id="luErr"></p>
       <div class="row end sticky-actions">
         <button class="btn ghost" id="editBtn">Dati gara</button>
-        ${m.events.length ? '<button class="btn ghost" id="undoBtn">↶ Annulla ultimo evento</button>' : ''}
-        <button class="btn primary big" id="goBtn" ${ready ? '' : 'disabled'}>▶ Inizia set ${d.index + 1}</button>
+        ${fixIdx != null ? '<button class="btn ghost" id="fixCancel">Annulla la correzione</button>' : m.events.length ? '<button class="btn ghost" id="undoBtn">↶ Annulla ultimo evento</button>' : ''}
+        <button class="btn primary big" id="goBtn" ${ready ? '' : 'disabled'}>${fixIdx != null ? '✔ Salva la correzione' : `▶ Inizia set ${d.index + 1}`}</button>
       </div>`;
 
     $app.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
@@ -539,6 +543,8 @@
     document.getElementById('editBtn').onclick = () => go('setup');
     const ub = document.getElementById('undoBtn');
     if (ub) ub.onclick = () => undoLast(m);
+    const fc = document.getElementById('fixCancel');
+    if (fc) fc.onclick = () => { ui.fix = null; go(viewFor(m)); };
     document.getElementById('goBtn').onclick = () => {
       if (!isReady()) return;
       const S = R.settingsOf(m);
@@ -546,17 +552,27 @@
       ['A', 'B'].forEach(tm => {
         const T = m.teams[tm];
         const ensure = n => { let p = player(m, tm, n); if (!p) { p = { no: n, name: '', gender: '', libero: false, captain: false }; T.players.push(p); } return p; };
-        if (!m.events.length) T.players.forEach(p => { if (p.no !== '' && p.no != null) p.libero = L.liberi[tm].includes(+p.no); });
+        if (!mPrev.events.length) T.players.forEach(p => { if (p.no !== '' && p.no != null) p.libero = L.liberi[tm].includes(+p.no); });
         L.liberi[tm].filter(n => n !== '').forEach(n => { ensure(n).libero = true; });
         L.lineup[tm].forEach(n => ensure(n));
         Object.keys(L.fem[tm]).forEach(n => { const p = player(m, tm, n); if (p) p.gender = L.fem[tm][n] ? 'F' : (p.gender === 'F' ? 'M' : p.gender || 'M'); });
       });
       touch(m);
       // il libero donna può essere una delle donne: entra in seconda linea prima del primo servizio
-      const short = ['A', 'B'].filter(tm => R.minWomenOf(S, tm) && womenIn(m, tm, L.lineup[tm]) + (liberi(m, tm).some(n => isWoman(m, tm, n) && !stateOf(m).barredMatch[tm][n]) ? 1 : 0) < R.minWomenOf(S, tm));
+      const short = ['A', 'B'].filter(tm => R.minWomenOf(S, tm) && womenIn(m, tm, L.lineup[tm]) + (liberi(m, tm).some(n => isWoman(m, tm, n) && !st.barredMatch[tm][n]) ? 1 : 0) < R.minWomenOf(S, tm));
       const start = () => {
-        const toss = L.needsToss ? { winner: L.winner, choice: L.choice, otherChoice: L.otherChoice } : null;
-        addEvent(m, { type: 'setStart', serving: L.serving, left: L.left, lineup: { A: L.lineup.A.slice(), B: L.lineup.B.slice() }, toss, midSwitch: +L.mid || 0 });
+        // sorteggio: si registra solo chi ha scelto di servire per prima
+        const toss = L.needsToss ? { winner: L.serving, choice: 'serve', otherChoice: null } : null;
+        const ev = { type: 'setStart', serving: L.serving, left: L.left, lineup: { A: L.lineup.A.slice(), B: L.lineup.B.slice() }, toss, midSwitch: +L.mid || 0 };
+        if (fixIdx == null) { addEvent(m, ev); return; }
+        // correzione: si sostituisce l'inizio del set; le azioni dopo restano (quelle non più valide vengono ignorate)
+        const old = m.events[fixIdx], before = stateOf(m).rejected.length;
+        m.events[fixIdx] = Object.assign({}, ev, { time: old.time, fixedAt: new Date().toISOString() });
+        const after = stateOf(m).rejected.length;
+        const keep = () => { ui.fix = null; touch(m); toast('Inizio del set corretto'); go(viewFor(m)); };
+        if (after > before) confirmBox('Correzione', `Con questa correzione ${after - before} azioni già registrate non sono più valide (per esempio un cambio di un giocatore che non è più in campo) e verranno ignorate. Salvare comunque?`, 'Salva', keep);
+        if (after > before) { const x = $overlay.querySelector('[data-x]'); if (x) x.addEventListener('click', () => { m.events[fixIdx] = old; }); }
+        else keep();
       };
       if (short.length) confirmBox('Donne in campo', `${short.map(tm => `${esc(teamName(m, tm))} (minimo ${R.minWomenOf(S, tm)})`).join(' e ')}: meno donne del minimo in formazione. Iniziare comunque?`, 'Inizia', start);
       else start();
@@ -617,6 +633,7 @@
         <div class="toolbar">
           <button class="btn" id="undoBtn" ${m.events.length ? '' : 'disabled'}>↶ Annulla</button>
           <button class="btn" id="sanBtn">Sanzione</button>
+          <button class="btn" id="fixBtn" title="Servizio, campo e formazioni di questo set">✎ Correggi inizio set</button>
           <button class="btn" id="moreBtn">Altro…</button>
         </div>
         <div class="log card">
@@ -643,6 +660,7 @@
     document.getElementById('undoBtn').onclick = () => undoLast(m);
     document.getElementById('sanBtn').onclick = () => sanctionDialog(m);
     document.getElementById('moreBtn').onclick = () => moreDialog(m);
+    document.getElementById('fixBtn').onclick = () => startFix(m);
   }
 
   function eventsLine(m, set) {
@@ -722,6 +740,7 @@
     const e = m.events.pop();
     touch(m);
     ui.lineup = null;
+    if (e.type === 'setStart') ui.prefill = { index: stateOf(m).sets.length, e };
     if (!silent) toast(`Annullato: ${EV[e.type] || e.type}${e.team ? ' ' + teamName(m, e.team) : ''}`);
     go(viewFor(m));
   }
@@ -849,6 +868,16 @@
       $overlay.querySelector('[data-ok]').onclick = () => { closeOverlay(); addEvent(m, { type: 'sanction', team: sel.team, player: sel.player, kind: sel.kind }); };
     };
     draw();
+  }
+
+  // correzione dell'inizio del set in corso: torna alla pagina delle formazioni con i dati già scritti
+  function startFix(m) {
+    if (m.closedAt) return;
+    let idx = -1;
+    m.events.forEach((e, i) => { if (e.type === 'setStart') idx = i; });
+    if (idx < 0) return;
+    ui.fix = idx; ui.view = 'lineup'; ui.lineup = null;
+    render(); window.scrollTo(0, 0);
   }
 
   function moreDialog(m) {

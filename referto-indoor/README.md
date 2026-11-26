@@ -12,8 +12,7 @@ di Data Project usato nelle gare internazionali.
    arbitri, segnapunti e **formula**.
    Con **“Nuova gara, stesso torneo”** torneo, data, arbitri e formula vengono copiati e il numero gara
    aumenta di uno.
-2. **Sorteggio e formazioni** (set 1 e set decisivo): chi vince il sorteggio sceglie servizio, ricezione o
-   campo; se sceglie il campo, l'altra squadra sceglie servizio o ricezione. Poi si indica la squadra alla
+2. **Sorteggio e formazioni** (set 1 e set decisivo): si indica **chi ha scelto di servire per prima**. Poi si indica la squadra alla
    sinistra del segnapunti e si inseriscono le formazioni **dal posto 1 al posto 6**. Ogni squadra è disegnata
    su due righe da 3, con la rete in alto: in alto i posti 4, 3, 2, in basso i posti 5, 6, 1 (senso antiorario,
    posto 1 in basso a destra = al servizio). Negli altri set il sistema propone già il cambio di campo, la squadra al
@@ -26,6 +25,9 @@ di Data Project usato nelle gare internazionali.
    **Cambio di campo, set per set**: all'inizio di ogni set si sceglie se le squadre cambiano campo rispetto al set
    precedente e se cambiano campo **durante il set** a metà dei punti (13 nei set a 25, 8 nei set a 15). La scelta
    proposta è sempre **"No cambio campo"**.
+   **Correzioni**: durante il set il pulsante **✎ Correggi inizio set** riporta alla pagina delle formazioni con i dati
+   già scritti (chi serve per prima, campo, formazioni, cambio a metà set): si corregge e si salva, e i punti già
+   registrati restano. Anche *Annulla ultimo evento* sull'inizio del set lascia i dati già scritti.
 3. **Gara**: si tocca **+1 punto** sotto la squadra che vince l'azione. Il resto è automatico:
    - **rotazioni**: quando la squadra che riceve vince l'azione conquista il servizio e ruota in senso
      orario (il giocatore del posto 2 va al servizio al posto 1); ogni giocatore resta col suo numero di maglia e

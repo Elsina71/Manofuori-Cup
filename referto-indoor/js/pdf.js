@@ -118,7 +118,7 @@
     const dur = mins(st.startTime, st.endTime);
     labeled('Durata', dur != null ? `${dur}′` : '', M + q * 3, y, q * 0.75, h1);
     const s0 = st.sets[0];
-    const toss = s0 && s0.toss && s0.toss.winner ? `vince ${tn(s0.toss.winner)}` : '';
+    const toss = s0 && s0.toss && s0.toss.winner ? (s0.toss.choice === 'serve' && !s0.toss.otherChoice ? `serve ${tn(s0.toss.winner)}` : `vince ${tn(s0.toss.winner)}`) : '';
     labeled('Sorteggio set 1', toss, M + q * 3.75, y, q * 1.25, h1);
     const mwA = window.Rules.minWomenOf(S, 'A'), mwB = window.Rules.minWomenOf(S, 'B');
     labeled('Donne in campo (min.)', mwA === mwB ? (mwA ? String(mwA) : '—') : `${tn('A')}: ${mwA || '—'} · ${tn('B')}: ${mwB || '—'}`, M + q * 5, y, q, h1);
