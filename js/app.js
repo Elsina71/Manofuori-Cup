@@ -3381,7 +3381,7 @@
   function teamCodeLine(tm) {
     const c = teamCodeOf(tm.id);
     return `<div class="tm-code">${c ? `<span class="muted small">${esc(t('tmCodeLbl'))}</span> <code class="code-pill">${esc(c.id)}</code>
-        <button class="btn small" data-action="tm-code-copy" data-code="${esc(c.id)}"><i class="ti ti-link" aria-hidden="true"></i> ${esc(t('tmCodeCopy'))}</button>
+        <button class="btn small" data-action="tm-code-copy" data-code="${esc(c.id)}" data-name="${esc(tm.name)}" data-level="${esc(tm.level || '')}"><i class="ti ti-link" aria-hidden="true"></i> ${esc(t('tmCodeCopy'))}</button>
         <button class="btn small" data-action="tm-code" data-id="${tm.id}" data-renew="1"><i class="ti ti-refresh" aria-hidden="true"></i> ${esc(t('tmCodeNew'))}</button>`
       : `<button class="btn small" data-action="tm-code" data-id="${tm.id}"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmCodeMake'))}</button>`}</div>`;
   }
@@ -4251,7 +4251,7 @@
         .catch(e => { el.disabled = false; vErr(e); });
     },
     'tm-codes-pdf': el => { el.disabled = true; teamCodesPdf().catch(vErr).finally(() => { el.disabled = false; }); },
-    'tm-code-copy': el => copyText(t('tmCodeMsg', { c: el.dataset.code, l: codeLink(el.dataset.code) })),
+    'tm-code-copy': el => copyText(t('tmCodeMsg', { n: el.dataset.name + (el.dataset.level ? ` (${el.dataset.level})` : ''), c: el.dataset.code, l: codeLink(el.dataset.code) })),
     'tm-codes-copy': () => copyText((S().teams || []).slice().sort(byLevel).filter(x => teamCodeOf(x.id))
       .map(x => `${x.name} (${x.level}): ${teamCodeOf(x.id).id} · ${codeLink(teamCodeOf(x.id).id)}`).join('\n')),
     'set-design': el => setDesign(el.dataset.designId),

@@ -639,7 +639,7 @@ const I18n = (() => {
       tmCodeLbl: 'Codice capitano', tmCodeCopy: 'Copia il messaggio', tmCodeNew: 'Nuovo codice', tmCodeMake: 'Crea il codice del capitano',
       tmCodeMade: 'Codice creato: copialo e mandalo al capitano.', tmCodeRenewConfirm: 'Creare un nuovo codice? Quello di adesso smette di valere e il capitano dovrà usare quello nuovo.',
       tmCodeNone: 'nessun codice', tmCodeUsed: 'usato dal capitano',
-      tmCodeMsg: 'Codice capitano Manofuori: {c}. Apri {l} oppure vai su manofuori.it, Squadre, e scrivi il codice: entri nella scheda della tua squadra e inserisci la lista dei giocatori. Il codice vale sempre: usalo tutte le volte che vuoi, anche da altri dispositivi.',
+      tmCodeMsg: 'Capitano della squadra {n}: ecco il tuo codice capitano Manofuori: {c}. Apri {l} oppure vai su manofuori.it, Squadre, e scrivi il codice: entri nella scheda della tua squadra e inserisci la lista dei giocatori. Il codice vale sempre: usalo tutte le volte che vuoi, anche da altri dispositivi.',
       tmCodesTitle: 'Codici dei capitani', tmCodesMake: 'Crea i codici mancanti ({n})', tmCodesMade: 'Codici creati: {n}.', tmCodesCopy: "Copia l'elenco dei codici",
       tmCodesHelp: "Ogni squadra ha un codice da dare al capitano: scrivendolo in Squadre (o aprendo il link) entra nella scheda della sua squadra e inserisce da solo la lista dei giocatori, senza bisogno di un account. Il codice resta valido: il capitano lo usa tutte le volte che vuole. Un nuovo codice annulla quello vecchio.",
       tmClaimTitle: 'Hai un codice capitano?', tmClaimGo: 'Entra',
