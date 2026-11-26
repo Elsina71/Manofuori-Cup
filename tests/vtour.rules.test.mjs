@@ -2,7 +2,7 @@
 // Uso (dalla cartella principale): npm i --no-save @firebase/rules-unit-testing@4 firebase@11, poi
 //   npx firebase-tools emulators:exec --only firestore --project demo-vtour "node tests/vtour.rules.test.mjs"
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, getDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, getDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import fs from 'fs';
 const env = await initializeTestEnvironment({ projectId: 'demo-vtour', firestore: { rules: fs.readFileSync(process.argv[2] || 'firestore.rules', 'utf8'), host: '127.0.0.1', port: 8089 } });
 await env.withSecurityRulesDisabled(async c => {
@@ -50,6 +50,13 @@ await t('scorer aggiorna punteggio in diretta e referto', assertSucceeds((() => 
 await t('admin tornei legge il proprio ruolo (serve al referto)', assertSucceeds(getDoc(doc(org, 'roles', 'org'))));
 await t('admin tornei apre il referto', assertSucceeds(openRef(org, 'T2', 'org@x.it')));
 await t('admin tornei legge il referto', assertSucceeds(getDoc(doc(org, 'referti', 'T2_g-A-d1-0'))));
+// archivio e cestino dei tornei (trash): solo admin tornei
+await t('admin tornei mette un torneo nel cestino', assertSucceeds(setDoc(doc(org, 'trash', 'vt_T9_1'), { kind: 'vtour', tid: 'T9', name: 'x', tour: '{}', matches: '[]', deletedAt: 1, expiresAt: 2 })));
+await t('admin tornei legge il cestino', assertSucceeds(getDoc(doc(org, 'trash', 'vt_T9_1'))));
+await t('scorer non legge il cestino', assertFails(getDoc(doc(sc1, 'trash', 'vt_T9_1'))));
+await t('utente non legge il cestino', assertFails(getDoc(doc(user, 'trash', 'vt_T9_1'))));
+await t('chi non ha accesso non legge il cestino', assertFails(getDoc(doc(anon, 'trash', 'vt_T9_1'))));
+await t('admin tornei svuota il cestino', assertSucceeds(deleteDoc(doc(org, 'trash', 'vt_T9_1'))));
 await t('tutti leggono il punteggio in diretta', assertSucceeds(getDoc(doc(anon, 'live', 'T1_g-A-d1-0'))));
 await t('il referto completo non è pubblico', assertFails(getDoc(doc(anon, 'referti', 'T1_g-A-d1-0'))));
 console.log(`\n${ok} ok, ${ko} falliti`);

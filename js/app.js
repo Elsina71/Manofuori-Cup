@@ -2478,21 +2478,77 @@
   const vSetsText = m => vSets(m).map(([h, a]) => `${h}-${a}`).join(', ');
   const vWhen = m => [m.date ? fmtDate(m.date) : '', m.time || ''].filter(Boolean).join(' ');
 
-  function vtCard(tour) {
-    const ms = vtMatches(tour.id), done = ms.filter(m => m.status === 'done').length;
-    return `<a class="card tour-card" href="#/vt/${tour.id}">
-      <div class="tour-card-top"><span class="badge cat">${esc(tour.level)}</span>
-        <span class="badge ${tour.status === 'live' ? 'st-main' : ''}">${esc(t('vtSt_' + (tour.status || 'draft')))}</span></div>
-      <h3>${esc(tour.name)}</h3>
-      <p class="muted small">${esc(t(tour.rr === 'a' ? 'vtRr_a' : 'vtRr_ar'))}${tour.playoff ? ' + ' + esc(t('vtPlayoff')) : ''} · ${esc(t('vtGroupsN', { n: (tour.groups || []).length }))}</p>
-      ${ms.length ? `<p class="muted small">${esc(t('vtPlayedOf', { d: done, n: ms.length }))}</p>` : ''}
+  // Evento di un torneo: la parte del nome prima di " · " (es. "Torneo Panettone 2026"), altrimenti la Manofuori Cup.
+  const vtEvent = tour => (tour.name.includes(' · ') ? tour.name.split(' · ')[0].trim() : t('vtEventCup'));
+  const vtShortName = tour => (tour.name.includes(' · ') ? tour.name.split(' · ').slice(1).join(' · ').trim() : tour.name);
+  // colore del livello (tonalità fissa per nome, mai viola), per la riga colorata della scheda
+  const LEVEL_HUES = [205, 158, 24, 352, 42, 188, 128, 8];
+  const levelHue = l => LEVEL_HUES[[...String(l)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % LEVEL_HUES.length];
+  const vNextMatch = tour => vtMatches(tour.id).filter(m => m.status !== 'done' && m.date && m.date >= todayStr())
+    .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))[0];
+  function vtCard(tour, inEvent) {
+    const ms = vtMatches(tour.id), done = ms.filter(m => m.status === 'done').length, pct = ms.length ? Math.round(done * 100 / ms.length) : 0;
+    const teams = new Set((tour.groups || []).flatMap(g => g.teams)).size, nx = vNextMatch(tour);
+    const st = tour.status || 'draft';
+    return `<a class="tcard st-${st}" href="#/vt/${tour.id}" style="--lv:${levelHue(tour.level)}">
+      <div class="tcard-head"><span class="tchip">${esc(tour.level)}</span><span class="tstate"><i aria-hidden="true"></i>${esc(t('vtSt_' + st))}</span></div>
+      <h3>${esc(inEvent ? vtShortName(tour) : tour.name)}</h3>
+      <p class="tcard-meta">${esc(t(tour.rr === 'a' ? 'vtRr_a' : 'vtRr_ar'))}${tour.playoff ? ' + ' + esc(t('vtPlayoff')) : ''} · ${esc(t('vtGroupsN', { n: (tour.groups || []).length }))}${teams ? ` · ${esc(t('vtTeamsN', { n: teams }))}` : ''}</p>
+      ${ms.length ? `<div class="tprog" role="img" aria-label="${esc(t('vtPlayedOf', { d: done, n: ms.length }))}"><span style="width:${pct}%"></span></div>
+        <p class="tprog-lbl"><strong>${done}</strong> / ${ms.length} ${esc(t('vtMatchesWord'))}</p>` : ''}
+      <div class="tnext">${nx ? `<span class="tnext-lbl">${esc(t('vtNextMatch'))}</span>
+        <span class="tnext-when">${esc(fmtDate(nx.date))}${nx.time ? ` · ${esc(nx.time)}` : ''}</span>
+        <span class="tnext-who">${esc(vTeamName(tour, nx.home))} – ${esc(vTeamName(tour, nx.away))}</span>`
+        : `<span class="tnext-lbl">${esc(t(ms.length && done === ms.length ? 'vtAllPlayed' : st === 'done' ? 'vtSt_done' : 'vtNoNext'))}</span>`}</div>
     </a>`;
+  }
+  // Squadre usate solo in questo torneo (non in altri): si possono togliere insieme al torneo
+  function vtOnlyTeams(tour) {
+    const inTour = (o, id) => (o.groups || []).some(g => g.teams.includes(id)) || (o.brackets || []).some(b => b.seeds.includes(id));
+    return [...new Set((tour.groups || []).flatMap(g => g.teams))].filter(id => teamById(id) && !(S().vtours || []).some(o => o.id !== tour.id && inTour(o, id)));
+  }
+  // Eliminazione di un torneo: archiviare (resta nel database, senza scadenza) o eliminare tra 7 giorni (revocabile)
+  function vtDeletePanel(tour) {
+    const ms = vtMatches(tour.id), played = ms.filter(m => m.status === 'done').length, only = vtOnlyTeams(tour);
+    return `<form class="card del-panel" data-form="vt-del" data-id="${tour.id}">
+      <h2><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('vtDelTitle', { n: tour.name }))}</h2>
+      ${played ? `<p class="note warn">${esc(t('vtDelPlayed', { k: played }))}</p>` : ''}
+      <fieldset class="del-choice"><legend class="small muted">${esc(t('vtDelHow'))}</legend>
+        <label class="del-opt"><input type="radio" name="how" value="archive" checked><span><strong>${esc(t('vtDelArchive'))}</strong><small>${esc(t('vtDelArchiveHelp'))}</small></span></label>
+        <label class="del-opt"><input type="radio" name="how" value="trash"><span><strong>${esc(t('vtDelTrash'))}</strong><small>${esc(t('vtDelTrashHelp'))}</small></span></label>
+      </fieldset>
+      ${only.length ? `<label class="check"><input type="checkbox" name="teams"> ${esc(t('vtDelTeams', { k: only.length, l: only.map(id => vTeamName(tour, id)).join(', ') }))}</label>` : ''}
+      <div class="form-actions"><button type="button" class="btn" data-action="vt-del-cancel">${esc(t('cancel'))}</button>
+        <button class="btn danger-solid"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('vtDelGo'))}</button></div>
+    </form>`;
+  }
+  // Cestino (admin tornei): tornei eliminati negli ultimi 7 giorni, da ripristinare o cancellare subito
+  function trashCard() {
+    const list = tourAdmin() ? (S().trash || []).filter(x => x.kind === 'vtour') : [];
+    if (!list.length) return '';
+    const left = x => Math.max(1, Math.ceil((x.expiresAt - Date.now()) / 864e5));
+    const when = x => (x.expiresAt ? t('trashLeft', { k: left(x) }) : t('trashKept'));
+    return `<details class="card trash-card"><summary><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('trashTitle', { n: list.length }))}</summary>
+      <p class="muted small">${esc(t('trashHelp'))}</p>
+      <ul class="reg-list">${list.map(x => `<li><span class="reg-names"><strong>${esc(x.name)}</strong> <span class="badge">${esc(x.level)}</span><br>
+        <small class="muted">${esc(t('trashLine', { d: fmtDate(new Date(x.deletedAt).toLocaleDateString('sv')), g: x.nMatches || 0, r: x.nDone || 0, s: x.nTeams || 0 }))} · <span class="${x.expiresAt ? 'trash-exp' : ''}">${esc(when(x))}</span></small></span>
+        <span class="btn-row"><button class="btn small primary" data-action="trash-restore" data-id="${x.id}"><i class="ti ti-restore" aria-hidden="true"></i> ${esc(t('trashRestore'))}</button>
+        <button class="btn small danger" data-action="trash-purge" data-id="${x.id}">${esc(t('trashPurge'))}</button></span></li>`).join('')}</ul></details>`;
+  }
+  // Sezione di un evento: titolo, riepilogo (tornei, gare giocate, periodo) e griglia delle schede
+  function vtEventBlock(name, tours, past) {
+    const ms = tours.flatMap(x => vtMatches(x.id)), done = ms.filter(m => m.status === 'done').length;
+    const dates = ms.map(m => m.date).filter(Boolean).sort();
+    const span = dates.length ? (dates[0] === dates[dates.length - 1] ? fmtDate(dates[0]) : `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length - 1])}`) : '';
+    return `<section class="tevent${past ? ' past' : ''}">
+      <header class="tevent-head"><h2>${esc(name)}</h2>
+        <p class="tevent-meta"><span>${esc(t('vtToursN', { n: tours.length }))}</span>${ms.length ? `<span>${esc(t('vtPlayedOf', { d: done, n: ms.length }))}</span>` : ''}${span ? `<span>${esc(span)}</span>` : ''}</p></header>
+      <div class="tgrid">${tours.map(x => vtCard(x, true)).join('')}</div></section>`;
   }
 
   function viewVTours() {
     const list = (S().vtours || []).slice().sort((a, b) => (teamLevels().indexOf(a.level) + 1 || 99) - (teamLevels().indexOf(b.level) + 1 || 99) || a.name.localeCompare(b.name));
     const shown = tourAdmin() ? list : list.filter(x => x.status !== 'draft');
-    const levels = teamLevels().concat([...new Set(shown.map(x => x.level))].filter(l => !teamLevels().includes(l)));
     const form = tourAdmin() ? `<details class="card sub-form" data-keep="vt-new" ${keepOpen('vt-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('vtNew'))}</summary>
       <form class="grid-form" data-form="vt-create">
         <label>${esc(t('tmLevel'))}<select name="level" required><option value="">—</option>${teamLevels().map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('')}</select></label>
@@ -2502,13 +2558,15 @@
         <label class="check span-all"><input type="checkbox" name="playoff"> ${esc(t('vtPlayoffOpt'))}</label>
         <div class="form-actions span-all"><button class="btn primary">${esc(t('vtCreate'))}</button></div>
       </form></details>` : '';
+    // tornei raggruppati per evento (Manofuori Cup, Torneo Panettone…): una griglia per evento, i conclusi in fondo
     const open = shown.filter(x => x.status !== 'done'), closed = shown.filter(x => x.status === 'done');
-    const blocks = levels.map(l => ({ l, ts: open.filter(x => x.level === l) })).filter(b => b.ts.length)
-      .map(b => `<section class="feat-block"><h2>${esc(b.l)}</h2><div class="cards">${b.ts.map(vtCard).join('')}</div></section>`).join('')
-      + (closed.length ? `<section class="feat-block"><h2>${esc(t('vtClosedList'))}</h2><div class="cards past">${closed.map(vtCard).join('')}</div></section>` : '');
+    const byEvent = list => { const m = new Map(); list.forEach(x => { const e = vtEvent(x); if (!m.has(e)) m.set(e, []); m.get(e).push(x); }); return [...m]; };
+    const blocks = byEvent(open).map(([e, ts]) => vtEventBlock(e, ts)).join('')
+      + (closed.length ? `<section class="tevent past"><header class="tevent-head"><h2>${esc(t('vtClosedList'))}</h2></header><div class="tgrid">${closed.map(x => vtCard(x)).join('')}</div></section>` : '');
     return `<div class="page-head"><h1><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t('navTournaments'))}</h1><p class="muted">${esc(t('vtIntro'))}</p></div>
       ${form}
       ${panettoneCard()}
+      ${trashCard()}
       ${blocks || `<div class="empty"><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t(tourAdmin() ? 'vtNoneAdmin' : 'vtNone'))}</div>`}
       ${`<div class="card freeref-card"><h2><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('freeRefTitle'))}</h2>
         <p class="muted small">${esc(t('freeRefHelp'))}</p>
@@ -2535,13 +2593,14 @@
     const tabs = ['groups', 'calendar', 'standings'].concat(tour.playoff ? ['playoff'] : [], vCanReferti(tour) ? ['referti'] : []);
     if (!tabs.includes(tab)) tab = (tour.groups || []).some(g => g.teams.length) && vtMatches(tour.id).length ? 'calendar' : 'groups';
     const body = tab === 'calendar' ? vtCalendar(tour) : tab === 'standings' ? vtStandingsTab(tour) : tab === 'playoff' ? vtPlayoff(tour) : tab === 'referti' ? vtRefertiTab(tour) : vtGroupsTab(tour);
-    return `<div class="page-head">
+    return `<div class="page-head has-action">
         <a class="back" href="#/tornei">← ${esc(t('navTournaments'))}</a>
         <h1>${esc(tour.name)}</h1>
         <p class="meta"><span class="badge cat">${esc(tour.level)}</span> <span class="badge ${tour.status === 'live' ? 'st-main' : ''}">${esc(t('vtSt_' + (tour.status || 'draft')))}</span>
           <span class="muted">${esc(t(tour.rr === 'a' ? 'vtRr_a' : 'vtRr_ar'))}${tour.playoff ? ' + ' + esc(t('vtPlayoff')) : ''}</span></p>
-        ${tourAdmin() ? `<div class="btn-row"><button type="button" class="btn small danger" data-action="vt-delete" data-id="${tour.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('vtDelete'))}</button></div>` : ''}
+        ${tourAdmin() ? `<button type="button" class="btn small danger head-action" data-action="vt-delete" data-id="${tour.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('vtDelete'))}</button>` : ''}
       </div>
+      ${tourAdmin() && ui.vtDel === tour.id ? vtDeletePanel(tour) : ''}
       <nav class="tabs" aria-label="${esc(t('sections'))}">${tabs.map(k => `<a href="#/vt/${tour.id}/${k}" class="${k === tab ? 'active' : ''}">${esc(t('vtTab_' + k))}</a>`).join('')}</nav>
       <section class="tab-body">${body}</section>`;
   }
@@ -2930,6 +2989,18 @@
         mode: '3', date: m.date, time: m.time, place: m.place, sets: [], status: 'sched', by: '', updated: now }]);
       window.Cloud.importTournaments(teams, tours, matches).then(() => { ui.flash = { text: t('panImportDone', { t: tours.length, g: matches.length }) }; render(); }).catch(vErr);
     },
+    'trash-restore': el => {
+      const x = (S().trash || []).find(y => y.id === el.dataset.id);
+      if (!x) return;
+      if (vtById(x.tid)) return warn('trashExists', { n: x.name });
+      if (!confirmed('trashRestoreConfirm', { n: x.name })) return;
+      window.Cloud.restoreVTour(x.id).then(id => { ui.flash = { text: t('trashRestored', { n: x.name }) }; location.hash = `#/vt/${id}`; render(); }).catch(vErr);
+    },
+    'trash-purge': el => {
+      const x = (S().trash || []).find(y => y.id === el.dataset.id);
+      if (!x || !confirmed('trashPurgeConfirm', { n: x.name })) return;
+      window.Cloud.purgeTrash(x.id).then(() => { ui.flash = { text: t('trashPurged') }; render(); }).catch(vErr);
+    },
     'vt-close': el => {
       const tour = vtById(el.dataset.id);
       if (!tour || !confirmed('vtCloseConfirm', { n: tour.name })) return;
@@ -2958,20 +3029,8 @@
       window.Cloud.writeVMatches({}, vtMatches(tour.id).map(m => m.id)).then(() => window.Cloud.saveVTour(tour.id, { status: 'draft', brackets: [] }))
         .then(() => { ui.flash = { text: t('saved') }; render(); }).catch(vErr);
     },
-    'vt-delete': el => {
-      const tour = vtById(el.dataset.id);
-      if (!tour) return;
-      const ms = vtMatches(tour.id), played = ms.filter(m => m.status === 'done').length;
-      if (!confirmed(played ? 'vtDeleteConfirmPlayed' : 'vtDeleteConfirm', { n: tour.name, k: played })) return;
-      // squadre usate solo in questo torneo (non in altri tornei): si possono eliminare insieme al torneo
-      const inTour = (o, id) => (o.groups || []).some(g => g.teams.includes(id)) || (o.brackets || []).some(b => b.seeds.includes(id));
-      const mine = [...new Set((tour.groups || []).flatMap(g => g.teams))].filter(id => teamById(id));
-      const only = mine.filter(id => !(S().vtours || []).some(o => o.id !== tour.id && inTour(o, id)));
-      const alsoTeams = only.length && confirmed('vtDeleteTeamsAsk', { k: only.length, l: only.map(id => vTeamName(tour, id)).join(', ') });
-      window.Cloud.deleteVTour(tour.id, ms.map(m => m.id))
-        .then(() => (alsoTeams ? Promise.all(only.map(id => window.Cloud.deleteTeam(id))) : null))
-        .then(() => { ui.flash = { text: t(alsoTeams ? 'vtDeletedTeams' : 'vtDeleted', { k: only.length }) }; location.hash = '#/tornei'; render(); }).catch(vErr);
-    },
+    'vt-delete': el => { ui.vtDel = ui.vtDel === el.dataset.id ? null : el.dataset.id; render(); },
+    'vt-del-cancel': () => { ui.vtDel = null; render(); },
     'vt-seed': el => {
       const tour = vtById(el.dataset.id), i = Number(el.dataset.i), j = i + Number(el.dataset.d);
       const brs = (tour.brackets || []).map(b => Object.assign({}, b, { seeds: b.seeds.slice() }));
@@ -2999,6 +3058,14 @@
     }
   };
   const vtForms = {
+    'vt-del': f => {
+      const tour = vtById(f.dataset.id);
+      if (!tour) return;
+      const keep = f.how.value === 'archive', only = f.teams && f.teams.checked ? vtOnlyTeams(tour) : [];
+      if (!confirmed(keep ? 'vtDelConfirmArchive' : 'vtDelConfirmTrash', { n: tour.name })) return;
+      window.Cloud.trashVTour(tour, vtMatches(tour.id).map(m => Object.assign({}, m)), only.map(id => Object.assign({}, teamById(id))), keep)
+        .then(() => { ui.vtDel = null; ui.flash = { text: t(keep ? 'vtArchived' : 'vtDeleted') }; location.hash = '#/tornei'; render(); }).catch(vErr);
+    },
     'vt-create': f => {
       const level = f.level.value, n = Math.min(8, Math.max(1, parseInt(f.nGroups.value, 10) || 1));
       if (!level) return warn('errRegFields');
@@ -3911,8 +3978,8 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['pan-import', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
-  const TOUR_FORMS = new Set(['scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
+  const TOUR_ACTIONS = new Set(['vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
+  const TOUR_FORMS = new Set(['vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);

@@ -866,6 +866,55 @@ async function writeVMatches(set, del) {
   }
 }
 function updateVMatch(id, patch) { return updateDoc(doc(db, 'vmatches', id), Object.assign({}, patch, { updated: Date.now() })); }
+// ---------- cestino dei tornei ----------
+// trash/{id}: copia completa di un torneo tolto dalle pagine (torneo, gare con i risultati, squadre e rose scelte):
+// archiviato (senza scadenza) oppure nel cestino per 7 giorni. Si ripristina in ogni momento; scaduti i 7 giorni la
+// copia del cestino si cancella da sola alla prima apertura di un admin tornei.
+const TRASH_DAYS = 7;
+let trashUnsub = null;
+function listenTrash() {
+  if (trashUnsub) { trashUnsub(); trashUnsub = null; }
+  Store.applyRemote('trash', []);
+  if (!user || !canTour()) return;
+  trashUnsub = onSnapshot(collection(db, 'trash'), snap => {
+    const now = Date.now(), list = [];
+    // archiviati: expiresAt null (nessuna scadenza); nel cestino: cancellati alla scadenza
+    snap.docs.forEach(d => { const x = Object.assign({ id: d.id }, d.data()); if (x.expiresAt && x.expiresAt < now) deleteDoc(d.ref).catch(() => {}); else list.push(x); });
+    Store.applyRemote('trash', list.sort((a, b) => b.deletedAt - a.deletedAt));
+    refresh();
+  }, onError);
+}
+const noId = o => { const x = Object.assign({}, o); delete x.id; return x; };
+async function trashVTour(tour, matches, teams, keep) {
+  const rosters = [];
+  for (const tm of teams) { try { const r = await getDoc(doc(db, 'rosters', tm.id)); if (r.exists()) rosters.push(Object.assign({ id: r.id }, r.data())); } catch (e) { /* senza rosa */ } }
+  const now = Date.now();
+  await setDoc(doc(db, 'trash', `vt_${tour.id}_${now}`), { kind: 'vtour', tid: tour.id, name: tour.name, level: tour.level || '',
+    tour: JSON.stringify(tour), matches: JSON.stringify(matches), teams: JSON.stringify(teams), rosters: JSON.stringify(rosters),
+    nMatches: matches.length, nDone: matches.filter(m => m.status === 'done').length, nTeams: teams.length,
+    deletedAt: now, expiresAt: keep ? null : now + TRASH_DAYS * 864e5, archived: !!keep, by: user.uid });
+  // solo dopo la copia: si cancellano gare, torneo, squadre e rose
+  await writeVMatches({}, matches.map(m => m.id));
+  const b = writeBatch(db);
+  b.delete(doc(db, 'vtours', tour.id));
+  teams.forEach(tm => { b.delete(doc(db, 'teams', tm.id)); b.delete(doc(db, 'rosters', tm.id)); });
+  await b.commit();
+}
+async function restoreVTour(trashId) {
+  const snap = await getDoc(doc(db, 'trash', trashId));
+  if (!snap.exists()) throw Object.assign(new Error('not-found'), { code: 'not-found' });
+  const x = snap.data(), tour = JSON.parse(x.tour), matches = JSON.parse(x.matches), teams = JSON.parse(x.teams || '[]'), rosters = JSON.parse(x.rosters || '[]');
+  const b = writeBatch(db);
+  teams.forEach(tm => b.set(doc(db, 'teams', tm.id), noId(tm)));
+  rosters.forEach(r => b.set(doc(db, 'rosters', r.id), noId(r)));
+  b.set(doc(db, 'vtours', tour.id), noId(tour));
+  await b.commit();
+  await writeVMatches(Object.fromEntries(matches.map(m => [m.id, noId(m)])), []);
+  await deleteDoc(doc(db, 'trash', trashId));
+  return tour.id;
+}
+function purgeTrash(trashId) { return deleteDoc(doc(db, 'trash', trashId)); }
+
 async function deleteVTour(id, matchIds) {
   await writeVMatches({}, matchIds);
   await deleteDoc(doc(db, 'vtours', id));
@@ -881,6 +930,7 @@ onSnapshot(collection(db, 'teams'), snap => {
 }, onError);
 let rosterUnsub = null;
 function listenRosters() {
+  listenTrash();
   if (rosterUnsub) { rosterUnsub(); rosterUnsub = null; }
   Store.applyRemote('rosters', []);
   if (!user || !(canTour() || member || scorer)) return;
@@ -1171,6 +1221,9 @@ window.Cloud = {
   writeVMatches,
   updateVMatch,
   deleteVTour,
+  trashVTour,
+  restoreVTour,
+  purgeTrash,
   saveTeam,
   importTournaments,
   setTeamStatus,

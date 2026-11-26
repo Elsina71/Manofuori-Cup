@@ -139,6 +139,10 @@ service cloud.firestore {
     // vtours/{id}: torneo (livello, gironi, playoff): pubblico, lo scrive l'admin tornei.
     // vmatches/{torneo_gara}: gara (squadre, data, ora, palestra, set): pubblica. L'admin tornei scrive tutto;
     //   lo scorer (account del campo, legato al torneo o a tutti) inserisce solo i set, il golden set e lo stato.
+    // trash/{id}: tornei eliminati (copia completa per 7 giorni, poi si cancellano). Solo admin tornei.
+    match /trash/{id} {
+      allow read, write: if isTourAdmin();
+    }
     match /vtours/{id} {
       allow read: if true;
       allow write: if isTourAdmin();

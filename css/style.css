@@ -1034,6 +1034,67 @@ li.is-void { opacity: .6; }
 .pdf-viewer .pv-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
 .pdf-viewer .pv-frame { width: 100%; height: 70vh; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 
+/* ---------- pagina Tornei e torneo: elementi nuovi (stessi colori del tema) ---------- */
+:root { --radius-s: 10px; --ease: cubic-bezier(.2, .7, .2, 1); --shadow-hover: 0 2px 4px rgba(26, 31, 39, .06), 0 14px 28px -14px rgba(26, 31, 39, .22); }
+.page-head.has-action { position: relative; }
+@media (min-width: 640px) {
+  .page-head.has-action { padding-right: 190px; }
+  .page-head .head-action { position: absolute; top: 0; right: 0; }
+}
+@media (max-width: 639px) { .page-head .head-action { margin-top: 10px; } }
+.btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger-solid:hover { background: color-mix(in srgb, var(--danger) 85%, #000); }
+/* ---------- pagina Tornei: un evento per sezione, schede in griglia ---------- */
+.tevent { margin: 0 0 34px; }
+.tevent-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.tevent-head h2 { margin: 0; font-size: 1.25rem; }
+.tevent-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.tevent-meta span { font-size: .78rem; font-weight: 600; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+.tgrid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.tcard {
+  --lvc: hsl(var(--lv) 62% 44%);
+  position: relative; display: flex; flex-direction: column; gap: 10px; min-height: 100%;
+  padding: 18px 18px 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border);
+  box-shadow: var(--shadow); color: inherit; text-decoration: none; overflow: hidden;
+  transition: transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s;
+}
+.tcard::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--lvc); }
+.tcard:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); border-color: color-mix(in srgb, var(--lvc) 45%, var(--border)); }
+.tcard-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tchip { font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--lvc);
+  background: color-mix(in srgb, var(--lvc) 12%, transparent); border-radius: 6px; padding: 3px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+.tstate { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.tstate i { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
+.tcard.st-live .tstate { color: var(--ok); }
+.tcard.st-live .tstate i { background: var(--ok); box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); animation: tpulse 2.4s infinite; }
+.tcard.st-draft .tstate i { background: var(--accent); }
+@keyframes tpulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); } 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
+@media (prefers-reduced-motion: reduce) { .tcard.st-live .tstate i { animation: none; } }
+.tcard h3 { margin: 0; font-size: 1.1rem; line-height: 1.2; }
+@media (prefers-reduced-motion: reduce) { .tcard, .tcard:hover { transition: none; transform: none; } }
+.tcard-meta { margin: 0; font-size: .82rem; color: var(--muted); }
+.tprog { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin-top: 2px; }
+.tprog span { display: block; height: 100%; border-radius: inherit; background: var(--lvc); min-width: 0; }
+.tprog-lbl { margin: -4px 0 0; font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tprog-lbl strong { color: var(--text); }
+.tnext { margin-top: auto; display: grid; gap: 1px; padding: 10px 12px; border-radius: var(--radius-s); background: var(--surface-2); font-size: .84rem; }
+.tnext-lbl { font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.tnext-when { font-weight: 700; font-variant-numeric: tabular-nums; }
+.tnext-who { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tevent.past .tcard { opacity: .82; }
+.tevent.past .tcard:hover { opacity: 1; }
+
+/* eliminazione del torneo e archivio */
+.del-panel { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
+.del-choice { border: 0; padding: 0; margin: 0 0 12px; display: grid; gap: 10px; }
+@media (min-width: 760px) { .del-choice { grid-template-columns: 1fr 1fr; } }
+.del-opt { flex-direction: row; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--surface-2); cursor: pointer; font-weight: 400; }
+.del-opt input { width: 18px; min-height: 18px; height: 18px; margin-top: 2px; accent-color: var(--primary); }
+.del-opt span { display: grid; gap: 2px; }
+.del-opt small { color: var(--muted); font-size: .82rem; }
+.del-opt:has(input:checked) { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); background: var(--surface); }
+.trash-card .trash-exp { color: var(--danger); font-weight: 600; }
+
 /* ===== temi scelti dall'utente (Impostazioni → Colori; solo su quel dispositivo). Pallone nello stile Molten Flistatec. ===== */
 /* temi chiari: valori di base fissi, anche con il telefono in modalità scura */
 [data-theme]:not([data-theme="notte"]):not([data-theme="lavagna"]) {
