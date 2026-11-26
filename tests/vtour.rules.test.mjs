@@ -59,6 +59,32 @@ await t('chi non ha accesso non legge il cestino', assertFails(getDoc(doc(anon, 
 await t('admin tornei svuota il cestino', assertSucceeds(deleteDoc(doc(org, 'trash', 'vt_T9_1'))));
 await t('tutti leggono il punteggio in diretta', assertSucceeds(getDoc(doc(anon, 'live', 'T1_g-A-d1-0'))));
 await t('il referto completo non è pubblico', assertFails(getDoc(doc(anon, 'referti', 'T1_g-A-d1-0'))));
+// arbitri: account come quelli dei campi (kind 'ref'), solo per le gare a cui sono assegnati (vmatches.referee = uid)
+await env.withSecurityRulesDisabled(async c => {
+  const db = c.firestore();
+  await setDoc(doc(db, 'scorers', 'arbitro@x.it'), { kind: 'ref', name: 'Mario Arbitro', uid: 'ref1', court: '', tid: '' });
+  await setDoc(doc(db, 'scorers', 'altro@x.it'), { kind: 'ref', name: 'Altro', uid: 'ref2', court: '', tid: '' });
+  await setDoc(doc(db, 'vmatches', 'T3_g-A-d1-0'), { tid: 'T3', key: 'g-A-d1-0', home: 'a', away: 'b', sets: [], status: 'sched' });
+  await setDoc(doc(db, 'vmatches', 'T3_g-A-d1-1'), { tid: 'T3', key: 'g-A-d1-1', home: 'c', away: 'd', sets: [], status: 'sched' });
+});
+const ref1 = env.authenticatedContext('ref1', { email: 'arbitro@x.it' }).firestore();
+const ref2 = env.authenticatedContext('ref2', { email: 'altro@x.it' }).firestore();
+await t('admin tornei assegna l\'arbitro alla gara', assertSucceeds(updateDoc(doc(org, 'vmatches', 'T3_g-A-d1-0'), { referee: 'ref1', refereeName: 'Mario Arbitro', updated: 1 })));
+await t('l\'arbitro non si assegna da solo una gara', assertFails(updateDoc(doc(ref1, 'vmatches', 'T3_g-A-d1-1'), { referee: 'ref1', refereeName: 'x', updated: 1 })));
+await t('l\'arbitro assegnato apre il referto della sua gara', assertSucceeds(openRef(ref1, 'T3', 'arbitro@x.it')));
+await t('un altro arbitro non apre il referto di quella gara', assertFails((() => { const b = writeBatch(ref2), id = 'T3_g-A-d1-0'; b.set(doc(ref2, 'live', id), Object.assign({ tid: 'T3', key: 'g-A-d1-0', a: 'a', b: 'b', updated: 9 }, EMPTY), { merge: true }); return b.commit(); })()));
+await t('l\'arbitro aggiorna punteggio e referto della sua gara', assertSucceeds((() => { const b = writeBatch(ref1), id = 'T3_g-A-d1-0', live = { status: 'live', sets: [], setsWon: { a: 0, b: 0 }, cur: { a: 1, b: 0 }, serving: 'a', winner: null, outcome: null };
+  b.set(doc(ref1, 'live', id), Object.assign({}, live, { updated: 2 }), { merge: true }); b.set(doc(ref1, 'referti', id), Object.assign({}, live, { json: '{}', updated: 2, updatedBy: 'arbitro@x.it' }), { merge: true }); return b.commit(); })()));
+await t('l\'arbitro archivia il PDF della sua gara', assertSucceeds(setDoc(doc(ref1, 'refertiPdf', 'T3_g-A-d1-0'), { tid: 'T3', key: 'g-A-d1-0', ref: 'T3_g-A-d1-0', status: 'finished', version: 1, name: 'r.pdf', parts: 1, updated: 3 })));
+await t('l\'arbitro invia il risultato della sua gara', assertSucceeds(updateDoc(doc(ref1, 'vmatches', 'T3_g-A-d1-0'), { sets, status: 'done', by: 'arbitro@x.it', updated: 4 })));
+await t('l\'arbitro non tocca una gara non sua', assertFails(updateDoc(doc(ref1, 'vmatches', 'T3_g-A-d1-1'), { sets, status: 'done', by: 'arbitro@x.it', updated: 5 })));
+await t('l\'arbitro non apre il referto di una gara non sua', assertFails(openRef(ref1, 'T1', 'arbitro@x.it')));
+await t('l\'arbitro non tocca le gare degli altri tornei', assertFails(updateDoc(doc(ref1, 'vmatches', 'T1_g-A-d1-0'), { sets, status: 'done', by: 'arbitro@x.it', updated: 6 })));
+await t('l\'arbitro non cambia squadre o arbitro', assertFails(updateDoc(doc(ref1, 'vmatches', 'T3_g-A-d1-0'), { referee: 'ref2', by: 'arbitro@x.it', updated: 7 })));
+await t('tolto dalla gara: non scrive più', assertSucceeds(updateDoc(doc(org, 'vmatches', 'T3_g-A-d1-0'), { referee: '', refereeName: '', updated: 8 })).then(() => assertFails(updateDoc(doc(ref1, 'vmatches', 'T3_g-A-d1-0'), { sets: [], status: 'sched', by: 'arbitro@x.it', updated: 9 }))));
+await t('un account del campo resta come prima (tutti i tornei)', assertSucceeds(updateDoc(doc(scAll, 'vmatches', 'T3_g-A-d1-1'), { sets, status: 'done', by: 'tutti@x.it', updated: 10 })));
+await t('admin tornei crea e vede gli arbitri', assertSucceeds(setDoc(doc(org, 'scorers', 'nuovo@x.it'), { kind: 'ref', name: 'N', uid: 'n1', court: '', tid: '' }).then(() => getDoc(doc(org, 'scorers', 'nuovo@x.it')))));
+await t('l\'arbitro non si cambia il ruolo', assertFails(updateDoc(doc(ref1, 'scorers', 'arbitro@x.it'), { kind: '' })));
 console.log(`\n${ok} ok, ${ko} falliti`);
 await env.cleanup();
 process.exit(ko ? 1 : 0);

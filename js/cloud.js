@@ -1269,6 +1269,41 @@ async function addScorer(email, password, court, tid) {
   return { existed };
 }
 
+// ---------- arbitri (admin tornei) ----------
+// L'arbitro è un account come quelli dei campi (scorers/{email}, kind 'ref') ma compila il referto solo delle gare
+// a cui è assegnato (vmatches.referee = suo uid). Account creato con l'app separata, così l'admin resta collegato.
+async function addReferee(name, email, password) {
+  if (!canTour()) throw Object.assign(new Error('permission-denied'), { code: 'permission-denied' });
+  email = email.trim().toLowerCase();
+  secondAuth();
+  let uid;
+  try {
+    uid = (await createUserWithEmailAndPassword(second, email, password)).user.uid;
+  } catch (err) {
+    if (err.code !== 'auth/email-already-in-use') throw err;
+    // account già esistente: va bene solo con la sua password e se non è un giocatore registrato
+    try { uid = (await signInWithEmailAndPassword(second, email, password)).user.uid; }
+    catch (e) { throw Object.assign(new Error('ref-exists'), { code: 'ref-exists' }); }
+    const m = await getDoc(doc(db, 'members', uid)).catch(() => null);
+    if (m && m.exists()) { await signOut(second); throw Object.assign(new Error('ref-member'), { code: 'ref-member' }); }
+  }
+  await signOut(second);
+  await setDoc(doc(db, 'scorers', email), { kind: 'ref', name: name.trim(), uid, court: '', tid: '', created: Date.now() });
+  return { uid };
+}
+// Toglie l'arbitro (l'account resta ma non può più fare nulla) e lo toglie dalle gare assegnate
+async function removeReferee(email, uid) {
+  if (!canTour()) return;
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'scorers', email));
+  if (uid) (await getDocs(query(collection(db, 'vmatches'), where('referee', '==', uid)))).docs.forEach(d => batch.update(d.ref, { referee: '', refereeName: '', updated: Date.now() }));
+  await batch.commit();
+}
+function assignReferee(matchId, uid, name) {
+  if (!canTour()) return Promise.resolve();
+  return updateDoc(doc(db, 'vmatches', matchId), { referee: uid || '', refereeName: uid ? name || '' : '', updated: Date.now() });
+}
+
 // Cambia il torneo a cui è legato l'account ('' = tutti i tornei in corso).
 function setScorerTournament(email, tid) {
   if (!isAdmin) return Promise.resolve();
@@ -1286,6 +1321,9 @@ window.Cloud = {
   loadPdf,
   openReferto,
   listScorers,
+  addReferee,
+  removeReferee,
+  assignReferee,
   addScorer,
   setScorerTournament,
   removeScorer,

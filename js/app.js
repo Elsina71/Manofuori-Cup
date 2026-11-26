@@ -20,6 +20,7 @@
   const canNotice = scope => (scope === 'home' ? admin() : tourAdmin());
   // Account di un campo (refertista): vede "Le mie gare" e apre i referti elettronici.
   const scorer = () => (window.Cloud && !window.Cloud.isAdmin && window.Cloud.scorer) || null;
+  const isRef = () => { const sc = window.Cloud && !window.Cloud.isAdmin && window.Cloud.scorer; return !!sc && sc.kind === 'ref'; };   // arbitro
   const teamCap = () => (window.Cloud && !window.Cloud.isAdmin && window.Cloud.teamCap) || null;   // entrato con il codice capitano di una squadra
   let pendingRender = false;
 
@@ -103,6 +104,7 @@
     else if (r[0] === 'mine') { nav = 'mine'; html = viewMineVolley(); }
     else if (r[0] === 'me') { nav = 'me'; html = viewProfile(); }
     else if (r[0] === 'teams') { nav = 'teams'; html = viewTeams(); }
+    else if (r[0] === 'arbitri' && tourAdmin()) { nav = 'refs'; html = viewRefs(); }
     // link del codice del capitano: apre Squadre con il codice già scritto
     else if (r[0] === 'codice') { ui.claimCode = r[1] || ''; location.replace('#/teams'); if (!myUid() && ui.claimCode) codeEnter(ui.claimCode); return; }
     else if (r[0] === 'tema') { nav = 'settings'; html = viewTheme(); }
@@ -135,7 +137,7 @@
     document.querySelectorAll('[data-tour-only]').forEach(el => { el.hidden = !tourAdmin(); });
     document.querySelectorAll('[data-cash-only]').forEach(el => { el.hidden = !cashier(); });
     document.querySelectorAll('[data-staff-badge]').forEach(el => { el.hidden = !(admin() || tourAdmin() || cashier()); const l = el.querySelector('.lbl'); if (l) l.textContent = ' ' + (admin() ? 'Admin' : [tourAdmin() ? t('roleTourShort') : '', cashier() ? t('roleCashShort') : ''].filter(Boolean).join(' · ')); });
-    document.querySelectorAll('[data-guest-only]').forEach(el => { el.hidden = admin() || !!scorer() || !!member() || !!teamCap(); });
+    document.querySelectorAll('[data-guest-only]').forEach(el => { el.hidden = admin() || tourAdmin() || cashier() || !!scorer() || !!member() || !!teamCap(); });
     document.querySelectorAll('[data-member-only]').forEach(el => { el.hidden = !member(); });
     document.querySelectorAll('[data-team-only]').forEach(el => { el.hidden = !(member() && myTeams().length); });
     document.querySelectorAll('[data-scorer-only]').forEach(el => { el.hidden = !scorer(); });
@@ -544,7 +546,7 @@
   // Livelli degli allenamenti (ordine nel report presenze).
   const LEVELS = ['start', 'inter', 'high', 'pro'];
   // Moduli a scomparsa che restano aperti anche se la pagina si ridisegna (aggiornamenti dal database).
-  const keepOpen = key => ((ui.keep || {})[key] ? 'open' : '');
+  const keepOpen = (key, def) => { const k = (ui.keep || {})[key]; return (k === undefined ? def : k) ? 'open' : ''; };
 
   // ====================================================================
   // PRIVACY E TERMINI: pagine legali, presa visione, dati personali (diritti GDPR artt. 15-22).
@@ -2477,7 +2479,8 @@
     const names = Object.fromEntries((grp ? grp.teams : []).map(id => [id, vTeamName(tour, id)]));
     return VL.standings(grp ? grp.teams : [], vGroupMatches(tour, g), names);
   };
-  const vCanScore = tour => tourAdmin() || (!!scorer() && tour.status !== 'done' && (!scorer().tid || scorer().tid === tour.id));
+  // chi inserisce i risultati: admin tornei, account del campo del torneo, oppure l'arbitro assegnato alla gara (m)
+  const vCanScore = (tour, m) => tourAdmin() || (!!scorer() && tour.status !== 'done' && (isRef() ? !!m && !!m.referee && m.referee === myUid() : (!scorer().tid || scorer().tid === tour.id)));
   const vStarted = tour => vtMatches(tour.id).some(m => m.status === 'done');
   const fmtQ = q => (q === Infinity ? '∞' : q.toFixed(3).replace('.', ','));
   const vResult = m => { const r = VL.tally(vSets(m)); return `${r.sh}-${r.sa}`; };
@@ -2786,7 +2789,7 @@
   // ---------- calendario e risultati ----------
   // Referto elettronico (referto-indoor/): stesso id della gara, punteggio pubblico in live/{id}.
   const vLive = m => (S().live || {})[m.id] || null;
-  const vCanEscore = tour => (tourAdmin() || (!!scorer() && vCanScore(tour))) && tour.status !== 'done';
+  const vCanEscore = (tour, m) => (tourAdmin() || (!!scorer() && vCanScore(tour, m))) && tour.status !== 'done';
   function vLiveText(lv) {
     // il referto mette in "sets" anche il set in corso (che è anche "cur"): qui contano solo i set finiti
     const sets = (lv.sets || []).slice(0, lv.cur && lv.cur.set ? lv.cur.set - 1 : undefined).map(s => (Array.isArray(s) ? `${s[0]}-${s[1]}` : `${s.a}-${s.b}`));
@@ -2796,7 +2799,7 @@
   function vmRow(tour, m) {
     const done = m.status === 'done';
     const r = done ? VL.tally(vSets(m)) : null;
-    const editing = ui.vmEdit === m.id && vCanScore(tour);
+    const editing = ui.vmEdit === m.id && vCanScore(tour, m);
     const lv = vLive(m);
     const liveNow = !done && lv && lv.status === 'live' && ((lv.sets || []).length || lv.cur);
     const refDone = !done && lv && lv.status === 'finished' && (lv.sets || []).length;
@@ -2807,10 +2810,10 @@
         : liveNow ? `<span class="badge live-b">${esc(t('vmLive'))}</span> <strong>${esc(vLiveText(lv))}</strong>`
         : refDone ? `<span class="badge warn-b">${esc(t('vmRefDone'))}</span> <strong>${esc(vLiveText(lv))}</strong>`
         : `<span class="muted small">${esc(t('vmToPlay'))}</span>`}</div>
-      <div class="vm-when muted small">${m.date || m.time ? `<i class="ti ti-calendar" aria-hidden="true"></i> ${esc(vWhen(m))}` : esc(t('vmNoDate'))}${m.place ? ` · <i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(m.place)}` : ''}${m.mode === 'bo5' ? ` · ${esc(t('vmBo5'))}` : ''}</div>
-      ${vCanScore(tour) && !editing ? `<div class="btn-row vm-actions">
+      <div class="vm-when muted small">${m.date || m.time ? `<i class="ti ti-calendar" aria-hidden="true"></i> ${esc(vWhen(m))}` : esc(t('vmNoDate'))}${m.place ? ` · <i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(m.place)}` : ''}${m.mode === 'bo5' ? ` · ${esc(t('vmBo5'))}` : ''}${m.refereeName && (tourAdmin() || scorer()) ? ` · <i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(m.refereeName)}` : ''}</div>
+      ${vCanScore(tour, m) && !editing ? `<div class="btn-row vm-actions">
         ${refDone ? `<button class="btn small primary" data-action="vm-fromref" data-id="${m.id}"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('vmFromRef'))}</button>` : ''}
-        ${vCanEscore(tour) && !done ? `<button class="btn small" data-action="vm-escore" data-id="${m.id}"><i class="ti ti-device-tablet" aria-hidden="true"></i> E-scoresheet</button>` : ''}
+        ${vCanEscore(tour, m) && !done ? `<button class="btn small" data-action="vm-escore" data-id="${m.id}"><i class="ti ti-device-tablet" aria-hidden="true"></i> E-scoresheet</button>` : ''}
         <button class="btn small" data-action="vm-edit" data-id="${m.id}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t(tourAdmin() ? 'vmEdit' : 'vmResult'))}</button></div>` : ''}
       ${editing ? vmForm(tour, m) : ''}
     </li>`;
@@ -2945,7 +2948,7 @@
     if (tt.golden && tt.winner && g) golden = `<p class="muted small">${esc(t('vtGoldenDone', { h: vTeamName(tour, back.home), x: g.h, y: g.a, a: vTeamName(tour, back.away) }))}</p>`;
     else if (tt.golden && back) {
       golden = `<div class="note warn">${esc(t('vtGoldenNeed', { n: tt.goldenTo }))}
-        ${vCanScore(tour) ? `<form class="vt-goldenform" data-form="vt-golden" data-id="${back.id}" data-to="${tt.goldenTo}">
+        ${vCanScore(tour, back) ? `<form class="vt-goldenform" data-form="vt-golden" data-id="${back.id}" data-to="${tt.goldenTo}">
           <label>${esc(vTeamName(tour, back.home))}<input type="number" name="h" min="0" max="99" inputmode="numeric" value="${g ? esc(g.h) : ''}"></label>
           <label>${esc(vTeamName(tour, back.away))}<input type="number" name="a" min="0" max="99" inputmode="numeric" value="${g ? esc(g.a) : ''}"></label>
           <button class="btn small primary">${esc(t('vtGoldenSave'))}</button></form>` : ''}</div>`;
@@ -3062,7 +3065,7 @@
     'vm-escore': el => vEscoreOpen(el.dataset.id),
     'vm-fromref': el => {
       const m = vmById(el.dataset.id), tour = m && vtById(m.tid), lv = m && vLive(m);
-      if (!m || !vCanScore(tour) || !lv || lv.status !== 'finished') return;
+      if (!m || !vCanScore(tour, m) || !lv || lv.status !== 'finished') return;
       const sets = (lv.sets || []).map(([a, b]) => [Number(a), Number(b)]);
       const err = VL.checkSets(sets, m.mode === 'bo5' ? 'bo5' : '3');
       if (err) return warn('vmRefBad', { e: t(err) });
@@ -3071,7 +3074,7 @@
     },
     'vm-clear': el => {
       const m = vmById(el.dataset.id), tour = m && vtById(m.tid);
-      if (!m || !vCanScore(tour) || !confirmed('vmClearConfirm')) return;
+      if (!m || !vCanScore(tour, m) || !confirmed('vmClearConfirm')) return;
       if (m.stage === 'p' && vtMatches(tour.id).some(x => x.stage === 'p' && x.bracket === m.bracket && x.round > m.round)) return warn('vmNextRound');
       window.Cloud.updateVMatch(m.id, Object.assign({ sets: [], status: 'sched', by: (window.Cloud.user.email || '').toLowerCase() }, m.stage === 'p' ? { golden: null } : {})).then(() => { ui.vmEdit = null; render(); }).catch(vErr);
     }
@@ -3157,7 +3160,7 @@
     },
     'vm-save': f => {
       const m = vmById(f.dataset.id), tour = m && vtById(m.tid);
-      if (!m || !vCanScore(tour)) return;
+      if (!m || !vCanScore(tour, m)) return;
       const n = m.mode === 'bo5' ? 5 : 3, sets = [];
       for (let i = 0; i < n; i++) {
         const h = f['h' + i].value, a = f['a' + i].value;
@@ -3185,7 +3188,7 @@
     },
     'vt-golden': f => {
       const m = vmById(f.dataset.id), tour = m && vtById(m.tid);
-      if (!m || !vCanScore(tour)) return;
+      if (!m || !vCanScore(tour, m)) return;
       const h = parseInt(f.h.value, 10), a = parseInt(f.a.value, 10), to = Number(f.dataset.to) || 15;
       if (!VL.setOk(h, a, to)) return warn('vGoldenBad', { n: to });
       window.Cloud.updateVMatch(m.id, { golden: { h, a }, by: (window.Cloud.user.email || '').toLowerCase() }).then(() => { ui.flash = { text: t('saved') }; render(); }).catch(vErr);
@@ -3208,7 +3211,7 @@
   }
   async function vEscoreOpen(id) {
     const m = vmById(id), tour = m && vtById(m.tid);
-    if (!m || !vCanEscore(tour) || !window.Cloud) return;
+    if (!m || !vCanEscore(tour, m) || !window.Cloud) return;
     // l'admin (generale o tornei) lo apre in una nuova scheda (aperta subito, prima dell'attesa del database); lo scorer nella stessa
     const win = tourAdmin() ? window.open('', '_blank') : null;
     ui.flash = { text: t('escoreLoading') }; render();
@@ -3227,7 +3230,8 @@
   const myTeams = () => { const uid = myUid(); return uid ? (S().teams || []).filter(x => x.captainUid === uid || (x.memberUids || []).includes(uid)) : []; };
   const teamTours = id => (S().vtours || []).filter(x => (x.groups || []).some(g => g.teams.includes(id)) || (x.brackets || []).some(b => b.seeds.includes(id)));
   const myTourIds = () => [...new Set(myTeams().flatMap(tm => teamTours(tm.id).map(x => x.id)))];
-  const liveTourIds = () => { const sc = scorer(); return (S().vtours || []).filter(x => x.status === 'live' && (!sc || !sc.tid || sc.tid === x.id)).map(x => x.id); };
+  const refMatches = () => (S().vmatches || []).filter(m => isRef() && m.referee && m.referee === myUid());
+  const liveTourIds = () => { const sc = scorer(); if (isRef()) return [...new Set(refMatches().map(m => m.tid))]; return (S().vtours || []).filter(x => x.status === 'live' && (!sc || !sc.tid || sc.tid === x.id)).map(x => x.id); };
   const byWhen = (a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '99').localeCompare(b.time || '99') || (a.day || 0) - (b.day || 0);
   // gare di una squadra: prima quelle da giocare (dalla più vicina), poi i risultati (dal più recente)
   function teamMatches(id) {
@@ -3255,14 +3259,15 @@
   function viewMineVolley() {
     const sc = scorer();
     if (!sc) return `<div class="card"><p class="muted">${esc(t('loginHelp'))}</p><a class="btn primary" href="#/settings">${esc(t('login'))}</a></div>`;
-    const tours = (S().vtours || []).filter(x => x.status === 'live' && (!sc.tid || sc.tid === x.id));
+    const tours = isRef() ? (S().vtours || []).filter(x => x.status !== 'done' && refMatches().some(m => m.tid === x.id))
+      : (S().vtours || []).filter(x => x.status === 'live' && (!sc.tid || sc.tid === x.id));
     const blocks = tours.map(tour => {
-      const ms = vtMatches(tour.id).slice().sort((a, b) => (a.status === 'done') - (b.status === 'done') || (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
+      const ms = (isRef() ? refMatches().filter(m => m.tid === tour.id) : vtMatches(tour.id)).slice().sort((a, b) => (a.status === 'done') - (b.status === 'done') || (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
       if (!ms.length) return '';
       return `<div class="card"><h2><i class="ti ti-trophy" aria-hidden="true"></i> <a href="#/vt/${tour.id}/calendar">${esc(tour.name)}</a></h2>
         <ul class="vm-list">${ms.map(m => vmRow(tour, m)).join('')}</ul></div>`;
     }).join('');
-    return `<div class="page-head"><h1><i class="ti ti-device-mobile" aria-hidden="true"></i> ${esc(t('navMine'))}</h1><p class="muted">${esc(t('vmScorerHelp'))}</p></div>
+    return `<div class="page-head"><h1><i class="ti ti-device-mobile" aria-hidden="true"></i> ${esc(t('navMine'))}</h1><p class="muted">${esc(t(isRef() ? 'refMineHelp' : 'vmScorerHelp', { n: sc.name || '' }))}</p></div>
       ${blocks || `<div class="card"><p class="muted">${esc(t('mineEmpty'))}</p></div>`}`;
   }
 
@@ -3800,7 +3805,7 @@
       window.Cloud.listScorers().then(list => { ui.scorers = list; }).catch(() => { ui.scorers = []; })
         .finally(() => { ui.scorersLoading = false; refresh(); });
     }
-    const list = (ui.scorers || []).slice().sort((a, b) => String(a.court).localeCompare(String(b.court), undefined, { numeric: true }));
+    const list = (ui.scorers || []).filter(x => x.kind !== 'ref').slice().sort((a, b) => String(a.court).localeCompare(String(b.court), undefined, { numeric: true }));
     return `<div class="card" id="scorers">
       <h2><i class="ti ti-device-mobile" aria-hidden="true"></i> ${esc(t('scorersTitle'))}</h2>
       <p class="muted small">${esc(t('scorersHelp'))}</p>
@@ -3817,6 +3822,49 @@
         <div class="form-actions"><button class="btn primary"><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('scorerAdd'))}</button></div>
       </form>
     </div>`;
+  }
+
+  // ---------- ARBITRI (admin tornei): account degli arbitri e assegnazione alle gare ----------
+  function refList() {
+    if (!ui.scorers && !ui.scorersLoading && window.Cloud && window.Cloud.listScorers) {
+      ui.scorersLoading = true;
+      window.Cloud.listScorers().then(list => { ui.scorers = list; }).catch(() => { ui.scorers = []; })
+        .finally(() => { ui.scorersLoading = false; refresh(); });
+    }
+    return (ui.scorers || []).filter(x => x.kind === 'ref').sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }
+  function viewRefs() {
+    const refs = refList();
+    const tours = (S().vtours || []).filter(x => x.status !== 'done').slice().sort((a, b) => (teamLevels().indexOf(a.level) + 1 || 99) - (teamLevels().indexOf(b.level) + 1 || 99) || a.name.localeCompare(b.name));
+    const count = uid => (S().vmatches || []).filter(m => m.referee === uid && m.status !== 'done').length;
+    const opts = m => `<option value="">${esc(t('refNone'))}</option>${refs.map(r => `<option value="${esc(r.uid)}" ${m.referee === r.uid ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}`;
+    const onlyFree = !!ui.refFree;
+    const block = tour => {
+      const ms = vtMatches(tour.id).filter(m => m.status !== 'done' && m.home && m.away && (!onlyFree || !m.referee))
+        .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
+      if (!ms.length) return '';
+      return `<details class="card sub-form" data-keep="ref-${tour.id}" ${keepOpen('ref-' + tour.id, true)}><summary><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(tour.name)} <small class="muted">(${ms.length})</small></summary>
+        <ul class="ref-games">${ms.map(m => `<li>
+          <div><strong>${esc(vTeamName(tour, m.home))} – ${esc(vTeamName(tour, m.away))}</strong>
+            <div class="muted small">${m.date || m.time ? esc(vWhen(m)) : esc(t('vmNoDate'))}${m.place ? ' · ' + esc(m.place) : ''}</div></div>
+          <select data-change="ref-assign" data-id="${m.id}" aria-label="${esc(t('refOf'))}" ${refs.length ? '' : 'disabled'}>${opts(m)}</select></li>`).join('')}</ul></details>`;
+    };
+    return `<div class="page-head"><h1><i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(t('navRefs'))}</h1><p class="muted">${esc(t('refIntro'))}</p></div>
+      <details class="card sub-form" data-keep="ref-new" ${keepOpen('ref-new', !refs.length)}><summary><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('refNew'))}</summary>
+        <form class="grid-form" data-form="ref-add" autocomplete="off">
+          <label>${esc(t('refName'))}<input name="name" required maxlength="80"></label>
+          <label>Email<input name="email" type="email" required autocapitalize="off" spellcheck="false"></label>
+          <label>${esc(t('scorerPassword'))}<input name="password" type="text" required minlength="6" autocapitalize="off" spellcheck="false"></label>
+          <div class="form-actions"><button class="btn primary"><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('refAdd'))}</button></div>
+        </form><p class="muted small">${esc(t('refNewHelp'))}</p></details>
+      <div class="card"><h2>${esc(t('refListTitle'))} (${refs.length})</h2>
+        ${!ui.scorers ? `<p class="muted">${esc(t('loading'))}</p>` : refs.length ? `<ul class="reg-list">${refs.map(r => `<li><span><strong>${esc(r.name)}</strong> <span class="badge">${esc(t(count(r.uid) === 1 ? 'refGames1' : 'refGames', { n: count(r.uid) }))}</span><br><small class="muted">${esc(r.email)}</small></span>
+          <span class="btn-row"><button class="btn small" data-action="ref-resetpw" data-email="${esc(r.email)}"><i class="ti ti-mail-forward" aria-hidden="true"></i> ${esc(t('userResetPw'))}</button>
+          <button class="btn small danger" data-action="ref-remove" data-email="${esc(r.email)}" data-uid="${esc(r.uid || '')}"><i class="ti ti-user-off" aria-hidden="true"></i> ${esc(t('refRemove'))}</button></span></li>`).join('')}</ul>`
+          : `<p class="muted">${esc(t('refNoneYet'))}</p>`}</div>
+      <h2 class="section-title">${esc(t('refAssignTitle'))}</h2>
+      <label class="check"><input type="checkbox" data-change="ref-free" ${onlyFree ? 'checked' : ''}> ${esc(t('refOnlyFree'))}</label>
+      ${tours.map(block).join('') || `<div class="card"><p class="muted">${esc(t('refNoGames'))}</p></div>`}`;
   }
 
   // Tornei tra cui scegliere per un account del campo: non chiusi, dal più vicino.
@@ -3905,7 +3953,7 @@
         <button class="btn" data-action="logout">${esc(t('logout'))}</button>
         ${window.Cloud.adminMember ? '' : `<p class="note warn">${esc(t('adminNoProfile'))}</p>${selfProfileCard()}`}`;
     } else if (user && scorer()) {
-      account = `<p><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(t('scorerBadge', { c: scorer().court }))} · ${esc(user.email)}</p>
+      account = `<p><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(isRef() ? t('refBadge', { n: scorer().name || '' }) : t('scorerBadge', { c: scorer().court }))} · ${esc(user.email)}</p>
         <div class="btn-row"><a class="btn primary" href="#/mine"><i class="ti ti-device-mobile" aria-hidden="true"></i> ${esc(t('navMine'))}</a>
         <button class="btn" data-action="logout">${esc(t('logout'))}</button></div>`;
     } else if (user && teamCap()) {
@@ -4112,6 +4160,15 @@
     'close-dialog': () => $dialog.close(),
 
     // lista d'ingresso
+    'ref-remove': el => {
+      if (!confirmed('refRemoveConfirm', { e: el.dataset.email })) return;
+      window.Cloud.removeReferee(el.dataset.email, el.dataset.uid).then(() => { ui.scorers = (ui.scorers || []).filter(x => x.email !== el.dataset.email); ui.flash = { text: t('refRemoved') }; render(); })
+        .catch(err => warn('scorerErr', { code: err.code || err.message }));
+    },
+    'ref-resetpw': el => {
+      if (!confirm(t('userResetPwConfirm', { n: el.dataset.email, e: el.dataset.email }))) return;
+      window.Cloud.resetPassword(el.dataset.email).then(() => { ui.flash = { text: t('userResetPwSent', { n: el.dataset.email, e: el.dataset.email }) }; render(); }).catch(() => warn('resetFailed'));
+    },
     'scorer-remove': el => {
       if (!confirmed('scorerRemoveConfirm', { e: el.dataset.email })) return;
       window.Cloud.removeScorer(el.dataset.email).then(() => { ui.scorers = null; ui.flash = { text: t('scorerRemoved') }; render(); })
@@ -4169,6 +4226,13 @@
       if (f.dataset.scope === 'home') S().noticeUntil = f.until ? f.until.value : '';
       setNotice(f.dataset.scope, f.text.value.trim());
     },
+    'ref-add': f => {
+      const btn = f.querySelector('button.primary'); btn.disabled = true;
+      const name = f.name.value.trim(), email = f.email.value.trim();
+      window.Cloud.addReferee(name, email, f.password.value)
+        .then(res => { ui.scorers = (ui.scorers || []).filter(x => x.email !== email.toLowerCase()).concat([{ email: email.toLowerCase(), kind: 'ref', name, uid: res.uid }]); (ui.keep || {})['ref-new'] = false; ui.flash = { text: t('refAdded', { n: name, e: email }) }; render(); })
+        .catch(err => { btn.disabled = false; warn(err.code === 'ref-exists' ? 'refExists' : err.code === 'ref-member' ? 'refMember' : 'scorerErr', { code: err.code || err.message }); });
+    },
     'scorer-add': f => {
       const btn = f.querySelector('button.primary');
       btn.disabled = true;
@@ -4224,8 +4288,8 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
-  const TOUR_FORMS = new Set(['vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
+  const TOUR_ACTIONS = new Set(['ref-remove', 'ref-resetpw', 'tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
+  const TOUR_FORMS = new Set(['ref-add', 'vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
@@ -4373,6 +4437,15 @@
         ui.msgTo = [...set];
         break;
       }
+      case 'ref-assign': {
+        if (!tourAdmin()) return;
+        const r = refList().find(x => x.uid === el.value);
+        window.Cloud.assignReferee(el.dataset.id, el.value, r ? r.name : '')
+          .then(() => { ui.flash = { text: r ? t('refAssigned', { n: r.name }) : t('refUnassigned') }; render(); })
+          .catch(err => warn('scorerErr', { code: err.code || err.message }));
+        break;
+      }
+      case 'ref-free': ui.refFree = el.checked; render(); break;
       case 'scorer-tour':
         if (!tourAdmin()) return;
         window.Cloud.setScorerTournament(el.dataset.email, el.value)

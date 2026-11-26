@@ -744,6 +744,12 @@ button.cal-btn:hover { border-color: var(--primary); }
 .reg-list { list-style: none; margin: 0; padding: 0; }
 .reg-list li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
 .reg-list li:first-child { border-top: 0; }
+/* arbitri: gare da assegnare */
+.ref-games { list-style: none; margin: 8px 0 0; padding: 0; }
+.ref-games li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 260px); gap: 6px 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+.ref-games li:first-child { border-top: 0; }
+@media (max-width: 560px) { .ref-games li { grid-template-columns: 1fr; } }
+.reg-list li > span:first-child { flex: 1 1 220px; }
 .reg-list li.wait { opacity: .75; }
 .reg-list .reg-no { min-width: 1.8em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 700; }
 .reg-list .reg-names { flex: 1; min-width: 180px; }

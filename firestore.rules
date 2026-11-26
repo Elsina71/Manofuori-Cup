@@ -50,8 +50,18 @@ service cloud.firestore {
     // Account del campo legato a un torneo (campo "tid"): scrive solo in quel torneo. Senza "tid": tutti i tornei.
     function scorerFor(tid) {
       return isScorer()
+        && get(/databases/$(database)/documents/scorers/$(request.auth.token.email.lower())).data.get('kind', '') != 'ref'
         && get(/databases/$(database)/documents/scorers/$(request.auth.token.email.lower())).data.get('tid', '') in ['', tid];
     }
+    // Arbitro (scorers/{email} con kind 'ref'): solo le gare a cui l'admin lo ha assegnato (vmatches.referee = suo uid).
+    function refFor(mid) {
+      return isScorer()
+        && get(/databases/$(database)/documents/scorers/$(request.auth.token.email.lower())).data.get('kind', '') == 'ref'
+        && exists(/databases/$(database)/documents/vmatches/$(mid))
+        && get(/databases/$(database)/documents/vmatches/$(mid)).data.get('referee', '') == request.auth.uid;
+    }
+    // chi compila il referto di una gara: account del campo del torneo, oppure l'arbitro assegnato alla gara
+    function staffFor(tid, mid) { return scorerFor(tid) || refFor(mid); }
 
     // Il refertista scrive solo i campi previsti, non omologa e non cambia gara né squadre.
     function scorerSets(fields) {
@@ -73,8 +83,8 @@ service cloud.firestore {
     // referti/{torneo}_{gara}: un documento per gara con tutti i dati del referto (firme comprese).
     match /referti/{id} {
       allow read: if isStaff();
-      allow create: if isTourAdmin() || (scorerFor(request.resource.data.tid) && rightId(id) && scorerSets(['tid', 'key', 'a', 'b', 'court', 'info', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'json', 'createdBy', 'createdAt', 'updated', 'updatedBy', 'approvedAt', 'closedAt']));
-      allow update: if isTourAdmin() || (scorerFor(resource.data.tid) && resource.data.status in ['ready', 'live', 'finished'] && sameMatch()
+      allow create: if isTourAdmin() || (staffFor(request.resource.data.tid, id) && rightId(id) && scorerSets(['tid', 'key', 'a', 'b', 'court', 'info', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'json', 'createdBy', 'createdAt', 'updated', 'updatedBy', 'approvedAt', 'closedAt']));
+      allow update: if isTourAdmin() || (staffFor(resource.data.tid, id) && resource.data.status in ['ready', 'live', 'finished'] && sameMatch()
         && scorerSets(['tid', 'key', 'a', 'b', 'court', 'info', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'json', 'createdBy', 'createdAt', 'updated', 'updatedBy', 'approvedAt', 'closedAt']));
       allow delete: if isTourAdmin();
     }
@@ -82,7 +92,7 @@ service cloud.firestore {
     // refertiPdf/{torneo}_{gara}[_n]: archivio dei PDF (anche in più parti se il file è grande).
     match /refertiPdf/{id} {
       allow read: if isStaff();
-      allow create, update: if (isTourAdmin() || scorerFor(request.resource.data.tid))
+      allow create, update: if (isTourAdmin() || staffFor(request.resource.data.tid, request.resource.data.tid + '_' + request.resource.data.key))
         && request.resource.data.keys().hasOnly(['tid', 'key', 'ref', 'status', 'version', 'name', 'parts', 'part', 'data', 'updated']);
       allow delete: if isTourAdmin();
     }
@@ -90,8 +100,8 @@ service cloud.firestore {
     // live/{torneo}_{gara}: punteggio in diretta, pubblico (senza dati personali né firme).
     match /live/{id} {
       allow read: if true;
-      allow create: if isTourAdmin() || (scorerFor(request.resource.data.tid) && rightId(id) && scorerSets(['tid', 'key', 'a', 'b', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'updated', 'approvedAt']));
-      allow update: if isTourAdmin() || (scorerFor(resource.data.tid) && resource.data.status in ['ready', 'live', 'finished'] && sameMatch()
+      allow create: if isTourAdmin() || (staffFor(request.resource.data.tid, id) && rightId(id) && scorerSets(['tid', 'key', 'a', 'b', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'updated', 'approvedAt']));
+      allow update: if isTourAdmin() || (staffFor(resource.data.tid, id) && resource.data.status in ['ready', 'live', 'finished'] && sameMatch()
         && scorerSets(['tid', 'key', 'a', 'b', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'updated', 'approvedAt']));
       allow delete: if isTourAdmin();
     }
@@ -150,7 +160,7 @@ service cloud.firestore {
     match /vmatches/{id} {
       allow read: if true;
       allow write: if isTourAdmin();
-      allow update: if scorerFor(resource.data.tid)
+      allow update: if staffFor(resource.data.tid, id)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sets', 'status', 'golden', 'by', 'updated'])
         && request.resource.data.status in ['sched', 'done']
         && request.resource.data.sets is list && request.resource.data.sets.size() <= 5
