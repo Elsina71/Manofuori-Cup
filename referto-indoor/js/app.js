@@ -367,7 +367,7 @@
       const r = roster(m, tm);
       const nos = r.map(p => +p.no);
       if (new Set(nos).size !== nos.length) return `${teamName(m, tm)}: due giocatori con lo stesso numero.`;
-      if (m.teams[tm].players.some(p => p.name && (p.no === '' || p.no == null))) return `${teamName(m, tm)}: manca il numero di maglia di un giocatore.`;
+      // giocatori della lista senza numero: vanno bene, i numeri si scrivono nella formazione di ogni set
       // senza lista (o con una lista incompleta) i numeri si scrivono a mano nella formazione di ogni set
       if (r.filter(p => p.libero).length > 2) return `${teamName(m, tm)}: al massimo 2 liberi.`;
     }
@@ -469,6 +469,7 @@
           ${opt('mid', '0', 'No', L.mid === '0')}${opt('mid', String(Math.ceil(R.targetOf(R.settingsOf(m), d.index) / 2)), `Sì, a ${Math.ceil(R.targetOf(R.settingsOf(m), d.index) / 2)} punti`, L.mid !== '0')}</div></div>
       </section>
       <section class="card"><h2>Formazioni (posto 1 → 6)</h2>
+        ${['A', 'B'].some(tm => m.teams[tm].players.some(p => p.name && (p.no === '' || p.no == null))) ? `<p class="note">Nella lista ci sono giocatori senza numero di maglia: scrivi qui i numeri di chi è in campo e dei liberi (finiscono a referto senza nome, oppure aggiungi il numero nei Dati gara).</p>` : ''}
         <p class="muted small">Scrivi il numero di maglia di ogni posto come sul tagliando della formazione (se la squadra ha la lista, compare l'elenco da cui scegliere; un numero non in lista si aggiunge al referto). Sotto, i liberi della gara (al massimo 2): non entrano nella formazione.${R.minWomenOf(S0, 'A') || R.minWomenOf(S0, 'B') ? ' Tocca <b>D</b> per le donne.' : ''}</p>
         <div class="lineups">${court(left, 'left')}${court(right, 'right')}</div>
       </section>

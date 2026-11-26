@@ -243,3 +243,6 @@ textarea { resize: vertical; }
 /* formazioni: rotazione avanti / indietro */
 .rot-row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; justify-content: flex-end; margin-top: .4rem; }
 .rot-row .muted { margin-right: auto; }
+
+/* avviso nella pagina delle formazioni */
+.note { background: color-mix(in srgb, var(--woman) 8%, var(--card)); border: 1px solid var(--line); border-radius: 10px; padding: .55rem .75rem; font-size: .9rem; margin: .4rem 0 .6rem; }

@@ -3349,7 +3349,8 @@
     return `<details class="card sub-form" data-keep="tm-codes" ${keepOpen('tm-codes')}><summary><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmCodesTitle'))}</summary>
       <p class="muted small">${esc(t('tmCodesHelp'))}</p>
       <div class="btn-row">${missing ? `<button class="btn primary" data-action="tm-codes-all"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmCodesMake', { n: missing }))}</button>` : ''}
-        ${all.length > missing ? `<button class="btn" data-action="tm-codes-copy"><i class="ti ti-copy" aria-hidden="true"></i> ${esc(t('tmCodesCopy'))}</button>` : ''}</div>
+        ${all.length > missing ? `<button class="btn" data-action="tm-codes-copy"><i class="ti ti-copy" aria-hidden="true"></i> ${esc(t('tmCodesCopy'))}</button>
+          <button class="btn" data-action="tm-codes-pdf"><i class="ti ti-file-type-pdf" aria-hidden="true"></i> ${esc(t('tmCodesPdf'))}</button>` : ''}</div>
       <div class="table-wrap"><table class="table"><thead><tr><th>${esc(t('navTeams'))}</th><th>${esc(t('tmLevel'))}</th><th>${esc(t('tmCaptain'))}</th><th>${esc(t('tmCodeLbl'))}</th></tr></thead>
         <tbody>${all.map(x => { const c = teamCodeOf(x.id); return `<tr><td>${esc(x.name)}</td><td>${esc(x.level)}</td><td>${esc(x.captainName || '—')}</td><td>${c ? `<code class="code-pill">${esc(c.id)}</code>` : `<span class="muted small">${esc(t('tmCodeNone'))}</span>`}</td></tr>`; }).join('')}</tbody></table></div>
     </details>`;
@@ -3381,6 +3382,54 @@
       <label class="check"><input type="checkbox" data-roster-replace ${imp.replace ? 'checked' : ''}> ${esc(t('rimReplace'))}</label>
       <div class="btn-row end"><button class="btn" data-action="rim-cancel">${esc(t('cancel'))}</button>
         <button class="btn primary" data-action="rim-go" ${go.length ? '' : 'disabled'}><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('rimGo', { k: go.length }))}</button></div></div>`;
+  }
+
+  // PDF dei codici dei capitani (riservato: lo scarica solo l'admin), diviso per categoria, con il link di ogni codice
+  async function teamCodesPdf() {
+    const JsPDF = await loadJsPdf();
+    const pdf = new JsPDF({ unit: 'mm', format: 'a4' });
+    const W = 210, M = 14, X = { team: M, cap: 74, code: 120, link: 148 };
+    const teams = (S().teams || []).filter(x => teamCodeOf(x.id)).sort(byLevel);
+    const levels = [...new Set(teams.map(x => x.level))];
+    const now = new Date();
+    let y = 0, page = 0;
+    const fit = (txt, w, size) => { pdf.setFontSize(size); let s = String(txt || ''); while (s.length > 1 && pdf.getTextWidth(s) > w) s = s.slice(0, -2) + '…'; return s; };
+    const head = () => {
+      if (page) pdf.addPage();
+      page++;
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); pdf.setTextColor(20); pdf.text(t('tmCodesPdfTitle'), M, 18);
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(90);
+      pdf.text(t('tmCodesPdfSub', { d: now.toLocaleDateString('it-IT'), n: teams.length }), M, 24);
+      pdf.text(t('tmCodesPdfPage', { p: page }), W - M, 24, { align: 'right' });
+      pdf.setDrawColor(200); pdf.line(M, 27, W - M, 27);
+      y = 34;
+    };
+    const cols = () => {
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(110);
+      pdf.text(t('tmName').toUpperCase(), X.team, y); pdf.text(t('tmCaptain').toUpperCase(), X.cap, y); pdf.text(t('tmCodeShort').toUpperCase(), X.code, y); pdf.text('LINK', X.link, y);
+      y += 2.5; pdf.setDrawColor(220); pdf.line(M, y, W - M, y); y += 5;
+    };
+    head();
+    // istruzioni per i capitani, in cima alla prima pagina
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(80);
+    const help = pdf.splitTextToSize(t('tmCodesPdfHelp'), W - 2 * M);
+    pdf.text(help, M, y - 1); y += help.length * 3.8 + 5;
+    levels.forEach(lv => {
+      if (y > 262) head();
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(20); pdf.text(lv, M, y); y += 6;
+      cols();
+      teams.filter(x => x.level === lv).forEach(x => {
+        if (y > 280) { head(); cols(); }
+        const c = teamCodeOf(x.id).id;
+        pdf.setFont('helvetica', 'bold'); pdf.setTextColor(20); pdf.text(fit(x.name, X.cap - X.team - 3, 10), X.team, y);
+        pdf.setFont('helvetica', 'normal'); pdf.setTextColor(60); pdf.text(fit(x.captainName || '—', X.code - X.cap - 3, 9), X.cap, y);
+        pdf.setFont('courier', 'bold'); pdf.setFontSize(11); pdf.setTextColor(20); pdf.text(c, X.code, y);
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7); pdf.setTextColor(60); pdf.textWithLink(codeLink(c).replace(/^https?:\/\//, ''), X.link, y, { url: codeLink(c) });
+        y += 2.8; pdf.setDrawColor(235); pdf.line(M, y, W - M, y); y += 5.2;
+      });
+      y += 4;
+    });
+    saveBlob(pdf.output('blob'), `codici-capitani-${now.toLocaleDateString('sv')}.pdf`);
   }
 
   // capitano: entra con il codice della squadra, quando vuole e da qualsiasi dispositivo (nessun account personale)
@@ -4014,6 +4063,7 @@
         .then(() => { ui.rosterImport = null; ui.flash = { text: t('rimDone', { k: go.length, p: go.reduce((a, x) => a + x.players.length, 0) }) }; render(); })
         .catch(e => { el.disabled = false; vErr(e); });
     },
+    'tm-codes-pdf': el => { el.disabled = true; teamCodesPdf().catch(vErr).finally(() => { el.disabled = false; }); },
     'tm-code-copy': el => copyText(t('tmCodeMsg', { c: el.dataset.code, l: codeLink(el.dataset.code) })),
     'tm-codes-copy': () => copyText((S().teams || []).slice().sort(byLevel).filter(x => teamCodeOf(x.id))
       .map(x => `${x.name} (${x.level}): ${teamCodeOf(x.id).id} · ${codeLink(teamCodeOf(x.id).id)}`).join('\n')),
@@ -4172,7 +4222,7 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
+  const TOUR_ACTIONS = new Set(['tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
   const TOUR_FORMS = new Set(['vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);

@@ -655,6 +655,8 @@ const I18n = (() => {
       rimBadFile: 'File non valido: serve il file .json delle liste dei giocatori.',
       userResetPw: 'Email per cambiare la password', userResetPwConfirm: 'Mandare a {n} ({e}) l\'email per scegliere una nuova password?',
       userResetPwSent: 'Email per cambiare la password inviata a {n} ({e}). Il link vale circa un\'ora.',
+      tmCodesPdf: 'Scarica il PDF', tmCodeShort: 'Codice', tmCodesPdfTitle: 'Manofuori Cup · Codici dei capitani', tmCodesPdfSub: 'Riservato agli organizzatori · {d} · {n} squadre', tmCodesPdfPage: 'pagina {p}',
+      tmCodesPdfHelp: "Il capitano apre il link oppure va su manofuori.it, Squadre, e scrive il codice: entra nella scheda della sua squadra e inserisce o corregge la lista dei giocatori, quando vuole e da qualsiasi dispositivo. Un nuovo codice annulla quello vecchio. Non diffondere questo elenco: ogni codice dà accesso alla lista della sua squadra.",
       tmLoginFirst: "Le squadre le iscrivono i capitani abilitati dall’organizzatore: accedi con il tuo account da capitano.",
       tmName: "Nome della squadra",
       tmLevel: "Livello",
