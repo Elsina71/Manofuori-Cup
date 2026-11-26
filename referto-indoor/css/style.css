@@ -93,6 +93,8 @@ textarea { resize: vertical; }
 .badge.done { background: var(--primary); color: #fff; }
 .badge.warn { background: var(--warn); color: #fff; }
 .badge.serve { background: var(--ok); color: #fff; }
+.badge.recv { background: var(--danger); color: #fff; }
+.tp-name .badge { vertical-align: middle; margin-left: .3rem; }
 .dot { display: inline-block; width: .8rem; height: .8rem; border-radius: 50%; vertical-align: middle; }
 .dot.team-A { background: var(--a); }
 .dot.team-B { background: var(--b); }

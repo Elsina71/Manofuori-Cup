@@ -119,6 +119,8 @@
   }
 
   const stateOf = m => R.replay(m);
+  // chi serve (verde) e chi riceve (rosso): nelle formazioni e durante il set, a ogni cambio palla
+  const srvTag = on => `<span class="badge ${on ? 'serve' : 'recv'}">${on ? 'al servizio' : 'in ricezione'}</span>`;
 
   function viewFor(m) {
     if (!m) return 'home';
@@ -448,7 +450,7 @@
     }).join('')}</div>`;
     const dlist = tm => `<datalist id="dl-${tm}">${playable(m, tm).filter(n => !st.barredMatch[tm][n]).map(n => `<option value="${sh(n)}">${esc(pLabel(m, tm, n))}</option>`).join('')}</datalist>`;
     const court = (tm, side) => `<div class="lineup-court team-${tm}">
-      <h3><span class="dot team-${tm}"></span> ${esc(teamName(m, tm))}${L.serving === tm ? ' · <span class="badge serve">al servizio</span>' : ''}</h3>
+      <h3><span class="dot team-${tm}"></span> ${esc(teamName(m, tm))}${L.serving ? ` · ${srvTag(L.serving === tm)}` : ''}</h3>
       <div class="net-label">rete</div><div class="court-grid">${GRID.map(p => pos(tm, p)).join('')}</div>${dlist(tm)}
       ${libRow(tm)}
       <div class="row rot-row"><span class="muted small">P1 = al servizio · rotazione:</span>
@@ -604,7 +606,7 @@
       const lead = set.score[tm] - set.score[other(tm)];
       const setPoint = (set.score[tm] + 1 >= set.target && lead >= 1) || (S.cap && set.score[tm] + 1 >= S.cap && lead >= 0);
       return `<section class="team-panel team-${tm} ${set.serving === tm ? 'serving' : ''}">
-        <div class="tp-head"><span class="tp-name">${esc(teamName(m, tm))}</span><span class="tp-sets" title="Set vinti">${st.setsWon[tm]}</span></div>
+        <div class="tp-head"><span class="tp-name">${esc(teamName(m, tm))} ${srvTag(set.serving === tm)}</span><span class="tp-sets" title="Set vinti">${st.setsWon[tm]}</span></div>
         ${court(tm, side)}
         <button class="score-btn" data-point="${tm}" aria-label="Punto a ${esc(teamName(m, tm))}"><span class="score">${set.score[tm]}</span><span class="plus">+1 punto</span></button>
         <div class="tp-foot">
