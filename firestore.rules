@@ -177,7 +177,9 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['refConfirmedAt', 'refDeclinedAt'])
         && (request.resource.data.get('refConfirmedAt', null) == null || request.resource.data.refConfirmedAt is int)
         && (request.resource.data.get('refDeclinedAt', null) == null || request.resource.data.refDeclinedAt is int);
+      // risultato dall'account del campo o dall'arbitro: solo finché la gara non è omologata (approvedAt), poi solo gli admin
       allow update: if staffFor(resource.data.tid, id)
+        && resource.data.get('approvedAt', null) == null
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sets', 'status', 'golden', 'by', 'updated'])
         && request.resource.data.status in ['sched', 'done']
         && request.resource.data.sets is list && request.resource.data.sets.size() <= 5

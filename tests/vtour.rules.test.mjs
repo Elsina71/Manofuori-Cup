@@ -129,6 +129,15 @@ await t('l\'account del campo non lo legge', assertFails(getDoc(doc(sc1, 'teamCo
 await t('un utente registrato non lo legge', assertFails(getDoc(doc(user, 'teamContacts', 'tm1'))));
 await t('chi non ha fatto l\'accesso non lo legge', assertFails(getDoc(doc(anon, 'teamContacts', 'tm1'))));
 await t('un utente non lo scrive', assertFails(setDoc(doc(user, 'teamContacts', 'tm2'), { name: 'x', phone: '1' })));
+// omologazione: dopo l'omologa solo gli admin modificano il risultato
+await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'vmatches', 'T1_g-A-d9-0'), { tid: 'T1', key: 'g-A-d9-0', home: 'a', away: 'b', sets: [], status: 'sched' }));
+await t('il referto chiuso manda il risultato (in attesa di omologazione)', assertSucceeds(updateDoc(doc(sc1, 'vmatches', 'T1_g-A-d9-0'), { sets, status: 'done', by: 'campo1@x.it', updated: 1 })));
+await t('lo scorer non si omologa da solo', assertFails(updateDoc(doc(sc1, 'vmatches', 'T1_g-A-d9-0'), { approvedAt: 5, by: 'campo1@x.it', updated: 2 })));
+await t('l\'admin tornei omologa', assertSucceeds(updateDoc(doc(org, 'vmatches', 'T1_g-A-d9-0'), { approvedAt: 5, approvedBy: 'org@x.it', updated: 3 })));
+await t('omologata: lo scorer non cambia più il risultato', assertFails(updateDoc(doc(sc1, 'vmatches', 'T1_g-A-d9-0'), { sets: [], status: 'sched', by: 'campo1@x.it', updated: 4 })));
+await t('omologata: l\'admin tornei la corregge', assertSucceeds(updateDoc(doc(org, 'vmatches', 'T1_g-A-d9-0'), { sets, status: 'done', updated: 5 })));
+await t('l\'admin tornei la riapre', assertSucceeds(updateDoc(doc(org, 'vmatches', 'T1_g-A-d9-0'), { approvedAt: null, approvedBy: '', updated: 6 })));
+await t('riaperta: lo scorer può di nuovo correggere', assertSucceeds(updateDoc(doc(sc1, 'vmatches', 'T1_g-A-d9-0'), { sets, status: 'done', by: 'campo1@x.it', updated: 7 })));
 console.log(`\n${ok} ok, ${ko} falliti`);
 await env.cleanup();
 process.exit(ko ? 1 : 0);

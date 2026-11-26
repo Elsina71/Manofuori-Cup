@@ -1061,6 +1061,14 @@ function saveTeam(id, team, players) {
   batch.set(doc(db, 'rosters', ref.id), { captainUid: team.captainUid, players, updated: now });
   return batch.commit().then(() => ref.id);
 }
+// Omologazione di una gara (admin tornei): blocca il risultato per gli account dei campi e gli arbitri, anche nel referto
+async function approveVMatch(id, on) {
+  if (!canTour()) return;
+  const now = Date.now(), by = (user.email || '').toLowerCase();
+  await updateDoc(doc(db, 'vmatches', id), on ? { approvedAt: now, approvedBy: by, updated: now } : { approvedAt: null, approvedBy: '', updated: now });
+  const r = await getDoc(doc(db, 'referti', id)).catch(() => null);
+  if (r && r.exists() && r.data().status !== 'ready' && r.data().status !== 'live') await updateDoc(doc(db, 'referti', id), on ? { status: 'approved', approvedAt: now, updated: now, updatedBy: by } : { status: 'finished', approvedAt: null, updated: now, updatedBy: by });
+}
 function setTeamStatus(id, status) { return updateDoc(doc(db, 'teams', id), { status, updated: Date.now() }); }
 function deleteTeam(id) {
   const batch = writeBatch(db);
@@ -1432,6 +1440,7 @@ window.Cloud = {
   makeTeamCodes,
   codeLogin,
   importRosters,
+  approveVMatch,
   importContacts,
   restoreVTour,
   purgeTrash,

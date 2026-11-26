@@ -2482,7 +2482,7 @@
     return VL.standings(grp ? grp.teams : [], vGroupMatches(tour, g), names);
   };
   // chi inserisce i risultati: admin tornei, account del campo del torneo, oppure l'arbitro assegnato alla gara (m)
-  const vCanScore = (tour, m) => tourAdmin() || (!!scorer() && tour.status !== 'done' && (isRef() ? !!m && !!m.referee && m.referee === myUid() : (!scorer().tid || scorer().tid === tour.id)));
+  const vCanScore = (tour, m) => tourAdmin() || (!!scorer() && tour.status !== 'done' && !(m && m.approvedAt) && (isRef() ? !!m && !!m.referee && m.referee === myUid() : (!scorer().tid || scorer().tid === tour.id)));
   const vStarted = tour => vtMatches(tour.id).some(m => m.status === 'done');
   const fmtQ = q => (q === Infinity ? '∞' : q.toFixed(3).replace('.', ','));
   const vResult = m => { const r = VL.tally(vSets(m)); return `${r.sh}-${r.sa}`; };
@@ -2808,15 +2808,17 @@
     const name = (id, w) => `<span class="${w ? 'vm-win' : ''}">${esc(vTeamName(tour, id))}</span>`;
     return `<li class="vm-row ${done ? 'done' : ''}" id="vm-${m.id}">
       <div class="vm-teams">${name(m.home, r && r.winner === 'h')} <span class="muted">–</span> ${name(m.away, r && r.winner === 'a')}</div>
-      <div class="vm-score">${done ? `<strong>${vResult(m)}</strong> <small class="muted">(${esc(vSetsText(m))})</small>`
+      <div class="vm-score">${done ? `<strong>${vResult(m)}</strong> <small class="muted">(${esc(vSetsText(m))})</small> ${m.approvedAt ? `<span class="badge st-done"><i class="ti ti-rosette-discount-check" aria-hidden="true"></i> ${esc(t('vmApproved'))}</span>` : `<span class="badge ref-todo">${esc(t('vmPending'))}</span>`}`
         : liveNow ? `<span class="badge live-b">${esc(t('vmLive'))}</span> <strong>${esc(vLiveText(lv))}</strong>`
         : refDone ? `<span class="badge warn-b">${esc(t('vmRefDone'))}</span> <strong>${esc(vLiveText(lv))}</strong>`
         : `<span class="muted small">${esc(t('vmToPlay'))}</span>`}</div>
       <div class="vm-when muted small">${m.date || m.time ? `<i class="ti ti-calendar" aria-hidden="true"></i> ${esc(vWhen(m))}` : esc(t('vmNoDate'))}${m.place ? ` · <i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(m.place)}` : ''}${m.mode === 'bo5' ? ` · ${esc(t('vmBo5'))}` : ''}${m.refereeName && (tourAdmin() || scorer()) ? ` · <i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(m.refereeName)}` : ''}</div>
       ${vCanScore(tour, m) && !editing ? `<div class="btn-row vm-actions">
+        ${tourAdmin() && done && !m.approvedAt ? `<button class="btn small primary" data-action="vm-approve" data-id="${m.id}"><i class="ti ti-rosette-discount-check" aria-hidden="true"></i> ${esc(t('vmApprove'))}</button>` : ''}
+        ${tourAdmin() && done && m.approvedAt ? `<button class="btn small" data-action="vm-reopen" data-id="${m.id}"><i class="ti ti-lock-open" aria-hidden="true"></i> ${esc(t('vmReopen'))}</button>` : ''}
         ${refDone ? `<button class="btn small primary" data-action="vm-fromref" data-id="${m.id}"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('vmFromRef'))}</button>` : ''}
         ${vCanEscore(tour, m) && !done ? `<button class="btn small" data-action="vm-escore" data-id="${m.id}"><i class="ti ti-device-tablet" aria-hidden="true"></i> E-scoresheet</button>` : ''}
-        <button class="btn small" data-action="vm-edit" data-id="${m.id}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t(tourAdmin() ? 'vmEdit' : 'vmResult'))}</button></div>` : ''}
+        ${tourAdmin() && m.approvedAt ? '' : `<button class="btn small" data-action="vm-edit" data-id="${m.id}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t(tourAdmin() ? 'vmEdit' : 'vmResult'))}</button>`}</div>` : ''}
       ${editing ? vmForm(tour, m) : ''}
     </li>`;
   }
@@ -3084,11 +3086,22 @@
       window.Cloud.updateVMatch(m.id, { sets: sets.map(([h, a]) => ({ h, a })), status: 'done', by: (window.Cloud.user.email || '').toLowerCase() })
         .then(() => { ui.flash = { text: t('vmFromRefDone') }; render(); }).catch(vErr);
     },
+    'vm-approve': el => {
+      const m = vmById(el.dataset.id);
+      if (!m || !tourAdmin() || m.status !== 'done') return;
+      el.disabled = true;
+      window.Cloud.approveVMatch(m.id, true).then(() => { ui.flash = { text: t('vmApprovedDone') }; render(); }).catch(e => { el.disabled = false; vErr(e); });
+    },
+    'vm-reopen': el => {
+      const m = vmById(el.dataset.id);
+      if (!m || !tourAdmin() || !confirmed('vmReopenConfirm')) return;
+      window.Cloud.approveVMatch(m.id, false).then(() => { ui.flash = { text: t('vmReopened') }; render(); }).catch(vErr);
+    },
     'vm-clear': el => {
       const m = vmById(el.dataset.id), tour = m && vtById(m.tid);
       if (!m || !vCanScore(tour, m) || !confirmed('vmClearConfirm')) return;
       if (m.stage === 'p' && vtMatches(tour.id).some(x => x.stage === 'p' && x.bracket === m.bracket && x.round > m.round)) return warn('vmNextRound');
-      window.Cloud.updateVMatch(m.id, Object.assign({ sets: [], status: 'sched', by: (window.Cloud.user.email || '').toLowerCase() }, m.stage === 'p' ? { golden: null } : {})).then(() => { ui.vmEdit = null; render(); }).catch(vErr);
+      window.Cloud.updateVMatch(m.id, Object.assign({ sets: [], status: 'sched', by: (window.Cloud.user.email || '').toLowerCase() }, m.stage === 'p' ? { golden: null } : {}, tourAdmin() ? { approvedAt: null, approvedBy: '' } : {})).then(() => { ui.vmEdit = null; render(); }).catch(vErr);
     }
   };
   const vtForms = {
@@ -3185,6 +3198,8 @@
         const err = VL.checkSets(sets, m.mode === 'bo5' ? 'bo5' : '3');
         if (err) return warn(err);
         Object.assign(patch, { sets: sets.map(([h, a]) => ({ h, a })), status: 'done', by: (window.Cloud.user.email || '').toLowerCase() });
+        // inserito a mano da un admin: già omologato; da un account del campo o da un arbitro: in attesa di omologazione
+        if (tourAdmin()) Object.assign(patch, { approvedAt: Date.now(), approvedBy: (window.Cloud.user.email || '').toLowerCase() });
       } else if (!tourAdmin()) return warn('vNoSets');
       if (m.stage === 'p' && sets.length) patch.golden = null;
       const notified = tourAdmin() ? vNotifyChanges(tour, [[m, { date: patch.date, time: patch.time, place: patch.place }]]) : 0;
@@ -4416,7 +4431,7 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['ref-remove', 'ref-resetpw', 'tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
+  const TOUR_ACTIONS = new Set(['vm-approve', 'vm-reopen', 'ref-remove', 'ref-resetpw', 'tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
   const TOUR_FORMS = new Set(['ref-add', 'vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
