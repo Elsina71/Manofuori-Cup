@@ -93,7 +93,7 @@
     }
     const r = route();
     if (window.Cloud && window.Cloud.watchLive) {
-      window.Cloud.watchLive(r[0] === 'vt' && vtById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? liveTourIds() : r[0] === 'gare' || r[0] === 'me' || r[0] === 'formazione' || (r[0] === 'teams' && teamCap()) ? myTourIds()
+      window.Cloud.watchLive(r[0] === 'live' && vmById(decodeURIComponent(r[1] || '')) ? vmById(decodeURIComponent(r[1])).tid : r[0] === 'vt' && vtById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? liveTourIds() : r[0] === 'gare' || r[0] === 'me' || r[0] === 'formazione' || (r[0] === 'teams' && teamCap()) ? myTourIds()
         // prima pagina e pagina Tornei: risultati in diretta delle gare dei tornei in corso (e di quelli delle mie squadre)
         : !r[0] || r[0] === 'tornei' || r[0] === 'tournaments' ? [...new Set((S().vtours || []).filter(x => x.status === 'live').map(x => x.id).concat(myTourIds()))] : null);
       // formazioni dei capitani: quelle che si possono dare adesso (per sapere se sono già state inviate)
@@ -113,6 +113,7 @@
     else if (r[0] === 'tema') { nav = 'settings'; html = viewTheme(); }
     else if (r[0] === 'livelli' && tourAdmin()) { nav = 'settings'; html = viewLevels(); }
     else if (r[0] === 'gare') { nav = 'gare'; html = viewMyMatches(); }
+    else if (r[0] === 'live' && r[1]) { nav = 'tournaments'; html = viewLiveMatch(decodeURIComponent(r[1])); }
     else if (r[0] === 'formazione' && r[1]) { nav = 'teams'; html = viewLineupSheet(decodeURIComponent(r[1])); }
     else if (r[0] === 'tornei' || r[0] === 'tournaments') { html = viewVTours(); }
     else if (r[0] === 'vt' && vtById(r[1])) { html = viewVTour(vtById(r[1]), r[2]); }
@@ -130,7 +131,8 @@
     $app.innerHTML = flashHtml() + html;
     updateChrome(nav);
     // scheda della formazione: a tutto schermo (senza intestazione e menu), con la firma
-    document.body.classList.toggle('lu-full', r[0] === 'formazione');
+    document.body.classList.toggle('lu-full', r[0] === 'formazione' || r[0] === 'live');
+    document.body.classList.toggle('lv-full', r[0] === 'live');
     if (r[0] === 'formazione') { luSignPad(); const inp = $app.querySelector('[data-lu-num]'); if (inp) { inp.focus(); inp.select(); } }
     fitEditorial();
   }
@@ -2515,7 +2517,50 @@
     return `<div class="tlive">${rows.slice(0, 4).map(m => { const lv = vLive(m); return `<div class="tlive-row">
       <span class="live-badge live-blink"><i class="dot" aria-hidden="true"></i>${esc(t('liveBadge'))}</span>
       <span class="tlive-teams">${esc(vTeamName(tour, m.home))} – ${esc(vTeamName(tour, m.away))}</span>
-      <strong class="tlive-score">${esc(vLiveText(lv))}</strong></div>`; }).join('')}</div>`;
+      <strong class="tlive-score">${esc(vLiveText(lv))}</strong>
+      <a class="btn small tlive-follow" href="#/live/${encodeURIComponent(m.id)}"><i class="ti ti-broadcast" aria-hidden="true"></i> ${esc(t('lvFollow'))}</a></div>`; }).join('')}</div>`;
+  }
+  // ---------- pagina "Segui il live" (#/live/{gara}): tabellone grande e successione dei punti ----------
+  // lv.pts = un testo per set: a/b punto di casa/ospiti, A/B time-out di casa/ospiti (dal referto elettronico)
+  function viewLiveMatch(mid) {
+    const m = vmById(mid), tour = m && vtById(m.tid);
+    if (!m || !tour) return `<div class="lv"><div class="lv-in"><button class="lv-x" data-action="lv-close" aria-label="${esc(t('luBackApp'))}"><i class="ti ti-arrow-left" aria-hidden="true"></i></button><p class="lv-empty">${esc(t('lvNone'))}</p></div></div>`;
+    const lv = vLive(m) || {}, A = vTeamName(tour, m.home), B = vTeamName(tour, m.away);
+    const sets = lv.sets || [], pts = lv.pts || [], won = lv.setsWon || {}, cur = lv.cur;
+    const finished = lv.status === 'finished' || !!lv.winner || m.status === 'done';
+    const live = !finished && lv.status === 'live' && (sets.length || cur);
+    const score = s => (Array.isArray(s) ? { a: s[0], b: s[1] } : s || { a: 0, b: 0 });
+    const last = cur ? { a: cur.a, b: cur.b } : sets.length ? score(sets[sets.length - 1]) : { a: 0, b: 0 };
+    const setNo = cur ? cur.set : sets.length || 1;
+    const serve = live && cur ? lv.serving : null;
+    const winner = lv.winner || (m.status === 'done' && VL.tally(vSets(m)).winner === 'h' ? 'a' : m.status === 'done' ? 'b' : null);
+    const badge = live ? `<span class="live-badge live-blink"><i class="dot" aria-hidden="true"></i>${esc(t('liveBadge'))}</span>` : `<span class="lv-state">${esc(t(finished ? 'lvEnded' : 'lvWaiting'))}</span>`;
+    const side = (k, name) => `<div class="lv-team ${winner === k ? 'win' : ''} lv-${k}"><div class="lv-name">${esc(name)}</div><div class="lv-sets" aria-label="${esc(t('lvSetsWon'))}">${won[k] || 0}</div>${serve === k ? `<span class="lv-serve"><i class="ti ti-ball-volleyball" aria-hidden="true"></i> ${esc(t('lvServe'))}</span>` : ''}</div>`;
+    // successione dei punti: una colonna per punto, il numero nella riga della squadra che lo fa; T = time-out
+    const ladder = (code, i) => {
+      if (!code) return '';
+      let a = 0, b = 0;
+      const cols = [...code].map(ch => {
+        if (ch === 'a') { a++; return `<span class="lv-col"><b class="lv-a">${a}</b><i></i></span>`; }
+        if (ch === 'b') { b++; return `<span class="lv-col"><i></i><b class="lv-b">${b}</b></span>`; }
+        return ch === 'A' ? `<span class="lv-col to" title="${esc(t('lvTimeout'))}"><b>T</b><i></i></span>` : `<span class="lv-col to" title="${esc(t('lvTimeout'))}"><i></i><b>T</b></span>`;
+      }).join('');
+      const sc = score(sets[i]), running = cur && cur.set === i + 1;
+      return `<section class="lv-set ${running ? 'now' : ''}"><h3>${esc(t('luSetN', { n: i + 1 }))} <span>${sc.a}–${sc.b}</span>${running ? ` <small>${esc(t('lvRunning'))}</small>` : ''}</h3>
+        <div class="lv-ladder"><div class="lv-heads"><span class="lv-a">${esc(A)}</span><span class="lv-b">${esc(B)}</span></div><div class="lv-cols">${cols}</div></div></section>`;
+    };
+    const order = pts.map((code, i) => i).reverse();
+    return `<div class="lv"><div class="lv-in">
+      <div class="lv-top"><button class="lv-x" data-action="lv-close" aria-label="${esc(t('luBackApp'))}"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+        <div class="lv-tour">${esc(tour.name)}<small>${esc(vWhen(m) || '')}${m.place ? ' · ' + esc(m.place.split(' – ')[0]) : ''}</small></div>${badge}</div>
+      <div class="lv-board">${side('a', A)}
+        <div class="lv-mid"><div class="lv-setno">${esc(t('luSetN', { n: setNo }))}</div><div class="lv-score"><span class="lv-a">${last.a}</span><em>:</em><span class="lv-b">${last.b}</span></div></div>
+        ${side('b', B)}</div>
+      ${sets.length ? `<div class="lv-chips">${sets.map((x, i) => { const sc = score(x), running = cur && cur.set === i + 1; return `<span class="${running ? 'now' : ''}">${esc(t('luSetN', { n: i + 1 }))} <b>${sc.a}–${sc.b}</b></span>`; }).join('')}</div>` : ''}
+      <h2 class="lv-h">${esc(t('lvSeq'))}</h2>
+      ${pts.some(Boolean) ? order.map(i => ladder(pts[i], i)).join('') : `<p class="lv-empty">${esc(t(sets.length ? 'lvNoSeq' : 'lvNotStarted'))}</p>`}
+      <p class="lv-legend">${esc(t('lvLegend'))}</p>
+    </div></div>`;
   }
   function vtCard(tour, inEvent) {
     const ms = vtMatches(tour.id), done = ms.filter(m => m.status === 'done').length, pct = ms.length ? Math.round(done * 100 / ms.length) : 0;
@@ -2820,7 +2865,7 @@
     return `<li class="vm-row ${done ? 'done' : ''}" id="vm-${m.id}">
       <div class="vm-teams">${name(m.home, r && r.winner === 'h')} <span class="muted">–</span> ${name(m.away, r && r.winner === 'a')}</div>
       <div class="vm-score">${done ? `<strong>${vResult(m)}</strong> <small class="muted">(${esc(vSetsText(m))})</small> ${m.approvedAt ? `<span class="badge st-done"><i class="ti ti-rosette-discount-check" aria-hidden="true"></i> ${esc(t('vmApproved'))}</span>` : `<span class="badge ref-todo">${esc(t('vmPending'))}</span>`}`
-        : liveNow ? `<span class="badge live-b">${esc(t('vmLive'))}</span> <strong>${esc(vLiveText(lv))}</strong>`
+        : liveNow ? `<span class="badge live-b">${esc(t('vmLive'))}</span> <strong>${esc(vLiveText(lv))}</strong> <a class="btn small tlive-follow" href="#/live/${encodeURIComponent(m.id)}"><i class="ti ti-broadcast" aria-hidden="true"></i> ${esc(t('lvFollow'))}</a>`
         : refDone ? `<span class="badge warn-b">${esc(t('vmRefDone'))}</span> <strong>${esc(vLiveText(lv))}</strong>`
         : `<span class="muted small">${esc(t('vmToPlay'))}</span>`}</div>
       <div class="vm-when muted small">${m.date || m.time ? `<i class="ti ti-calendar" aria-hidden="true"></i> ${esc(vWhen(m))}` : esc(t('vmNoDate'))}${m.place ? ` · <i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(m.place)}` : ''}${m.mode === 'bo5' ? ` · ${esc(t('vmBo5'))}` : ''}${m.refereeName && (tourAdmin() || scorer()) ? ` · <i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(m.refereeName)}` : ''}</div>
@@ -4477,6 +4522,7 @@
       window.Cloud.confirmReferee(m.id, text).then(() => { ui.flash = { text: t('refConfirmDone') }; render(); }).catch(e => { el.disabled = false; vErr(e); });
     },
     'tm-nums-edit': el => { ui.tmNums = el.dataset.id || null; render(); },
+    'lv-close': () => { if (history.length > 1) history.back(); else location.hash = '#/'; },
     'lu-open': el => {
       const m = vmById(el.dataset.id);
       if (!m || !luState(m.id)) return;
@@ -4627,7 +4673,7 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   // scheda della formazione del capitano: le azioni controllano da sole chi è il capitano (luMine)
   const LU_ACTIONS = new Set(['lu-open', 'lu-close', 'lu-sel', 'lu-pick', 'lu-hand', 'lu-handok', 'lu-clear', 'lu-next', 'lu-back', 'lu-sign-clear', 'lu-confirm']);
-  const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
+  const PUBLIC_ACTIONS = new Set(['lv-close', 'set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
   const TOUR_ACTIONS = new Set(['vm-approve', 'vm-reopen', 'ref-remove', 'ref-resetpw', 'tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
   const TOUR_FORMS = new Set(['ref-add', 'vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);

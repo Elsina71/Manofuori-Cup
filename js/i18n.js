@@ -663,6 +663,8 @@ const I18n = (() => {
       refRemoveConfirm: "Togliere l'arbitro {e}? Non potrà più compilare referti e viene tolto dalle gare assegnate.", refRemoved: 'Arbitro tolto.',
       refAdded: 'Arbitro creato: {n} ({e}).', refExists: "Questa email ha già un account con un'altra password: usa la sua password o un'altra email.",
       refMember: "Questa email è di un giocatore registrato nell'app: per l'arbitro usa un'altra email.",
+      lvFollow: 'Segui il live', lvNone: 'Gara non trovata.', lvEnded: 'Finita', lvWaiting: 'Non ancora iniziata', lvSetsWon: 'Set vinti', lvServe: 'al servizio', lvTimeout: 'Time-out', lvRunning: 'in corso', lvSeq: 'Successione dei punti',
+      lvNoSeq: 'La successione dei punti compare quando il referto elettronico è aggiornato.', lvNotStarted: 'La gara non è ancora iniziata: il punteggio si aggiorna da solo.', lvLegend: 'Ogni colonna è un punto: il numero è il punteggio della squadra che lo ha fatto. T = time-out. La pagina si aggiorna da sola.',
       luBackApp: 'Torna all\'app', luVs: 'contro', luHand: 'a mano', luOptional: 'facoltativi', luSign: 'Firma del capitano', luSignClear: 'Cancella', luSignHere: 'Firma qui con il dito',
       luAllSet: 'Formazione completa: tocca un posto per cambiarlo, oppure vai avanti.', luHandHead: '{p}: scrivi il numero di maglia', luNoListHead: '{p}: scrivi il numero di maglia (anche 0, 00, 000)', luOk: 'OK', luFromList: 'Scegli dalla lista', luClear: 'Svuota il posto',
       luPickHead: '{p}: tocca un compagno', luByHand: 'numero a mano', luNoList: 'La squadra non ha la lista nel sito: scrivi i numeri di maglia dei compagni.', luNext: 'Avanti: controlla e firma', luDup: 'Il numero {n} è già in un altro posto.', luBadNum: 'Numero non valido: da 0 a 99, oppure 00 o 000.',

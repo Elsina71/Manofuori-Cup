@@ -1108,6 +1108,15 @@
     const LABEL = { ok: 'In diretta', wait: 'In attesa di rete', err: 'Non autorizzato' };
     function dot() { return `<span class="sync sync-${sync.state}"><i></i>${LABEL[sync.state]}</span>`; }
     function setState(v) { sync.state = v; const el = $topInfo.querySelector('.sync'); if (el) el.outerHTML = dot(); }
+    // successione dei punti di un set: i time-out entrano al punteggio in cui sono stati chiesti
+    function seq(set) {
+      const tos = [];
+      ['A', 'B'].forEach(t => (set.timeouts[t] || []).forEach(x => tos.push({ t, n: (x.score ? (x.score.A || 0) + (x.score.B || 0) : 0) })));
+      let out = '';
+      (set.rallies || []).forEach((r, i) => { tos.filter(x => x.n === i).forEach(x => { out += x.t; }); out += r.winner.toLowerCase(); });
+      tos.filter(x => x.n >= (set.rallies || []).length).forEach(x => { out += x.t; });
+      return out;
+    }
     // Dati pubblici (punteggio in diretta) e completi (referto) per l'app del torneo
     function data(m) {
       const st = stateOf(m);
@@ -1122,7 +1131,9 @@
           cur: c ? { set: c.index + 1, a: c.score.A, b: c.score.B } : null,
           serving: c ? c.serving.toLowerCase() : null,
           winner: st.winner ? st.winner.toLowerCase() : null,
-          outcome: st.forfeit ? { type: 'forfeit', team: st.forfeit.team.toLowerCase() } : null
+          outcome: st.forfeit ? { type: 'forfeit', team: st.forfeit.team.toLowerCase() } : null,
+          // successione dei punti di ogni set (pubblica, senza nomi): a/b = punto, A/B = time-out di quella squadra
+          pts: st.sets.map(seq)
         },
         ref: { json: JSON.stringify(copy), closedAt: m.closedAt || null }
       };

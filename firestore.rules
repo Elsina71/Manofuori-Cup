@@ -114,9 +114,9 @@ service cloud.firestore {
     // referti/{torneo}_{gara}: un documento per gara con tutti i dati del referto (firme comprese).
     match /referti/{id} {
       allow read: if isStaff();
-      allow create: if isTourAdmin() || (staffFor(request.resource.data.tid, id) && rightId(id) && scorerSets(['tid', 'key', 'a', 'b', 'court', 'info', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'json', 'createdBy', 'createdAt', 'updated', 'updatedBy', 'approvedAt', 'closedAt']));
+      allow create: if isTourAdmin() || (staffFor(request.resource.data.tid, id) && rightId(id) && scorerSets(['tid', 'key', 'a', 'b', 'court', 'info', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'pts', 'json', 'createdBy', 'createdAt', 'updated', 'updatedBy', 'approvedAt', 'closedAt']));
       allow update: if isTourAdmin() || (staffFor(resource.data.tid, id) && resource.data.status in ['ready', 'live', 'finished'] && sameMatch()
-        && scorerSets(['tid', 'key', 'a', 'b', 'court', 'info', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'json', 'createdBy', 'createdAt', 'updated', 'updatedBy', 'approvedAt', 'closedAt']));
+        && scorerSets(['tid', 'key', 'a', 'b', 'court', 'info', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'pts', 'json', 'createdBy', 'createdAt', 'updated', 'updatedBy', 'approvedAt', 'closedAt']));
       allow delete: if isTourAdmin();
     }
 
@@ -131,9 +131,9 @@ service cloud.firestore {
     // live/{torneo}_{gara}: punteggio in diretta, pubblico (senza dati personali né firme).
     match /live/{id} {
       allow read: if true;
-      allow create: if isTourAdmin() || (staffFor(request.resource.data.tid, id) && rightId(id) && scorerSets(['tid', 'key', 'a', 'b', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'updated', 'approvedAt']));
+      allow create: if isTourAdmin() || (staffFor(request.resource.data.tid, id) && rightId(id) && scorerSets(['tid', 'key', 'a', 'b', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'pts', 'updated', 'approvedAt']));
       allow update: if isTourAdmin() || (staffFor(resource.data.tid, id) && resource.data.status in ['ready', 'live', 'finished'] && sameMatch()
-        && scorerSets(['tid', 'key', 'a', 'b', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'updated', 'approvedAt']));
+        && scorerSets(['tid', 'key', 'a', 'b', 'status', 'sets', 'setsWon', 'cur', 'serving', 'winner', 'outcome', 'pts', 'updated', 'approvedAt']));
       allow delete: if isTourAdmin();
     }
 
