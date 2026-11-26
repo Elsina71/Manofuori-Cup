@@ -663,6 +663,7 @@ const I18n = (() => {
       refRemoveConfirm: "Togliere l'arbitro {e}? Non potrà più compilare referti e viene tolto dalle gare assegnate.", refRemoved: 'Arbitro tolto.',
       refAdded: 'Arbitro creato: {n} ({e}).', refExists: "Questa email ha già un account con un'altra password: usa la sua password o un'altra email.",
       refMember: "Questa email è di un giocatore registrato nell'app: per l'arbitro usa un'altra email.",
+      luImgBtn: 'Formazioni', luImgTitle: 'Formazioni della gara', luImgNone: 'Nessuna formazione: i capitani non le hanno ancora date e il referto non ha ancora iniziato un set.', luImgDownload: 'Scarica immagine', luImgHelp: 'Una immagine per set con le due squadre: la formazione data dal capitano (con la firma) oppure, se manca, quella scritta nel referto.',
       lvFollow: 'Segui il live', lvNone: 'Gara non trovata.', lvEnded: 'Finita', lvWaiting: 'Non ancora iniziata', lvSetsWon: 'Set vinti', lvServe: 'al servizio', lvTimeout: 'Time-out', lvRunning: 'in corso', lvSeq: 'Successione dei punti',
       lvNoSeq: 'La successione dei punti compare quando il referto elettronico è aggiornato.', lvNotStarted: 'La gara non è ancora iniziata: il punteggio si aggiorna da solo.', lvLegend: 'Ogni riga è un punto, dal più recente: il numero colorato è il punteggio della squadra che lo ha fatto. La pagina si aggiorna da sola.',
       luBackApp: 'Torna all\'app', luVs: 'contro', luHand: 'a mano', luOptional: 'facoltativi', luSign: 'Firma del capitano', luSignClear: 'Cancella', luSignHere: 'Firma qui con il dito',

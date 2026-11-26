@@ -2879,6 +2879,7 @@
         ${tourAdmin() && done && !m.approvedAt ? `<button class="btn small primary" data-action="vm-approve" data-id="${m.id}"><i class="ti ti-rosette-discount-check" aria-hidden="true"></i> ${esc(t('vmApprove'))}</button>` : ''}
         ${tourAdmin() && done && m.approvedAt ? `<button class="btn small" data-action="vm-reopen" data-id="${m.id}"><i class="ti ti-lock-open" aria-hidden="true"></i> ${esc(t('vmReopen'))}</button>` : ''}
         ${refDone ? `<button class="btn small primary" data-action="vm-fromref" data-id="${m.id}"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('vmFromRef'))}</button>` : ''}
+        ${tourAdmin() && (lv || done) ? `<button class="btn small" data-action="vm-lineups" data-id="${m.id}"><i class="ti ti-photo" aria-hidden="true"></i> ${esc(t('luImgBtn'))}</button>` : ''}
         ${vCanEscore(tour, m) && !done ? `<button class="btn small" data-action="vm-escore" data-id="${m.id}"><i class="ti ti-device-tablet" aria-hidden="true"></i> E-scoresheet</button>` : ''}
         ${tourAdmin() && m.approvedAt ? '' : `<button class="btn small" data-action="vm-edit" data-id="${m.id}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t(tourAdmin() ? 'vmEdit' : 'vmResult'))}</button>`}</div>` : ''}
       ${editing ? vmForm(tour, m) : ''}
@@ -3139,6 +3140,7 @@
     },
     'vm-edit': el => { ui.vmEdit = el.dataset.id || null; render(); },
     'vm-escore': el => vEscoreOpen(el.dataset.id),
+    'vm-lineups': el => { vmLineupsDialog(el.dataset.id); },
     'vm-fromref': el => {
       const m = vmById(el.dataset.id), tour = m && vtById(m.tid), lv = m && vLive(m);
       if (!m || !vCanScore(tour, m) || !lv || lv.status !== 'finished') return;
@@ -4208,6 +4210,113 @@
     .replace(/[\u0370-\u03ff]/g, c => { const l = GR[c.toLowerCase()] || ''; return c === c.toLowerCase() ? l : l.charAt(0).toUpperCase() + l.slice(1); })
     .replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '');
 
+  // ---------- formazioni come immagine (admin): una PNG per set, le due squadre affiancate ----------
+  // Fonte: la formazione data dal capitano (con la firma) oppure, se manca, quella scritta nel referto all'inizio del set.
+  const loadImg = src => new Promise(res => { if (!src) return res(null); const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+  async function lineupImage(info) {
+    const W = 1600, H = 1000, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d');
+    try { await Promise.all(['900 40px Inter', '700 20px Inter', '56px "Broken Wing"'].map(f => document.fonts.load(f))); } catch (e) { /* font di sistema */ }
+    const logo = await loadImg('img/logo-fenicottero.png');
+    const F = (w, px, fam) => `${w} ${px}px ${fam || 'Inter, system-ui, sans-serif'}`;
+    const pill = (x, y, w, h, r, fill) => { g.beginPath(); g.roundRect(x, y, w, h, r); g.fillStyle = fill; g.fill(); };
+    const fitText = (txt, x, y, maxW, font, color, align) => { g.font = font; g.fillStyle = color; g.textAlign = align || 'left'; let tx = txt; while (g.measureText(tx).width > maxW && tx.length > 3) tx = tx.slice(0, -2); if (tx !== txt) tx = tx.slice(0, -1) + '…'; g.fillText(tx, x, y); };
+    // foglio bianco con il verde ai lati
+    g.fillStyle = '#1d362c'; g.fillRect(0, 0, W, H); g.fillStyle = '#fff'; g.fillRect(28, 0, W - 56, H);
+    // intestazione: manofuori CUP, set, torneo, gara
+    if (logo) g.drawImage(logo, 60, 26, 98, 64);
+    g.font = F('', 58, '"Broken Wing", Inter, sans-serif'); g.fillStyle = '#1d362c'; g.textAlign = 'left'; g.fillText('manofuori', 168, 80);
+    const mw = g.measureText('manofuori').width; pill(176 + mw, 42, 82, 36, 7, '#e4487a'); g.font = F(900, 22); g.fillStyle = '#fff'; g.fillText('C U P', 190 + mw, 68);
+    pill(W - 420, 30, 360, 56, 28, '#1d362c'); g.font = F(900, 26); g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(`FORMAZIONI · ${info.set}° SET`, W - 240, 67);
+    fitText(info.title, 60, 128, W - 120, F(800, 26), '#16231d');
+    fitText(info.sub, 60, 160, W - 120, F(500, 21), '#5f6f67');
+    // le due squadre
+    const XY = [[83, 58], [83, 6], [50, 4], [17, 6], [17, 58], [50, 64]];
+    const COL = { A: '#1f63d1', B: '#e8590c' };
+    for (const [k, sd] of info.sides.entries()) {
+      const x0 = 60 + k * 760, y0 = 190, pw = 720;
+      fitText(sd.name, x0, y0 + 34, pw - 230, F(900, 34), COL[sd.side]);
+      const tag = sd.src === 'cap' ? 'dal capitano' : sd.src === 'ref' ? 'dal referto' : 'non data';
+      g.font = F(800, 17); const tw = g.measureText(tag).width + 28; pill(x0 + pw - tw, y0 + 8, tw, 32, 16, sd.src === 'cap' ? '#2f9e44' : sd.src === 'ref' ? '#5f6f67' : '#c92a2a');
+      g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(tag, x0 + pw - tw / 2, y0 + 30);
+      // campo: azzurro, mattone chiaro, rete, linea dei 3 m
+      const ax = x0, ay = y0 + 56, aw = pw, ah = 520;
+      const grd = g.createLinearGradient(0, ay, 0, ay + ah); grd.addColorStop(0, '#9fd6fb'); grd.addColorStop(1, '#7cc4f4');
+      g.beginPath(); g.roundRect(ax, ay, aw, ah, 26); g.fillStyle = grd; g.fill();
+      const cx = ax + 30, cy = ay + 44, cw = aw - 60, ch = 400;
+      g.fillStyle = '#f3b694'; g.fillRect(cx, cy, cw, ch); g.strokeStyle = '#fff'; g.lineWidth = 6; g.strokeRect(cx, cy, cw, ch);
+      g.beginPath(); g.moveTo(cx, cy + ch * 0.4); g.lineTo(cx + cw, cy + ch * 0.4); g.stroke();
+      g.fillStyle = '#2b3a33'; g.fillRect(cx - 18, cy - 12, cw + 36, 14); g.fillRect(cx - 18, cy - 24, 9, 38); g.fillRect(cx + cw + 9, cy - 24, 9, 38);
+      g.fillStyle = '#fff'; for (let i = cx - 12; i < cx + cw + 12; i += 11) g.fillRect(i, cy - 10, 3, 10);
+      g.font = F(900, 14); g.fillStyle = '#1b4f72'; g.textAlign = 'center'; g.fillText('R E T E', cx + cw / 2, cy - 30);
+      if (!sd.lineup) { g.font = F(800, 26); g.fillStyle = '#8a4b0c'; g.fillText('Formazione non disponibile', cx + cw / 2, cy + ch / 2); }
+      else sd.lineup.forEach((no, i) => {
+        const px = cx + cw * XY[i][0] / 100, py = cy + ch * XY[i][1] / 100 + 50, r = 44;
+        if (i === 0) { g.beginPath(); g.arc(px, py, r + 8, 0, 7); g.fillStyle = '#2f9e44'; g.fill(); }
+        g.beginPath(); g.arc(px, py, r + 5, 0, 7); g.fillStyle = '#fff'; g.fill();
+        g.beginPath(); g.arc(px, py, r, 0, 7); g.fillStyle = '#e9a17c'; g.fill();
+        g.font = F(900, 40); g.fillStyle = '#fff'; g.textAlign = 'center'; g.fillText(luShow(no), px, py + 14);
+        pill(px - 40, py - r - 6, 38, 22, 11, '#fff'); g.font = F(900, 14); g.fillStyle = '#16231d'; g.fillText('P' + (i + 1), px - 21, py - r + 10);
+        const nm = sd.names[no] || ''; if (nm) { g.font = F(700, 17); const nw = Math.min(150, g.measureText(nm).width + 20); pill(px - nw / 2, py + r + 8, nw, 26, 13, 'rgba(255,255,255,.95)'); fitText(nm, px, py + r + 27, nw - 12, F(700, 17), '#16231d', 'center'); }
+      });
+      // liberi
+      const ly = ay + ah - 46; g.font = F(900, 19); g.fillStyle = '#123b57'; g.textAlign = 'left'; g.fillText('Liberi', cx, ly + 7);
+      (sd.liberi || []).forEach((no, i) => {
+        const lx = cx + 130 + i * 230; g.beginPath(); g.arc(lx, ly, 27, 0, 7); g.fillStyle = '#fff'; g.fill(); g.beginPath(); g.arc(lx, ly, 23, 0, 7); g.fillStyle = '#ffd43b'; g.fill();
+        g.font = F(900, 22); g.fillStyle = '#16231d'; g.textAlign = 'center'; g.fillText(luShow(no), lx, ly + 8);
+        fitText(sd.names[no] || '', lx + 36, ly + 7, 160, F(700, 17), '#16231d');
+      });
+      if (!(sd.liberi || []).length) fitText(sd.lineup ? '—' : '', cx + 130, ly + 7, 200, F(700, 19), '#123b57');
+      // firma del capitano
+      const sy = ay + ah + 20; g.font = F(800, 18); g.fillStyle = '#16231d'; g.textAlign = 'left'; g.fillText('Firma del capitano', x0, sy + 18);
+      g.setLineDash([8, 6]); g.strokeStyle = '#b8c4be'; g.lineWidth = 2; g.beginPath(); g.roundRect(x0, sy + 28, pw, 150, 14); g.stroke(); g.setLineDash([]);
+      const sg = await loadImg(/^data:image\/(png|jpeg);base64,/.test(sd.sign || '') ? sd.sign : '');
+      if (sg) { const ih = 136, iw = Math.min(pw - 20, ih * sg.width / sg.height); g.drawImage(sg, x0 + (pw - iw) / 2, sy + 35, iw, ih); }
+      else { g.font = F(600, 18); g.fillStyle = '#9aa8a1'; g.textAlign = 'center'; g.fillText(sd.src === 'ref' ? 'formazione scritta dal refertista' : 'nessuna firma', x0 + pw / 2, sy + 110); }
+    }
+    return cv.toDataURL('image/png');
+  }
+  async function vmLineupsDialog(id) {
+    const m = vmById(id), tour = m && vtById(m.tid);
+    if (!m || !tour || !tourAdmin()) return;
+    $dialog.innerHTML = `<div class="lu-dl"><h2><i class="ti ti-photo" aria-hidden="true"></i> ${esc(t('luImgTitle'))}</h2><p class="muted"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</p></div>`;
+    $dialog.classList.add('wide-dialog');
+    if (!$dialog.open) $dialog.showModal();
+    let data;
+    try { data = await window.Cloud.loadMatchLineups(m.id); } catch (e) { $dialog.querySelector('p').textContent = t('regError', { code: e.code || e.message }); return; }
+    // referto: formazioni d'inizio set, nomi e liberi delle due squadre (A = casa, B = ospiti)
+    let ref = null; try { ref = data.json ? JSON.parse(data.json) : null; } catch (e) { ref = null; }
+    const starts = ref ? (ref.events || []).filter(e => e.type === 'setStart').map(e => e.lineup) : [];
+    const teamOf = side => teamById(side === 'A' ? m.home : m.away);
+    const names = side => {
+      const out = {};
+      const tm = teamOf(side); if (tm) rosterOf(tm.id).forEach(p => { if (String(p.num || '') !== '') out[luShirt(p.num)] = `${p.last}`; });
+      if (ref && ref.teams && ref.teams[side]) (ref.teams[side].players || []).forEach(p => { if (p.no !== '' && p.no != null && p.name && out[+p.no] == null) out[+p.no] = p.name.split(' ').slice(-1)[0]; });
+      return out;
+    };
+    const refLib = side => (ref && ref.teams && ref.teams[side] ? (ref.teams[side].players || []).filter(p => p.libero && p.no !== '' && p.no != null).map(p => +p.no) : []);
+    const capLib = side => { const c1 = data.caps.find(c => c.side === side && c.set === 1); return c1 ? (c1.liberi || []) : null; };
+    const nSets = Math.max(starts.length, ...data.caps.map(c => c.set), 0);
+    if (!nSets) { $dialog.innerHTML = `<div class="lu-dl"><h2>${esc(t('luImgTitle'))}</h2><p class="muted">${esc(t('luImgNone'))}</p><div class="form-actions"><button class="btn primary" data-action="close-dialog">${esc(t('close'))}</button></div></div>`; return; }
+    const A = vTeamName(tour, m.home), B = vTeamName(tour, m.away);
+    const items = [];
+    for (let n = 1; n <= nSets; n++) {
+      const sides = ['A', 'B'].map(side => {
+        const cap = data.caps.find(c => c.side === side && c.set === n), st = starts[n - 1];
+        const lineup = cap ? cap.lineup.map(Number) : st && st[side] && st[side].length === 6 ? st[side].map(Number) : null;
+        const lib = capLib(side) || refLib(side);
+        return { side, name: side === 'A' ? A : B, lineup, liberi: lineup ? lib : [], names: names(side), sign: cap ? cap.sign : '', src: cap ? 'cap' : lineup ? 'ref' : '' };
+      });
+      const url = await lineupImage({ set: n, title: `${A} – ${B}`, sub: `${tour.name} · ${vWhen(m) || ''}${m.place ? ' · ' + m.place : ''}`, sides });
+      items.push({ n, url, file: `formazioni_${latinName(A)}-${latinName(B)}_set${n}.png` });
+    }
+    $dialog.innerHTML = `<div class="lu-dl"><div class="pv-bar"><strong><i class="ti ti-photo" aria-hidden="true"></i> ${esc(t('luImgTitle'))} · ${esc(A)} – ${esc(B)}</strong>
+        <button class="btn small primary" data-action="close-dialog">${esc(t('close'))}</button></div>
+      <p class="muted small">${esc(t('luImgHelp'))}</p>
+      <div class="lu-dl-grid">${items.map(x => `<figure><img src="${x.url}" alt="${esc(t('luSetN', { n: x.n }))}"><figcaption><strong>${esc(t('luSetN', { n: x.n }))}</strong>
+        <a class="btn small" href="${x.url}" download="${esc(x.file)}"><i class="ti ti-download" aria-hidden="true"></i> ${esc(t('luImgDownload'))}</a></figcaption></figure>`).join('')}</div></div>`;
+  }
+
   // PDF archiviato di un referto: anteprima, download o apertura in una nuova scheda.
   let pdfUrl = null;
   async function viewPdf(id) {
@@ -4680,7 +4789,7 @@
   const LU_ACTIONS = new Set(['lu-open', 'lu-close', 'lu-sel', 'lu-pick', 'lu-hand', 'lu-handok', 'lu-clear', 'lu-next', 'lu-back', 'lu-sign-clear', 'lu-confirm']);
   const PUBLIC_ACTIONS = new Set(['lv-close', 'set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['vm-approve', 'vm-reopen', 'ref-remove', 'ref-resetpw', 'tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
+  const TOUR_ACTIONS = new Set(['vm-lineups', 'vm-approve', 'vm-reopen', 'ref-remove', 'ref-resetpw', 'tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
   const TOUR_FORMS = new Set(['ref-add', 'vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);

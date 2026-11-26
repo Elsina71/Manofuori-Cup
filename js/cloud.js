@@ -1423,6 +1423,13 @@ async function saveLineup(d) {
   Store.applyRemote('myLineups', Object.assign({}, Store.state.myLineups || {}, { [id]: data }));
   if (lineupUnsubs.has(id)) { lineupUnsubs.get(id)(); lineupUnsubs.delete(id); }
 }
+// admin (generale o tornei): formazioni date dai capitani e referto della gara, per le immagini delle formazioni
+async function loadMatchLineups(mid) {
+  if (!canTour()) throw Object.assign(new Error('permission-denied'), { code: 'permission-denied' });
+  const q = await getDocs(query(collection(db, 'lineups'), where('mid', '==', mid)));
+  const r = await getDoc(doc(db, 'referti', mid)).catch(() => null);
+  return { caps: q.docs.map(d => d.data()), json: r && r.exists() ? r.data().json || '' : '' };
+}
 // il capitano segue le formazioni che può dare adesso (una per gara: il prossimo set)
 const lineupUnsubs = new Map();
 function watchMyLineups(ids) {
@@ -1442,6 +1449,7 @@ function watchMyLineups(ids) {
 window.Cloud = {
   watchLive,
   saveLineup,
+  loadMatchLineups,
   watchMyLineups,
   watchReferti,
   loadPdf,

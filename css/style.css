@@ -1929,3 +1929,9 @@ body.lu-full.lv-full { background: #0e1a22 !important; }
 .lv-tolbl { text-align: center; font-size: 13px; font-weight: 700; color: var(--win); }
 .lv-row:first-child.pa, .lv-row:first-child.pb { min-height: 48px; }
 .lv-row:first-child .lv-c:not(.dim) { font-size: 30px; }
+/* formazioni come immagine (admin) */
+.lu-dl .pv-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.lu-dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-top: 10px; }
+.lu-dl-grid figure { margin: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.lu-dl-grid img { display: block; width: 100%; height: auto; }
+.lu-dl-grid figcaption { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; }
