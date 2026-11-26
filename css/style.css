@@ -1956,3 +1956,6 @@ body.lu-full.lv-full { background: #0e1a22 !important; }
 .livetop-sets { font-size: 1rem; font-weight: 900; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,.12); text-align: center; }
 .livetop-pts { font-size: 2.1rem; font-weight: 900; line-height: 1; text-align: right; font-variant-numeric: tabular-nums; color: #ffd43b; }
 .livetop-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: #93a6b4; margin-top: 2px; }
+/* riga della gara: i nomi delle squadre non si schiacciano mai; sul telefono squadre sopra e risultato sotto */
+.vm-row { grid-template-columns: minmax(min(12em, 100%), 1fr) auto; }
+@media (max-width: 560px) { .vm-row { grid-template-columns: minmax(0, 1fr); } .vm-row > * { grid-column: 1 !important; } .vm-row .vm-score { justify-self: start; text-align: left; white-space: normal; } .vm-row > .btn { grid-row: auto; justify-self: start; } }
