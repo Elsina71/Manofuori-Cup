@@ -1942,3 +1942,17 @@ body.lu-full.lv-full { background: #0e1a22 !important; }
 .vm-follow .tlive-follow { margin-top: 0; }
 .vm-score { min-width: 0; }
 @media (max-width: 560px) { .vm-row.is-live { grid-template-columns: minmax(0, 1fr); } .vm-row.is-live > * { grid-column: 1; } .vm-row.is-live .vm-score { justify-self: start; } }
+
+/* "Gare in corso" in cima alla pagina: tutte le gare LIVE, ben visibili */
+.livetop { margin: 4px 0 18px; }
+.livetop h2 { display: flex; align-items: center; gap: 10px; font-size: 1.25rem; margin: 0 0 10px; }
+.livetop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.livetop-card { display: grid; gap: 6px; padding: 14px 16px; border-radius: 16px; text-decoration: none; color: #f4f7f9; background: linear-gradient(160deg, #1d3442, #0e1a22); border: 2px solid #e03131; box-shadow: 0 8px 22px rgba(0,0,0,.25); }
+.livetop-card:hover { transform: translateY(-1px); }
+.livetop-tour { font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #93a6b4; }
+.livetop-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 2.2ch; align-items: center; gap: 10px; }
+.livetop-team { font-size: 1.15rem; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.livetop-team.srv::after { content: ' ●'; color: #ffd43b; font-size: .8em; }
+.livetop-sets { font-size: 1rem; font-weight: 900; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,.12); text-align: center; }
+.livetop-pts { font-size: 2.1rem; font-weight: 900; line-height: 1; text-align: right; font-variant-numeric: tabular-nums; color: #ffd43b; }
+.livetop-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: #93a6b4; margin-top: 2px; }

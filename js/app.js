@@ -334,6 +334,7 @@
       ${noticeAlerts()}
       ${verifyNotice()}
       ${noticeBox('home', S().notice, S().noticeUntil)}
+      ${liveTop()}
       <div class="theme-hero" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <h1 class="sr-only">${esc(t('navHome'))}</h1>
       ${editorialSection()}
@@ -2521,6 +2522,24 @@
       <strong class="tlive-score">${esc(vLiveText(lv))}</strong>
       <span class="btn small tlive-follow" role="link" tabindex="0" data-action="lv-open" data-id="${esc(m.id)}"><i class="ti ti-broadcast" aria-hidden="true"></i> ${esc(t('lvFollow'))}</span></div>`; }).join('')}</div>`;
   }
+  // ---------- "Gare in corso": in cima alla prima pagina e alla pagina Tornei, tutte le gare LIVE di tutti i tornei ----------
+  function liveTop() {
+    const rows = (S().vmatches || []).filter(m => vIsLive(m) && vtById(m.tid)).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    if (!rows.length) return '';
+    return `<section class="livetop" aria-label="${esc(t(rows.length > 1 ? 'vtLiveNowN' : 'vtLiveNow'))}">
+      <h2><span class="live-badge live-blink"><i class="dot" aria-hidden="true"></i>${esc(t('liveBadge'))}</span> ${esc(t(rows.length > 1 ? 'vtLiveNowN' : 'vtLiveNow'))}</h2>
+      <div class="livetop-grid">${rows.map(m => {
+        const tour = vtById(m.tid), lv = vLive(m), cur = lv.cur, won = lv.setsWon || {};
+        const sets = (lv.sets || []).slice(0, cur && cur.set ? cur.set - 1 : undefined).map(x => (Array.isArray(x) ? `${x[0]}-${x[1]}` : `${x.a}-${x.b}`));
+        return `<a class="livetop-card" href="#/live/${encodeURIComponent(m.id)}">
+          <span class="livetop-tour">${esc(vtShortName(tour))} · ${esc(tour.level)}</span>
+          <span class="livetop-row"><span class="livetop-team ${lv.serving === 'a' ? 'srv' : ''}">${esc(vTeamName(tour, m.home))}</span><b class="livetop-sets">${won.a || 0}</b><b class="livetop-pts">${cur ? cur.a : '–'}</b></span>
+          <span class="livetop-row"><span class="livetop-team ${lv.serving === 'b' ? 'srv' : ''}">${esc(vTeamName(tour, m.away))}</span><b class="livetop-sets">${won.b || 0}</b><b class="livetop-pts">${cur ? cur.b : '–'}</b></span>
+          <span class="livetop-foot"><span>${cur ? esc(t('luSetN', { n: cur.set })) : ''}${sets.length ? ` · ${esc(sets.join(', '))}` : ''}</span><span class="btn small primary"><i class="ti ti-broadcast" aria-hidden="true"></i> ${esc(t('lvFollow'))}</span></span>
+        </a>`;
+      }).join('')}</div></section>`;
+  }
+
   // ---------- pagina "Segui il live" (#/live/{gara}): tabellone grande e successione dei punti ----------
   // lv.pts = un testo per set: a/b punto di casa/ospiti, A/B time-out di casa/ospiti (dal referto elettronico)
   function viewLiveMatch(mid) {
@@ -2649,7 +2668,7 @@
     const byEvent = list => { const m = new Map(); list.forEach(x => { const e = vtEvent(x); if (!m.has(e)) m.set(e, []); m.get(e).push(x); }); return [...m]; };
     const blocks = byEvent(open).map(([e, ts]) => vtEventBlock(e, ts)).join('')
       + (closed.length ? `<section class="tevent past"><header class="tevent-head"><h2>${esc(t('vtClosedList'))}</h2></header><div class="tgrid">${closed.map(x => vtCard(x)).join('')}</div></section>` : '');
-    return `<div class="page-head"><h1><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t('navTournaments'))}</h1><p class="muted">${esc(t('vtIntro'))}</p></div>
+    return `${liveTop()}<div class="page-head"><h1><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t('navTournaments'))}</h1><p class="muted">${esc(t('vtIntro'))}</p></div>
       ${form}
       ${panettoneCard()}
       ${trashCard()}
