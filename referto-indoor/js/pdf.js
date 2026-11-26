@@ -244,13 +244,20 @@
       font(8, 'normal'); remarks.forEach(l => { doc.text(l, M + 2, y + 2.5); y += 3.6; });
       y += 1;
     }
-    const sig = [['1° arbitro', m.officials.ref1], ['2° arbitro', m.officials.ref2], ['Segnapunti', m.officials.scorer], [`Capitano ${tn('A')}`, ''], [`Capitano ${tn('B')}`, '']];
+    // firme dei capitani: quelle date con la formazione dal telefono (capSign), se ci sono
+    const cs = m.capSign || {}, okImg = d => /^data:image\/(png|jpeg);base64,/.test(d || '');
+    const sig = [['1° arbitro', m.officials.ref1], ['2° arbitro', m.officials.ref2], ['Segnapunti', m.officials.scorer], [`Capitano ${tn('A')}`, '', cs.A], [`Capitano ${tn('B')}`, '', cs.B]];
     const sw = (CW - 4 * 3) / 5;
-    sig.forEach(([l, v], i) => {
+    sig.forEach(([l, v, img], i) => {
       const x = M + i * (sw + 3);
       box(x, y, sw, 16);
       font(6, 'normal', GREY); doc.text(clean(l).toUpperCase(), x + 1.5, y + 3);
       if (v) fit(v, x + 1.5, y + 7, sw - 3, 8, 'bold');
+      if (okImg(img)) {
+        // firma nel riquadro, proporzioni 480 x ~120 (larghezza piena, alta al massimo 11 mm)
+        const iw = sw - 3, ih = Math.min(11.5, iw / 3.6);
+        try { doc.addImage(img, img.indexOf('image/png') > 0 ? 'PNG' : 'JPEG', x + 1.5, y + 3.8, iw, ih); } catch (e) { /* immagine non valida */ }
+      }
     });
     y += 18;
     font(6.5, 'normal', GREY);

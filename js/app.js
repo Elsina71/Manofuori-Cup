@@ -3280,7 +3280,9 @@
   // ---------- formazione del set data dal capitano (lineups) ----------
   // Quando il referto della gara è aperto e nessun set è in corso, il capitano dà la formazione del prossimo set
   // (al 1° set anche i liberi): Invia → controllo finale → Conferma. Poi non si cambia più (la corregge il referto).
-  const luNext = lv => (!lv || !['ready', 'live'].includes(lv.status) || lv.cur || lv.winner || lv.outcome ? 0 : (lv.sets || []).length + 1);
+  // set di cui si può dare la formazione: il prossimo da iniziare (con un set in corso, quello dopo: da quando il set
+  // in corso è cominciato fino al fischio d'inizio del successivo); niente oltre l'ultimo set possibile o a gara finita
+  const luNext = (lv, m) => { if (!lv || !['ready', 'live'].includes(lv.status) || lv.winner || lv.outcome) return 0; const n = (lv.sets || []).length + 1; return n > (m && m.mode === 'bo5' ? 5 : 3) ? 0 : n; };
   const luShirt = x => (x === '00' ? 100 : x === '000' ? 1000 : Number(x));
   const luShow = n => (n === 100 ? '00' : n === 1000 ? '000' : String(n));
   // squadra di cui sono capitano in questa gara (A = casa, B = ospiti)
@@ -3291,11 +3293,11 @@
   const luId = (m, side, n) => `${m.id}_${side}_${n}`;
   // formazioni che il capitano può dare adesso: le segue il database (per sapere se sono già state inviate)
   function luWatchIds() {
-    return myTeams().flatMap(tm => teamMatches(tm.id)).map(m => { const c = luMine(m), n = luNext(vLive(m)); return c && n && m.status !== 'done' ? luId(m, c.side, n) : null; }).filter(Boolean);
+    return myTeams().flatMap(tm => teamMatches(tm.id)).map(m => { const c = luMine(m), n = luNext(vLive(m), m); return c && n && m.status !== 'done' ? luId(m, c.side, n) : null; }).filter(Boolean);
   }
   const LU_POS = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
   function luBox(tour, m) {
-    const c = luMine(m), n = c && m.status !== 'done' ? luNext(vLive(m)) : 0;
+    const c = luMine(m), n = c && m.status !== 'done' ? luNext(vLive(m), m) : 0;
     if (!n) return '';
     const sent = (S().myLineups || {})[luId(m, c.side, n)];
     if (sent) return `<div class="lu-box sent"><span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('luSent', { n }))}</span>
@@ -3308,7 +3310,7 @@
   const luParse = v => { v = String(v || '').trim(); if (v === '00') return 100; if (v === '000') return 1000; return /^\d{1,2}$/.test(v) ? Number(v) : null; };
   const LU_XY = [[83, 58], [83, 6], [50, 4], [17, 6], [17, 58], [50, 64]];   // P1…P6 nel campo (sinistra %, alto %)
   function luState(mid) {
-    const m = vmById(mid), c = m && luMine(m), n = m && luNext(vLive(m));
+    const m = vmById(mid), c = m && luMine(m), n = m && luNext(vLive(m), m);
     if (!c || !n || m.status === 'done') return null;
     const id = luId(m, c.side, n);
     if (!ui.luForm || ui.luForm.id !== id) ui.luForm = { id, lineup: ['', '', '', '', '', ''], liberi: ['', ''], sel: 'p0', hand: false, step: 'edit', sign: '', err: '' };

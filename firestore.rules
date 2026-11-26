@@ -139,7 +139,7 @@ service cloud.firestore {
 
     // lineups/{torneo}_{gara}_{A|B}_{set}: formazione di un set data dal capitano (A = casa, B = ospiti).
     // La crea solo il capitano della squadra (registrato o con il codice), una volta sola (non si cambia più),
-    // e solo mentre il referto è aperto e quel set è il prossimo da giocare (live: nessun set in corso).
+    // e solo mentre il referto è aperto e quel set è il prossimo da iniziare (con un set in corso: quello dopo).
     // La leggono il referto (admin tornei, account del campo, arbitri) e i capitani di quella squadra: l'altra squadra no.
     function capOf(team) {
       return request.auth != null && exists(teamDoc(team))
@@ -161,9 +161,9 @@ service cloud.firestore {
         && get(vmDoc(request.resource.data.mid)).data.get(request.resource.data.side == 'A' ? 'home' : 'away', '') == request.resource.data.team
         && exists(liveDoc(request.resource.data.mid))
         && get(liveDoc(request.resource.data.mid)).data.status in ['ready', 'live']
-        && get(liveDoc(request.resource.data.mid)).data.get('cur', null) == null
         && get(liveDoc(request.resource.data.mid)).data.get('winner', null) == null
         && get(liveDoc(request.resource.data.mid)).data.get('sets', []).size() + 1 == request.resource.data.set
+        && request.resource.data.set <= (get(vmDoc(request.resource.data.mid)).data.get('mode', '') == 'bo5' ? 5 : 3)
         && shirts(request.resource.data.lineup, 6) && request.resource.data.lineup.size() == 6
         && shirts(request.resource.data.liberi, 2) && (request.resource.data.set == 1 || request.resource.data.liberi.size() == 0);
       allow delete: if isTourAdmin();

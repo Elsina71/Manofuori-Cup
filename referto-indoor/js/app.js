@@ -1172,7 +1172,7 @@
         if (ref.json) {
           try {
             const prev = JSON.parse(ref.json);
-            if ((prev.events || []).length > m.events.length) ['header', 'teams', 'officials', 'settings', 'events', 'remarks', 'closedAt', 'setupDone'].forEach(k => { if (prev[k] != null) m[k] = prev[k]; });
+            if ((prev.events || []).length > m.events.length) ['header', 'teams', 'officials', 'settings', 'events', 'remarks', 'closedAt', 'setupDone', 'capSign'].forEach(k => { if (prev[k] != null) m[k] = prev[k]; });
           } catch (e) { /* dati non leggibili */ }
         }
         applyInfo(m, ref.info || {});
@@ -1182,6 +1182,13 @@
         // formazioni date dai capitani: si propongono nella schermata della formazione del set
         if (window.RefCloud && window.RefCloud.watchLineups && !ui.capWatch) ui.capWatch = window.RefCloud.watchLineups(id, cap => {
           ui.cap = cap;
+          // firma del capitano (l'ultima data con una formazione): va nel referto e nel PDF, nel riquadro del capitano
+          const lm = Object.values(db.matches).find(x => x.link && x.link.id === id);
+          if (lm && !lm.closedAt) {
+            const sg = {};
+            ['A', 'B'].forEach(tm => { const c = Object.keys(cap[tm] || {}).map(Number).sort((a, b) => b - a).map(n => cap[tm][n]).find(x => x.sign); if (c) sg[tm] = c.sign; });
+            if (JSON.stringify(sg) !== JSON.stringify(lm.capSign || {})) { lm.capSign = Object.assign({}, lm.capSign, sg); touch(lm); }
+          }
           if (ui.view === 'lineup' && cur() && cur().link && cur().link.id === id) render();
         });
       }).catch(err => {
