@@ -2508,17 +2508,18 @@
   // colore del livello (tonalità fissa per nome, mai viola), per la riga colorata della scheda
   const LEVEL_HUES = [205, 158, 24, 352, 42, 188, 128, 8];
   const levelHue = l => LEVEL_HUES[[...String(l)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % LEVEL_HUES.length];
-  const vNextMatch = tour => vtMatches(tour.id).filter(m => m.status !== 'done' && m.date && m.date >= todayStr())
+  const vIsLive = m => { const lv = m.status !== 'done' && vLive(m); return !!lv && lv.status === 'live' && !!((lv.sets || []).length || lv.cur); };
+  const vNextMatch = tour => vtMatches(tour.id).filter(m => m.status !== 'done' && !vIsLive(m) && m.date && m.date >= todayStr())
     .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))[0];
   // gare in corso con il referto elettronico: risultato in diretta con la scritta LIVE rossa lampeggiante
   function vtLiveBox(tour) {
     const rows = vtMatches(tour.id).filter(m => { const lv = m.status !== 'done' && vLive(m); return lv && lv.status === 'live' && ((lv.sets || []).length || lv.cur); });
     if (!rows.length) return '';
-    return `<div class="tlive">${rows.slice(0, 4).map(m => { const lv = vLive(m); return `<div class="tlive-row">
+    return `<div class="tlive"><span class="tnext-lbl">${esc(t(rows.length > 1 ? 'vtLiveNowN' : 'vtLiveNow'))}</span>${rows.slice(0, 4).map(m => { const lv = vLive(m); return `<div class="tlive-row">
       <span class="live-badge live-blink"><i class="dot" aria-hidden="true"></i>${esc(t('liveBadge'))}</span>
       <span class="tlive-teams">${esc(vTeamName(tour, m.home))} – ${esc(vTeamName(tour, m.away))}</span>
       <strong class="tlive-score">${esc(vLiveText(lv))}</strong>
-      <a class="btn small tlive-follow" href="#/live/${encodeURIComponent(m.id)}"><i class="ti ti-broadcast" aria-hidden="true"></i> ${esc(t('lvFollow'))}</a></div>`; }).join('')}</div>`;
+      <span class="btn small tlive-follow" role="link" tabindex="0" data-action="lv-open" data-id="${esc(m.id)}"><i class="ti ti-broadcast" aria-hidden="true"></i> ${esc(t('lvFollow'))}</span></div>`; }).join('')}</div>`;
   }
   // ---------- pagina "Segui il live" (#/live/{gara}): tabellone grande e successione dei punti ----------
   // lv.pts = un testo per set: a/b punto di casa/ospiti, A/B time-out di casa/ospiti (dal referto elettronico)
@@ -4636,6 +4637,7 @@
       window.Cloud.confirmReferee(m.id, text).then(() => { ui.flash = { text: t('refConfirmDone') }; render(); }).catch(e => { el.disabled = false; vErr(e); });
     },
     'tm-nums-edit': el => { ui.tmNums = el.dataset.id || null; render(); },
+    'lv-open': el => { location.hash = '#/live/' + encodeURIComponent(el.dataset.id); },
     'lv-close': () => { if (history.length > 1) history.back(); else location.hash = '#/'; },
     'lu-open': el => {
       const m = vmById(el.dataset.id);
@@ -4787,7 +4789,7 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   // scheda della formazione del capitano: le azioni controllano da sole chi è il capitano (luMine)
   const LU_ACTIONS = new Set(['lu-open', 'lu-close', 'lu-sel', 'lu-pick', 'lu-hand', 'lu-handok', 'lu-clear', 'lu-next', 'lu-back', 'lu-sign-clear', 'lu-confirm']);
-  const PUBLIC_ACTIONS = new Set(['lv-close', 'set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
+  const PUBLIC_ACTIONS = new Set(['lv-open', 'lv-close', 'set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
   const TOUR_ACTIONS = new Set(['vm-lineups', 'vm-approve', 'vm-reopen', 'ref-remove', 'ref-resetpw', 'tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
   const TOUR_FORMS = new Set(['ref-add', 'vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
@@ -4809,6 +4811,9 @@
   // tornando nell'app dopo aver aperto il link dell'email, la conferma si controlla da sola
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && needsVerify()) window.Cloud.checkVerified().then(ok => { if (ok) { ui.flash = { text: t('verifyOk') }; render(); } }).catch(() => {});
+  });
+  document.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('span[data-action][role=link]')) { e.preventDefault(); e.target.click(); }
   });
   document.addEventListener('click', e => {
     const sub = e.target.closest('[data-submit]');

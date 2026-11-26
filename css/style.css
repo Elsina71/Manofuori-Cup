@@ -1845,8 +1845,9 @@ body.lu-full #app { max-width: none; padding: 0; margin: 0; }
 .lus-done p { font-size: 18px; font-weight: 700; margin: 10px 0 24px; }
 
 /* ===== "Segui il live" (#/live/…): tabellone a tutta pagina e successione dei punti ===== */
-.tlive-follow { margin-left: auto; white-space: nowrap; }
-.tlive-row { flex-wrap: wrap; }
+.tlive-follow { grid-column: 1 / -1; justify-self: start; margin-top: 6px; white-space: nowrap; }
+.tlive .tnext-lbl { color: var(--danger); }
+.tlive-row + .tlive-row { margin-top: 6px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--danger) 20%, var(--border)); }
 .lv { --bg: #0e1a22; --card: #15252f; --tx: #f4f7f9; --mu: #93a6b4; --ca: #4dabf7; --cb: #ff922b; --win: #ffd43b;
   min-height: 100dvh; background: radial-gradient(ellipse at 50% 0%, #1d3442 0%, var(--bg) 60%); color: var(--tx); font-family: Inter, system-ui, sans-serif; }
 .lv-in { max-width: 980px; margin: 0 auto; padding: max(12px, env(safe-area-inset-top)) 14px 40px; }
