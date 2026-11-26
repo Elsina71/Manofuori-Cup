@@ -257,3 +257,15 @@ test('set successivo: la formazione proposta ha chi è entrato con un cambio al 
   assert.deepEqual(d.lineup.A, [1, 2, 7, 4, 5, 6]);
   assert.deepEqual(d.lineup.B, LB);
 });
+
+test('cambio di campo a metà set scelto a ogni set: anche nel 1° set, oppure mai nel set decisivo', () => {
+  let st = R.replay(match([Object.assign(start('A', 'A'), { midSwitch: 13 }), ...pts('A'.repeat(13))]));
+  assert.equal(st.cur.switched, true);
+  assert.equal(st.cur.left, 'B');
+  st = R.replay(match([Object.assign(start('A', 'A'), { midSwitch: 0 }), ...pts('A'.repeat(14))], { sets: 1, lastPoints: 15 }));
+  assert.equal(st.cur.switched, false);
+  assert.equal(st.cur.left, 'A');
+  // senza scelta (referti già iniziati): resta la regola del set decisivo
+  st = R.replay(match([start('A', 'A'), ...pts('A'.repeat(13))]));
+  assert.equal(st.cur.switched, false);
+});

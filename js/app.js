@@ -90,7 +90,9 @@
     }
     const r = route();
     if (window.Cloud && window.Cloud.watchLive) {
-      window.Cloud.watchLive(r[0] === 'vt' && vtById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? liveTourIds() : r[0] === 'gare' || r[0] === 'me' ? myTourIds() : null);
+      window.Cloud.watchLive(r[0] === 'vt' && vtById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? liveTourIds() : r[0] === 'gare' || r[0] === 'me' ? myTourIds()
+        // prima pagina e pagina Tornei: risultati in diretta delle gare dei tornei in corso
+        : !r[0] || r[0] === 'tornei' || r[0] === 'tournaments' ? (S().vtours || []).filter(x => x.status === 'live').map(x => x.id) : null);
       window.Cloud.watchReferti(r[0] === 'vt' && vtById(r[1]) && r[2] === 'referti' ? r[1] : null);
     }
     const adminOnly = r[0] === 'messages' || r[0] === 'users' || r[0] === 'athletes' || r[0] === 'payments';
@@ -324,7 +326,7 @@
       <section class="feat-block">
         <div class="page-head row"><h2><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(t('activeTournaments'))}</h2>
           <a class="btn small" href="#/tornei">${esc(t('allTournaments'))} →</a></div>
-        ${active.length ? `<div class="cards">${active.map(vtCard).join('')}</div>`
+        ${active.length ? `<div class="tgrid">${active.map(x => vtCard(x)).join('')}</div>`
           : `<div class="empty">${esc(t(admin() ? 'noTournamentsAdmin' : 'noUpcomingTournaments'))}</div>`}
       </section>
       ${freeplayHome()}`;
@@ -2486,6 +2488,15 @@
   const levelHue = l => LEVEL_HUES[[...String(l)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % LEVEL_HUES.length];
   const vNextMatch = tour => vtMatches(tour.id).filter(m => m.status !== 'done' && m.date && m.date >= todayStr())
     .sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')))[0];
+  // gare in corso con il referto elettronico: risultato in diretta con la scritta LIVE rossa lampeggiante
+  function vtLiveBox(tour) {
+    const rows = vtMatches(tour.id).filter(m => { const lv = m.status !== 'done' && vLive(m); return lv && lv.status === 'live' && ((lv.sets || []).length || lv.cur); });
+    if (!rows.length) return '';
+    return `<div class="tlive">${rows.slice(0, 4).map(m => { const lv = vLive(m); return `<div class="tlive-row">
+      <span class="live-badge live-blink"><i class="dot" aria-hidden="true"></i>${esc(t('liveBadge'))}</span>
+      <span class="tlive-teams">${esc(vTeamName(tour, m.home))} – ${esc(vTeamName(tour, m.away))}</span>
+      <strong class="tlive-score">${esc(vLiveText(lv))}</strong></div>`; }).join('')}</div>`;
+  }
   function vtCard(tour, inEvent) {
     const ms = vtMatches(tour.id), done = ms.filter(m => m.status === 'done').length, pct = ms.length ? Math.round(done * 100 / ms.length) : 0;
     const teams = new Set((tour.groups || []).flatMap(g => g.teams)).size, nx = vNextMatch(tour);
@@ -2497,6 +2508,7 @@
       <p class="tcard-meta">${esc(t(tour.rr === 'a' ? 'vtRr_a' : 'vtRr_ar'))}${tour.playoff ? ' + ' + esc(t('vtPlayoff')) : ''} · ${esc(t('vtGroupsN', { n: (tour.groups || []).length }))}${teams ? ` · ${esc(t('vtTeamsN', { n: teams }))}` : ''}</p>
       ${ms.length ? `<div class="tprog" role="img" aria-label="${esc(t('vtPlayedOf', { d: done, n: ms.length }))}"><span style="width:${pct}%"></span></div>
         <p class="tprog-lbl"><span><strong>${done}</strong> / ${ms.length} ${esc(t('vtMatchesWord'))}</span>${state}</p>` : ''}
+      ${vtLiveBox(tour)}
       <div class="tnext">${nx ? `<span class="tnext-lbl">${esc(t('vtNextMatch'))}</span>
         <span class="tnext-when">${esc(fmtDate(nx.date))}${nx.time ? ` · ${esc(nx.time)}` : ''}</span>
         <span class="tnext-who">${esc(vTeamName(tour, nx.home))} – ${esc(vTeamName(tour, nx.away))}</span>`
@@ -2771,7 +2783,7 @@
   const vCanEscore = tour => (tourAdmin() || (!!scorer() && vCanScore(tour))) && tour.status !== 'done';
   function vLiveText(lv) {
     // il referto mette in "sets" anche il set in corso (che è anche "cur"): qui contano solo i set finiti
-    const sets = (lv.sets || []).slice(0, lv.cur && lv.cur.set ? lv.cur.set - 1 : undefined).map(([a, b]) => `${a}-${b}`);
+    const sets = (lv.sets || []).slice(0, lv.cur && lv.cur.set ? lv.cur.set - 1 : undefined).map(s => (Array.isArray(s) ? `${s[0]}-${s[1]}` : `${s.a}-${s.b}`));
     if (lv.cur) sets.push(`${lv.cur.a}-${lv.cur.b}`);
     return `${(lv.setsWon || {}).a || 0}-${(lv.setsWon || {}).b || 0}${sets.length ? ` (${sets.join(', ')})` : ''}`;
   }

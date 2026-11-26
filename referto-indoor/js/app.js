@@ -392,7 +392,9 @@
         // liberi della gara (al massimo 2): presi dalla lista, oppure scritti a mano prima del 1° set; fem: D/U scritti qui
         liberi: { A: [0, 1].map(i => liberi(m, 'A')[i] ?? ''), B: [0, 1].map(i => liberi(m, 'B')[i] ?? '') },
         libLocked: { A: [0, 1].map(i => m.events.length > 0 && liberi(m, 'A')[i] != null), B: [0, 1].map(i => m.events.length > 0 && liberi(m, 'B')[i] != null) },
-        fem: { A: {}, B: {} }
+        fem: { A: {}, B: {} },
+        // cambio di campo durante il set: punti a cui si cambia ('0' = nessuno); di regola solo nel set decisivo
+        mid: String(R.midSwitchOf(R.settingsOf(m), d.index))
       };
     }
     const L = ui.lineup;
@@ -458,9 +460,13 @@
             ${opt('otherChoice', 'serve', 'Servizio', L.otherChoice === 'serve')}${opt('otherChoice', 'receive', 'Ricezione', L.otherChoice === 'receive')}</div></div>` : ''}
           <div class="q"><h3>Squadra alla sinistra del segnapunti</h3><div class="opts">${teamOpts('left')}</div></div>
         ` : `
-          <p class="muted">Cambio di campo; serve per prima la squadra che ha ricevuto per prima nel set precedente. Puoi correggere se serve.</p>
+          <p class="muted">Serve per prima la squadra che ha ricevuto per prima nel set precedente. Puoi correggere se serve.</p>
+          ${d.left ? `<div class="q"><h3>Cambio di campo rispetto al set precedente</h3><div class="opts">
+            ${opt('swap', '1', 'Sì, si cambia campo', L.left === d.left)}${opt('swap', '0', 'No, stesso campo', L.left === other(d.left))}</div></div>` : ''}
           <div class="q"><h3>Al servizio</h3><div class="opts">${teamOpts('serving')}</div></div>
           <div class="q"><h3>A sinistra del segnapunti</h3><div class="opts">${teamOpts('left')}</div></div>`}
+        <div class="q"><h3>Cambio di campo durante il set</h3><div class="opts">
+          ${opt('mid', '0', 'No', L.mid === '0')}${opt('mid', String(Math.ceil(R.targetOf(R.settingsOf(m), d.index) / 2)), `Sì, a ${Math.ceil(R.targetOf(R.settingsOf(m), d.index) / 2)} punti`, L.mid !== '0')}</div></div>
       </section>
       <section class="card"><h2>Formazioni (posto 1 → 6)</h2>
         <p class="muted small">Scrivi il numero di maglia di ogni posto come sul tagliando della formazione (se la squadra ha la lista, compare l'elenco da cui scegliere; un numero non in lista si aggiunge al referto). Sotto, i liberi della gara (al massimo 2): non entrano nella formazione.${R.minWomenOf(S0, 'A') || R.minWomenOf(S0, 'B') ? ' Tocca <b>D</b> per le donne.' : ''}</p>
@@ -474,6 +480,8 @@
       </div>`;
 
     $app.querySelectorAll('[data-k]').forEach(b => b.onclick = () => {
+      // cambio di campo tra i set: Sì = lati invertiti rispetto all'inizio del set precedente
+      if (b.dataset.k === 'swap') { L.left = b.dataset.v === '1' ? d.left : other(d.left); render(); return; }
       L[b.dataset.k] = b.dataset.v;
       if (b.dataset.k === 'winner') { L.choice = null; L.otherChoice = null; }
       if (b.dataset.k === 'choice' && b.dataset.v !== 'side') L.otherChoice = null;
@@ -545,7 +553,7 @@
       const short = ['A', 'B'].filter(tm => R.minWomenOf(S, tm) && womenIn(m, tm, L.lineup[tm]) + (liberi(m, tm).some(n => isWoman(m, tm, n) && !stateOf(m).barredMatch[tm][n]) ? 1 : 0) < R.minWomenOf(S, tm));
       const start = () => {
         const toss = L.needsToss ? { winner: L.winner, choice: L.choice, otherChoice: L.otherChoice } : null;
-        addEvent(m, { type: 'setStart', serving: L.serving, left: L.left, lineup: { A: L.lineup.A.slice(), B: L.lineup.B.slice() }, toss });
+        addEvent(m, { type: 'setStart', serving: L.serving, left: L.left, lineup: { A: L.lineup.A.slice(), B: L.lineup.B.slice() }, toss, midSwitch: +L.mid || 0 });
       };
       if (short.length) confirmBox('Donne in campo', `${short.map(tm => `${esc(teamName(m, tm))} (minimo ${R.minWomenOf(S, tm)})`).join(' e ')}: meno donne del minimo in formazione. Iniziare comunque?`, 'Inizia', start);
       else start();
