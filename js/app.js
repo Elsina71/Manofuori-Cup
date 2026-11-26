@@ -2501,13 +2501,15 @@
     const ms = vtMatches(tour.id), done = ms.filter(m => m.status === 'done').length, pct = ms.length ? Math.round(done * 100 / ms.length) : 0;
     const teams = new Set((tour.groups || []).flatMap(g => g.teams)).size, nx = vNextMatch(tour);
     const st = tour.status || 'draft';
-    const state = `<span class="tstate"><i aria-hidden="true"></i>${esc(t('vtSt_' + st))}</span>`;
+    // stato del torneo (non delle gare): solo bozza o concluso; un torneo in corso non ha etichetta, così non sembra
+    // che le gare siano in corso (quelle davvero in gioco hanno il riquadro LIVE)
+    const state = st === 'live' ? '' : `<span class="tstate"><i aria-hidden="true"></i>${esc(t('vtSt_' + st))}</span>`;
     return `<a class="tcard st-${st}" href="#/vt/${tour.id}" style="--lv:${levelHue(tour.level)}">
-      <div class="tcard-head"><span class="tchip" title="${esc(tour.level)}">${esc(tour.level)}</span>${ms.length ? '' : state}</div>
+      <div class="tcard-head"><span class="tchip" title="${esc(tour.level)}">${esc(tour.level)}</span>${state}</div>
       <h3>${esc(inEvent ? vtShortName(tour) : tour.name)}</h3>
       <p class="tcard-meta">${esc(t(tour.rr === 'a' ? 'vtRr_a' : 'vtRr_ar'))}${tour.playoff ? ' + ' + esc(t('vtPlayoff')) : ''} · ${esc(t('vtGroupsN', { n: (tour.groups || []).length }))}${teams ? ` · ${esc(t('vtTeamsN', { n: teams }))}` : ''}</p>
       ${ms.length ? `<div class="tprog" role="img" aria-label="${esc(t('vtPlayedOf', { d: done, n: ms.length }))}"><span style="width:${pct}%"></span></div>
-        <p class="tprog-lbl"><span><strong>${done}</strong> / ${ms.length} ${esc(t('vtMatchesWord'))}</span>${state}</p>` : ''}
+        <p class="tprog-lbl"><span><strong>${done}</strong> / ${ms.length} ${esc(t('vtMatchesWord'))}</span></p>` : ''}
       ${vtLiveBox(tour)}
       <div class="tnext">${nx ? `<span class="tnext-lbl">${esc(t('vtNextMatch'))}</span>
         <span class="tnext-when">${esc(fmtDate(nx.date))}${nx.time ? ` · ${esc(nx.time)}` : ''}</span>
