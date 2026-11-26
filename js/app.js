@@ -3496,7 +3496,14 @@
   // [id, colore principale, sfondo, colore accento]
   // Tavolozze di colori: [id, primario, sfondo, accento]. Per ora solo il tema neutro (colori in :root di css/style.css).
   const THEMES = [
-    ['logo', '#000000', '#f7f7f5', '#d0106f'],
+    ['logo', '#2f4a6d', '#f4f5f7', '#d9822b'],
+    // grafiche Taste (cambiano anche caratteri, forme e impaginazione): data-look a…f in css/style.css
+    ['moderna', '#000000', '#f7f7f5', '#d0106f'],
+    ['petrolio', '#06525c', '#f7f9f8', '#dcebe8'],
+    ['biancoblu', '#111111', '#ffffff', '#1a4be0'],
+    ['tabellone', '#efefef', '#0a0a0a', '#e0283f'],
+    ['laterale', '#1f3038', '#f7f9fa', '#0d7480'],
+    ['pastello', '#1f6b3a', '#d5f2df', '#fde1ea'],
     ['palestra', '#0b5563', '#e9b77b', '#e36414'],
     ['gialloblu', '#0a3fa8', '#f3f6fb', '#ffcc00'],
     ['notte', '#38d0ff', '#0a0f1e', '#ffe14d'],
@@ -3508,6 +3515,7 @@
     ['pallapazza', '#7b2ff7', '#e6f4ff', '#ff7a00']
   ];
   const THEME_KEY = 'pcm-theme';
+  const LOOKS = { moderna: 'a', petrolio: 'b', biancoblu: 'c', tabellone: 'd', laterale: 'e', pastello: 'f' };
 
   function currentTheme() {
     return ui.theme || Consent.read(THEME_KEY) || 'logo';   // senza consenso: solo per questa visita
@@ -3515,8 +3523,9 @@
 
   function applyTheme(id) {
     const th = THEMES.find(x => x[0] === id) || THEMES[0];
-    if (th[0] === 'logo') document.documentElement.removeAttribute('data-theme');
-    else document.documentElement.setAttribute('data-theme', th[0]);
+    const html = document.documentElement, look = LOOKS[th[0]];
+    if (th[0] === 'logo' || look) html.removeAttribute('data-theme'); else html.setAttribute('data-theme', th[0]);
+    if (look) html.setAttribute('data-look', look); else html.removeAttribute('data-look');
     const meta = document.querySelector('meta[name=theme-color]');
     if (meta) meta.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || th[2]);
   }
@@ -3525,6 +3534,7 @@
     ui.theme = id; Consent.write(THEME_KEY, id);
     applyTheme(id);
     render();
+    if (document.getElementById('themePop')) themePop(true);   // il menu resta aperto per provare altre grafiche
   }
 
   // Temi grafici: [id, file dei caratteri in assets/fonts, stile dell'anteprima, stile del pulsante]. Per ora solo il tema base.
@@ -3582,17 +3592,56 @@
       <h1><i class="ti ti-palette" aria-hidden="true"></i> ${esc(t('themeTitle'))}</h1></div>${themeCard(true)}`;
   }
 
+  // le scelte: prima le grafiche complete, poi i temi a colori (usate nella pagina Tema e nel menu dell'icona in testata)
+  function themeGroups(cur) {
+    return [[t('themeLooks'), THEMES.filter(x => LOOKS[x[0]])], [t('themeColors'), THEMES.filter(x => !LOOKS[x[0]])]].map(([title, list]) => `
+      <h3 class="theme-group">${esc(title)}</h3>
+      <div class="theme-grid">${list.map(([id, p, bg, a]) => `
+        <button type="button" class="theme-opt" data-action="set-theme" data-theme-id="${id}" aria-pressed="${cur === id}">
+          <span class="sw"><span style="background:${bg}"></span><span style="background:${p}"></span><span style="background:${a}"></span></span>
+          ${esc(t('theme_' + id))}
+        </button>`).join('')}</div>`).join('');
+  }
+
+  // Icona della tavolozza in testata: apre subito le scelte, senza passare dalla pagina Tema (che resta per chi non ha JS)
+  function themePopPlace(pop) {
+    const link = document.querySelector('.topbar .theme-link');
+    if (!pop || !link) return;
+    const r = link.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
+    pop.style.top = Math.max(8, Math.min(r.bottom + 8, innerHeight - h - 8)) + 'px';
+  }
+  function themePop(open) {
+    const link = document.querySelector('.topbar .theme-link');
+    let pop = document.getElementById('themePop');
+    if (!open) { if (pop) pop.remove(); if (link) link.setAttribute('aria-expanded', 'false'); return; }
+    if (!pop) {
+      pop = document.createElement('div');
+      pop.id = 'themePop'; pop.className = 'theme-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', t('themeTitle'));
+      document.body.appendChild(pop);
+    }
+    pop.innerHTML = `<div class="theme-pop-head"><strong>${esc(t('themeTitle'))}</strong>
+      <button type="button" class="icon-btn" data-theme-pop-close aria-label="${esc(t('close'))}"><i class="ti ti-x" aria-hidden="true"></i></button></div>
+      <p class="muted small">${esc(t('themeHelp'))}</p>${themeGroups(currentTheme())}`;
+    if (link) link.setAttribute('aria-expanded', 'true');
+    themePopPlace(pop);
+  }
+  document.addEventListener('click', e => {
+    const link = e.target.closest && e.target.closest('.topbar .theme-link');
+    if (link) { e.preventDefault(); themePop(!document.getElementById('themePop')); return; }
+    const pop = document.getElementById('themePop');
+    if (pop && (e.target.closest('[data-theme-pop-close]') || !pop.contains(e.target))) themePop(false);
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('themePop')) { themePop(false); const l = document.querySelector('.topbar .theme-link'); if (l) l.focus(); } });
+  addEventListener('resize', () => themePopPlace(document.getElementById('themePop')));
+
   function themeCard(page) {
     if (THEMES.length < 2) return '';
     const cur = currentTheme();
     return `<div class="card" id="theme">
       ${page ? '' : `<h2><i class="ti ti-palette" aria-hidden="true"></i> ${esc(t('themeTitle'))}</h2>`}
       <p class="muted small">${esc(t('themeHelp'))}</p>
-      <div class="theme-grid">${THEMES.map(([id, p, bg, a]) => `
-        <button class="theme-opt" data-action="set-theme" data-theme-id="${id}" aria-pressed="${cur === id}">
-          <span class="sw"><span style="background:${bg}"></span><span style="background:${p}"></span><span style="background:${a}"></span></span>
-          ${esc(t('theme_' + id))}
-        </button>`).join('')}</div>
+      ${themeGroups(cur)}
     </div>`;
   }
 
