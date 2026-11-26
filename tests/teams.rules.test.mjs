@@ -21,7 +21,7 @@ const team = { name: 'Fenicotteri', level: 'MASTER', kind: 'X', captainUid: 'cap
 let ok = 0, ko = 0;
 const t = async (name, p) => { try { await p; ok++; console.log('✔', name); } catch (e) { ko++; console.log('✘', name, e.message.slice(0, 120)); } };
 const batchSave = (db, id, tm, players, upd) => { const b = writeBatch(db); upd ? b.update(doc(db, 'teams', id), tm) : b.set(doc(db, 'teams', id), tm); b.set(doc(db, 'rosters', id), { captainUid: 'cap', players, updated: 2 }); return b.commit(); };
-// admin principali per email (manofuori@gmail.com, pierpaolomurgioni@gmail.com): serve l'email confermata (col link o a mano: verified/{uid})
+// account principale e super admin per email (manofuori@gmail.com, pierpaolomurgioni@gmail.com): serve l'email confermata (col link o a mano: verified/{uid})
 const pp = env.authenticatedContext('pp', { email: 'ManoFuori@gmail.com', email_verified: false }).firestore();
 await t('email admin non confermata: non è admin', assertFails(getDoc(doc(pp, 'admins', 'probe'))));
 await env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'verified', 'pp'), { by: 'admin', at: 1 }));
@@ -34,24 +34,41 @@ const adm = env.authenticatedContext('Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2', { email_ver
 await t('admin corregge nome e cognome di un utente', assertSucceeds(updateDoc(doc(adm, 'members', 'other'), { first: 'Anna Maria', last: 'Rossi', gender: 'F' })));
 await t('admin: nome vuoto rifiutato', assertFails(updateDoc(doc(adm, 'members', 'other'), { first: '' })));
 await t('utente non cambia il nome di un altro', assertFails(updateDoc(doc(cap, 'members', 'other'), { first: 'X' })));
-// altri admin generali (admins/{uid}), nominati da un admin generale
+// super admin: solo pierpaolomurgioni@gmail.com (confermato) nomina, modifica e toglie gli admin generali; lui non lo tocca nessuno
 const oth = env.authenticatedContext('other', { email_verified: true }).firestore();
+const pm = env.authenticatedContext('pm', { email: 'pierpaolomurgioni@gmail.com', email_verified: true }).firestore();
+const pmNo = env.authenticatedContext('pm2', { email: 'pierpaolomurgioni@gmail.com', email_verified: false }).firestore();
+await env.withSecurityRulesDisabled(async c => { const f = c.firestore(); await setDoc(doc(f, 'accounts', 'pm'), { email: 'pierpaolomurgioni@gmail.com', verified: true }); await setDoc(doc(f, 'accounts', 'pp'), { email: 'manofuori@gmail.com', verified: true }); await setDoc(doc(f, 'members', 'pm'), { first: 'Pier', last: 'Paolo', gender: 'M' }); await setDoc(doc(f, 'members', 'Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2'), { first: 'Mano', last: 'Fuori', gender: 'M' }); });
+await t('pierpaolomurgioni (confermato) è super admin', assertSucceeds(getDoc(doc(pm, 'admins', 'probe'))));
+await t('pierpaolomurgioni non confermato: non è admin', assertFails(getDoc(doc(pmNo, 'admins', 'probe'))));
 await t('utente normale non si nomina admin', assertFails(setDoc(doc(oth, 'admins', 'other'), { name: 'X', by: 'other', at: 1 })));
 await t('utente normale non è admin', assertFails(getDoc(doc(oth, 'admins', 'probe'))));
-await t('admin generale nomina un altro admin', assertSucceeds(setDoc(doc(adm, 'admins', 'other'), { name: 'Anna Maria Rossi', by: 'Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2', at: 1 })));
+await t('l\'account principale (manofuori) non nomina admin', assertFails(setDoc(doc(adm, 'admins', 'other'), { name: 'X', by: 'x', at: 1 })));
+await t('il super admin nomina un altro admin', assertSucceeds(setDoc(doc(pm, 'admins', 'other'), { name: 'Anna Maria Rossi', by: 'pm', at: 1 })));
 await t('il nuovo admin è admin generale', assertSucceeds(getDoc(doc(oth, 'admins', 'probe'))));
 await t('il nuovo admin vede l\'elenco degli admin', assertSucceeds(getDocs(collection(oth, 'admins'))));
+await t('un admin non nomina altri admin', assertFails(setDoc(doc(oth, 'admins', 'cap'), { name: 'Capitano', by: 'other', at: 2 })));
 await t('un admin non toglie se stesso', assertFails(deleteDoc(doc(oth, 'admins', 'other'))));
-await t('un admin (non principale) nomina un altro admin', assertSucceeds(setDoc(doc(oth, 'admins', 'cap'), { name: 'Capitano', by: 'other', at: 2 })));
-await t('un admin (non principale) non toglie un altro admin', assertFails(deleteDoc(doc(oth, 'admins', 'cap'))));
-await t('l\'admin principale toglie quell\'admin', assertSucceeds(deleteDoc(doc(adm, 'admins', 'cap'))));
-await t('l\'admin principale per email (confermato) toglie un admin', assertSucceeds(setDoc(doc(adm, 'admins', 'cap'), { name: 'C', by: 'x', at: 3 }).then(() => deleteDoc(doc(pp, 'admins', 'cap')))));
-await t('nessuno toglie l\'admin principale (non è nella raccolta: resta admin)', assertSucceeds(deleteDoc(doc(oth, 'admins', 'Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2')).catch(() => 0).then(() => getDoc(doc(adm, 'admins', 'probe')))));
-const pm = env.authenticatedContext('pm', { email: 'pierpaolomurgioni@gmail.com', email_verified: true }).firestore();
-await t('pierpaolomurgioni (confermato) è admin principale', assertSucceeds(getDoc(doc(pm, 'admins', 'probe'))));
-await t('pierpaolomurgioni toglie un admin', assertSucceeds(setDoc(doc(adm, 'admins', 'cap'), { name: 'C', by: 'x', at: 4 }).then(() => deleteDoc(doc(pm, 'admins', 'cap')))));
-await t('l\'admin principale toglie un admin', assertSucceeds(deleteDoc(doc(adm, 'admins', 'other'))));
+await t('l\'account principale non toglie un admin', assertFails(deleteDoc(doc(adm, 'admins', 'other'))));
+await t('admin: non cambia nome a un altro admin', assertFails(updateDoc(doc(adm, 'members', 'other'), { first: 'X', last: 'Y', gender: 'F' })));
+await t('admin: non dà ruoli a un altro admin', assertFails(setDoc(doc(adm, 'roles', 'other'), { tour: true }, { merge: true })));
+await t('admin: non blocca un altro admin', assertFails(setDoc(doc(adm, 'bans', 'other'), { tour: true })));
+await t('admin: non blocca il super admin', assertFails(setDoc(doc(oth, 'bans', 'pm'), { tour: true })));
+await t('admin: non cambia nome al super admin', assertFails(updateDoc(doc(oth, 'members', 'pm'), { first: 'X', last: 'Y', gender: 'M' })));
+await t('admin: non elimina il super admin', assertFails(deleteDoc(doc(adm, 'members', 'pm'))));
+await t('admin: non toglie i ruoli al super admin', assertFails(setDoc(doc(adm, 'roles', 'pm'), { tour: false })));
+await t('admin: non toglie il ruolo al super admin (adminsOff)', assertFails(setDoc(doc(adm, 'adminsOff', 'pm'), { name: 'x', by: 'x', at: 1 })));
+await t('admin: non modifica l\'account principale', assertFails(updateDoc(doc(oth, 'members', 'Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2'), { first: 'X', last: 'Y', gender: 'M' })));
+await t('admin: vede ancora tutti i ruoli', assertSucceeds(getDocs(collection(oth, 'roles'))));
+await t('admin: sugli utenti normali lavora come prima (ruoli)', assertSucceeds(setDoc(doc(adm, 'roles', 'fake'), { cash: false }, { merge: true })));
+await t('il super admin cambia nome e ruoli a un admin', assertSucceeds(updateDoc(doc(pm, 'members', 'other'), { first: 'Anna Maria', last: 'Rossi', gender: 'F' }).then(() => setDoc(doc(pm, 'roles', 'other'), { cash: true }, { merge: true })).then(() => deleteDoc(doc(pm, 'roles', 'other')))));
+await t('il super admin toglie il ruolo all\'account principale', assertSucceeds(setDoc(doc(pm, 'adminsOff', 'Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2'), { name: 'Mano', by: 'pm', at: 1 })));
+await t('account principale tolto: non è più admin', assertFails(getDoc(doc(adm, 'admins', 'probe'))));
+await t('anche per email (manofuori confermato): non è più admin', assertSucceeds(setDoc(doc(pm, 'adminsOff', 'pp'), { name: 'M', by: 'pm', at: 1 }).then(() => assertFails(getDoc(doc(pp, 'admins', 'probe'))))));
+await t('il super admin gli ridà il ruolo', assertSucceeds(deleteDoc(doc(pm, 'adminsOff', 'Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2')).then(() => deleteDoc(doc(pm, 'adminsOff', 'pp'))).then(() => getDoc(doc(adm, 'admins', 'probe')))));
+await t('il super admin toglie un admin', assertSucceeds(deleteDoc(doc(pm, 'admins', 'other'))));
 await t('tolto: non è più admin', assertFails(getDoc(doc(oth, 'admins', 'probe'))));
+await t('nessuno toglie il super admin (resta admin)', assertSucceeds(setDoc(doc(adm, 'adminsOff', 'pm'), { name: 'x', by: 'x', at: 1 }).catch(() => 0).then(() => getDoc(doc(pm, 'admins', 'probe')))));
 // timbro e firma delle ricevute: li carica l'admin, li leggono gli utenti collegati, non chi non ha fatto l'accesso
 await t('admin carica timbro e firma', assertSucceeds(setDoc(doc(adm, 'private', 'receiptSign'), { stamp: 'data:image/png;base64,AAA', updated: 1 })));
 await t('utente collegato legge timbro e firma', assertSucceeds(getDoc(doc(cap, 'private', 'receiptSign'))));

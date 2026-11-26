@@ -5,19 +5,40 @@ rules_version = '2';
 // La raccolta "admins" si gestisce solo dalla console Firebase.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ADMIN PRINCIPALI: manofuori@gmail.com (account principale) e pierpaolomurgioni@gmail.com, con email confermata.
-    // Nessuno toglie loro il ruolo; sono gli unici che possono togliere il ruolo di admin generale agli altri.
-    function isOwner() {
+    // SUPER ADMIN: solo pierpaolomurgioni@gmail.com (email confermata). È sempre admin generale: nessuno può togliergli
+    // il ruolo né modificarlo; è l'unico che nomina, modifica o toglie gli altri admin generali.
+    function isSuper() {
+      return request.auth != null && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'pierpaolomurgioni@gmail.com'
+        && (request.auth.token.email_verified == true || exists(/databases/$(database)/documents/verified/$(request.auth.uid)));
+    }
+    // ACCOUNT PRINCIPALE (manofuori@gmail.com): admin generale come gli altri; solo il super admin può toglierlo (adminsOff).
+    function isMain() {
       return request.auth != null
         && (request.auth.uid in ['Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2']
-            || (request.auth.token.email is string && request.auth.token.email.lower() in ['manofuori@gmail.com', 'pierpaolomurgioni@gmail.com']
+            || (request.auth.token.email is string && request.auth.token.email.lower() == 'manofuori@gmail.com'
                 && (request.auth.token.email_verified == true
-                    || exists(/databases/$(database)/documents/verified/$(request.auth.uid)))));
+                    || exists(/databases/$(database)/documents/verified/$(request.auth.uid)))))
+        && !exists(/databases/$(database)/documents/adminsOff/$(request.auth.uid));
     }
-    // ADMIN GENERALE: accesso e scrittura su tutto. L'admin principale e chi è nominato nella raccolta "admins".
+    // ADMIN GENERALE: accesso e scrittura su tutto. Il super admin, l'account principale e chi è nella raccolta "admins".
     function isAdmin() {
-      return isOwner() || (request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      return isSuper() || (request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid))) || isMain();
     }
+    // L'utente uid è un admin generale (o il super admin, o l'account principale)? Allora i suoi dati, ruoli e blocchi
+    // li cambia solo il super admin (o lui stesso dove è permesso).
+    function acctEmail(uid) {
+      return exists(/databases/$(database)/documents/accounts/$(uid))
+        && get(/databases/$(database)/documents/accounts/$(uid)).data.get('verified', false) == true
+        ? get(/databases/$(database)/documents/accounts/$(uid)).data.get('email', '') : '';
+    }
+    function isGeneral(uid) {
+      return uid == 'Q0EvxfRr7wfZqvNeqLnRcSMN8Tv2'
+        || exists(/databases/$(database)/documents/admins/$(uid))
+        || acctEmail(uid) in ['pierpaolomurgioni@gmail.com', 'manofuori@gmail.com'];
+    }
+    // l'admin può intervenire sull'utente uid: sugli admin generali solo il super admin
+    function canManage(uid) { return isAdmin() && (isSuper() || !isGeneral(uid)); }
     // Ruoli assegnati dagli admin generali: roles/{uid} = { tour: admin tornei, cash: cassa, captain: capitano }.
     function hasRole(r) {
       return request.auth != null
@@ -39,7 +60,8 @@ service cloud.firestore {
 
     match /roles/{uid} {
       allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
-      allow list, write: if isAdmin();
+      allow list: if isAdmin();
+      allow write: if canManage(uid);
     }
 
     // ---------- referto elettronico (E-scoresheet) ----------
@@ -139,9 +161,9 @@ service cloud.firestore {
         && request.resource.data.first is string && request.resource.data.first.size() > 0 && request.resource.data.first.size() <= 60
         && request.resource.data.last is string && request.resource.data.last.size() > 0 && request.resource.data.last.size() <= 60
         && request.resource.data.gender in ['M', 'F'];
-      allow delete: if isAdmin();
+      allow delete: if canManage(uid);
       // l'admin registra direttamente un utente
-      allow create, update: if isAdmin()
+      allow create, update: if canManage(uid)
         && request.resource.data.keys().hasOnly(['first', 'last', 'gender', 'created', 'privacyAt', 'privacyVer', 'deleteReq'])
         && request.resource.data.first is string && request.resource.data.first.size() > 0 && request.resource.data.first.size() <= 60
         && request.resource.data.last is string && request.resource.data.last.size() > 0 && request.resource.data.last.size() <= 60
@@ -151,7 +173,7 @@ service cloud.firestore {
     // Conferma a mano dell'utente da parte dell'admin (vale come email confermata).
     match /verified/{uid} {
       allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
-      allow write: if isAdmin();
+      allow write: if canManage(uid);
     }
 
     // ---------- tornei a squadre (pallavolo) ----------
@@ -270,7 +292,7 @@ service cloud.firestore {
         && request.resource.data.email == request.auth.token.email.lower()
         && request.resource.data.get('verified', false) == (request.auth.token.email_verified == true);
       allow create: if isAdmin() && request.resource.data.keys().hasOnly(['email', 'verified']) && request.resource.data.verified == false;
-      allow delete: if isAdmin();   // eliminazione dell'utente (diritto alla cancellazione)
+      allow delete: if canManage(uid);   // eliminazione dell'utente (diritto alla cancellazione)
     }
 
     // Messaggi già letti da ciascun utente.
@@ -280,7 +302,7 @@ service cloud.firestore {
 
     match /bans/{uid} {
       allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
-      allow write: if isAdmin();
+      allow write: if canManage(uid);
     }
 
     // ---------- gioco libero ----------
@@ -376,7 +398,8 @@ service cloud.firestore {
     }
     match /coaches/{uid} {
       allow get: if isAdmin() || (request.auth != null && request.auth.uid == uid);
-      allow list, write: if isAdmin();
+      allow list: if isAdmin();
+      allow write: if canManage(uid);
     }
     match /athletes/{uid} {
       allow get: if isAdmin() || (request.auth != null && request.auth.uid == uid);
@@ -516,15 +539,21 @@ service cloud.firestore {
 
     // Chi è admin lo decide solo il database: l'app chiede il documento "probe" (o il proprio) e,
     // se la lettura è permessa, l'utente è admin. Nessun UID nel codice pubblico.
-    // admins/{uid}: altri admin generali. Li nomina un admin generale (Utenti registrati → Ruoli);
-    // li tolgono solo gli admin principali.
+    // admins/{uid}: altri admin generali. Li nomina, modifica e toglie solo il super admin (Utenti registrati → Ruoli).
+    // adminsOff/{uid}: ruolo tolto all'account principale (manofuori@gmail.com), anche questo solo dal super admin.
     match /admins/{uid} {
       allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
-      allow create, update: if isAdmin() && uid != 'probe' && uid != request.auth.uid
+      allow create, update: if isSuper() && uid != 'probe' && uid != request.auth.uid
         && request.resource.data.keys().hasOnly(['name', 'by', 'at'])
         && request.resource.data.name is string && request.resource.data.name.size() <= 130;
-      allow delete: if isOwner() && uid != request.auth.uid;
+      allow delete: if isSuper() && uid != request.auth.uid;
+    }
+    match /adminsOff/{uid} {
+      allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isSuper() && uid != request.auth.uid && request.resource.data.keys().hasOnly(['name', 'by', 'at']);
+      allow delete: if isSuper();
     }
   }
 }

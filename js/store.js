@@ -16,7 +16,7 @@ const Store = (() => {
   }
 
   // Raccolte copiate così come arrivano dal database.
-  const PLAIN = ['roles', 'admins', 'trash', 'teamCodes', 'teamContacts', 'vtours', 'vmatches', 'teams', 'rosters', 'incassi', 'tesserati', 'occfree', 'manualVerified', 'emailVerified', 'freeplay', 'fpreg', 'fpanon',
+  const PLAIN = ['roles', 'admins', 'adminsOff', 'trash', 'teamCodes', 'teamContacts', 'vtours', 'vmatches', 'teams', 'rosters', 'incassi', 'tesserati', 'occfree', 'manualVerified', 'emailVerified', 'freeplay', 'fpreg', 'fpanon',
     'trainings', 'coaches', 'athletes', 'groups', 'plans', 'packs', 'occ', 'att', 'spots', 'receipts', 'bans', 'notices', 'members', 'messages', 'inbox', 'accounts'];
 
   function applyRemote(kind, value) {

@@ -238,10 +238,11 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   spot e trimestrali si aggiornano (avviso se un numero risulterebbe doppio).
 - Il corsista scarica dal profilo solo le proprie ricevute (`receipts`: admin e interessato).
 - **Ruoli** (pagina Utenti → "Ruoli e accessi"):
-  - *Admin generale*: tutto. Gli **admin principali** sono manofuori@gmail.com (account principale) e
-    pierpaolomurgioni@gmail.com, con email confermata (nelle regole del database): nessuno può togliere loro il ruolo e
-    sono gli unici che possono toglierlo agli altri. Gli altri admin generali li nomina un admin generale con la casella
-    **Admin generale** accanto all'utente (raccolta `admins`; vale dal prossimo accesso). Nessun admin cambia il proprio ruolo.
+  - *Admin generale*: tutto. Il **super admin** è pierpaolomurgioni@gmail.com con email confermata (nelle regole del
+    database): nessuno può modificarlo o togliergli il ruolo, ed è l'unico che nomina, modifica o toglie gli altri admin
+    generali (raccolta `admins`; casella **Admin generale** accanto all'utente) e che cambia dati, ruoli e blocchi di un
+    admin generale. L'account principale manofuori@gmail.com è admin generale come gli altri: solo il super admin può
+    toglierlo (raccolta `adminsOff`). Nessun admin cambia il proprio ruolo.
   - *Admin tornei* (`roles/{uid}.tour`): tornei, squadre (ammissione), livelli, calendari e risultati. I livelli stanno
     in `data/tour` (separati da `data/settings`, che resta dell'admin generale).
   - *Capitano* (`roles/{uid}.captain`): può iscrivere e gestire la propria squadra.

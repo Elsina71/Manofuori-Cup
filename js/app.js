@@ -420,7 +420,7 @@
     return `<div class="card" id="roles"><h2><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('rolesTitle'))}</h2>
       <p class="muted small">${esc(t('rolesHelp'))}</p>
       <ul class="reg-list">
-        ${row('crown', t('role_general'), t('roleHelp_general'), OWNER_EMAILS.map(e => `${e} (${t('adminOwner')})`).concat(Object.entries(S().admins || {}).map(([uid, v]) => { const m = memberByUid(uid); return m ? personName(m) : v.name || uid; }).sort()))}
+        ${row('crown', t('role_general'), t('roleHelp_general'), [`${SUPER_EMAIL} (${t('adminOwner')})`].concat(Object.entries(S().admins || {}).map(([uid, v]) => { const m = memberByUid(uid); return m ? personName(m) : v.name || uid; }).sort()))}
         ${row('shirt-sport', t('role_captain'), t('roleHelp_captain'), who('captain'))}
         ${row('trophy', t('role_tour'), t('roleHelp_tour'), who('tour'))}
         ${row('cash-register', t('role_cash'), t('roleHelp_cash'), who('cash'))}
@@ -453,38 +453,43 @@
         </form></details>
       <div class="toolbar"><input type="search" class="search" placeholder="${esc(t('search'))}" value="${esc(ui.userFilter || '')}" data-change="user-filter" aria-label="${esc(t('search'))}"></div>
       <div class="card"><ul class="reg-list users-list">${list.map(m => {
+        const lk = userLocked(m.uid), dis = lk ? 'disabled' : '';
         return `<li class="${pend.has(m.uid) ? 'homonym' : ''} ${banOf(m.uid).tour ? 'banned' : ''}">
-          <span class="reg-names">${ui.userEdit === m.uid ? userEditForm(m) : `<strong>${esc(personName(m))}</strong> <span class="badge g-${m.gender}">${esc(m.gender)}</span>
-            <button class="btn small" data-action="user-edit" data-uid="${m.uid}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t('userEditName'))}</button>`}
+          <span class="reg-names">${ui.userEdit === m.uid && !lk ? userEditForm(m) : `<strong>${esc(personName(m))}</strong> <span class="badge g-${m.gender}">${esc(m.gender)}</span>
+            ${lk ? `<span class="badge" title="${esc(t('adminOnlySuper'))}"><i class="ti ti-lock" aria-hidden="true"></i> ${esc(t('adminLocked'))}</span>` : `<button class="btn small" data-action="user-edit" data-uid="${m.uid}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t('userEditName'))}</button>`}`}
             ${homs.has(m.uid) ? `<span class="badge warn-b">${esc(t('homonym'))}</span>` : ''}<br>
             <small class="muted">${esc(acc[m.uid] || '—')}</small>
-            ${acc[m.uid] ? `<button class="btn small" data-action="user-reset-pw" data-uid="${m.uid}"><i class="ti ti-mail-forward" aria-hidden="true"></i> ${esc(t('userResetPw'))}</button>` : ''}
-            <button class="btn small danger" data-action="user-delete" data-uid="${m.uid}"><i class="ti ti-user-x" aria-hidden="true"></i> ${esc(t('userDelete'))}</button>
+            ${acc[m.uid] && !lk ? `<button class="btn small" data-action="user-reset-pw" data-uid="${m.uid}"><i class="ti ti-mail-forward" aria-hidden="true"></i> ${esc(t('userResetPw'))}</button>` : ''}
+            ${lk ? '' : `<button class="btn small danger" data-action="user-delete" data-uid="${m.uid}"><i class="ti ti-user-x" aria-hidden="true"></i> ${esc(t('userDelete'))}</button>`}
             <span class="ban-row">${verifyBadge(m.uid)} ${m.privacyAt ? `<span class="badge st-done" title="${esc(t('privacyAcceptedOn', { d: fmtDate(new Date(m.privacyAt).toLocaleDateString('sv')) }))}"><i class="ti ti-shield-check" aria-hidden="true"></i> ${esc(t('privacyOkBadge'))}</span>` : `<span class="badge tess-no">${esc(t('privacyNoBadge'))}</span>`}${m.deleteReq ? ` <span class="badge st-full">${esc(t('deleteRequested', { d: fmtDate(new Date(m.deleteReq).toLocaleDateString('sv')) }))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('rolesTitle'))}:
               ${generalAdminBox(m)}
-              ${['captain', 'tour', 'refs', 'cash'].map(r => `<label class="check"><input type="checkbox" data-change="role" data-uid="${m.uid}" data-role="${r}" ${((S().roles || {})[m.uid] || {})[r] ? 'checked' : ''}> ${esc(t('role_' + r))}</label>`).join('')}
+              ${['captain', 'tour', 'refs', 'cash'].map(r => `<label class="check"><input type="checkbox" data-change="role" data-uid="${m.uid}" data-role="${r}" ${((S().roles || {})[m.uid] || {})[r] ? 'checked' : ''} ${dis}> ${esc(t('role_' + r))}</label>`).join('')}
               ${coachOf(m.uid) ? `<span class="badge">${esc(t('role_coach'))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-ban" aria-hidden="true"></i> ${esc(t('banTitle'))}:
-              <label class="check"><input type="checkbox" data-change="ban" data-uid="${m.uid}" data-what="tour" ${banOf(m.uid).tour ? 'checked' : ''}> ${esc(t('banTour'))}</label></span></span>
+              <label class="check"><input type="checkbox" data-change="ban" data-uid="${m.uid}" data-what="tour" ${banOf(m.uid).tour ? 'checked' : ''} ${dis}> ${esc(t('banTour'))}</label></span></span>
           <form class="nick-form" data-form="nick-save" data-uid="${m.uid}">
-            <input name="nick" maxlength="40" value="${esc((S().nicks || {})[m.uid] || '')}" placeholder="${esc(t('nickPh'))}" aria-label="${esc(t('nick'))}">
-            <button class="btn small">${esc(t('save'))}</button>
+            <input name="nick" maxlength="40" value="${esc((S().nicks || {})[m.uid] || '')}" placeholder="${esc(t('nickPh'))}" aria-label="${esc(t('nick'))}" ${dis}>
+            <button class="btn small" ${dis}>${esc(t('save'))}</button>
           </form>
         </li>`; }).join('') || `<li class="muted">${esc(t('noMembers'))}</li>`}</ul></div>`;
   }
 
-  // Casella "Admin generale" nella scheda dell'utente. Gli admin principali non si toccano; un admin non cambia se stesso;
-  // nominare può ogni admin generale, togliere il ruolo solo un admin principale (lo controllano anche le regole).
-  const OWNER_EMAILS = ['manofuori@gmail.com', 'pierpaolomurgioni@gmail.com'];
-  const isOwnerEmail = e => OWNER_EMAILS.includes(String(e || '').toLowerCase());
-  const iAmOwner = () => !!(window.Cloud && window.Cloud.user && isOwnerEmail(window.Cloud.user.email));
+  // Casella "Admin generale" nella scheda dell'utente. Il super admin (pierpaolomurgioni@gmail.com) è l'unico che nomina,
+  // modifica o toglie gli admin generali; lui non lo tocca nessuno. L'account principale (manofuori@gmail.com) è admin
+  // generale come gli altri (lo controllano anche le regole del database).
+  const SUPER_EMAIL = 'pierpaolomurgioni@gmail.com', MAIN_EMAIL = 'manofuori@gmail.com';
+  const accEmail = uid => String((S().accounts || {})[uid] || '').toLowerCase();
+  const iAmSuper = () => !!(window.Cloud && window.Cloud.user && String(window.Cloud.user.email || '').toLowerCase() === SUPER_EMAIL);
+  const isGeneralUid = uid => [SUPER_EMAIL, MAIN_EMAIL].includes(accEmail(uid)) || !!(S().admins || {})[uid];
+  // dati, ruoli e blocchi di un admin generale li cambia solo il super admin
+  const userLocked = uid => isGeneralUid(uid) && !iAmSuper();
   function generalAdminBox(m) {
-    const owner = isOwnerEmail((S().accounts || {})[m.uid]);
-    const on = owner || !!(S().admins || {})[m.uid] || (m.uid === myUid() && admin());
-    const locked = owner || m.uid === myUid() || (on && !iAmOwner());
-    const why = owner ? 'adminOwnerFixed' : m.uid === myUid() ? 'adminSelfFixed' : 'adminOnlyOwnerRevokes';
-    return `<label class="check" ${locked ? `title="${esc(t(why))}"` : ''}><input type="checkbox" data-change="admin-role" data-uid="${m.uid}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}> <strong>${esc(t('role_general'))}</strong>${owner ? ` <span class="badge">${esc(t('adminOwner'))}</span>` : ''}</label>`;
+    const sup = accEmail(m.uid) === SUPER_EMAIL, main = accEmail(m.uid) === MAIN_EMAIL;
+    const on = sup || !!(S().admins || {})[m.uid] || (main && !(S().adminsOff || {})[m.uid]) || (m.uid === myUid() && admin());
+    const locked = sup || m.uid === myUid() || !iAmSuper();
+    const why = sup ? 'adminOwnerFixed' : m.uid === myUid() ? 'adminSelfFixed' : 'adminOnlyOwnerRevokes';
+    return `<label class="check" ${locked ? `title="${esc(t(why))}"` : ''}><input type="checkbox" data-change="admin-role" data-uid="${m.uid}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}> <strong>${esc(t('role_general'))}</strong>${sup ? ` <span class="badge">${esc(t('adminOwner'))}</span>` : ''}</label>`;
   }
 
   // Correzione di nome, cognome e sesso di un utente (solo admin generale).
@@ -4194,8 +4199,8 @@
       if (!fp || !confirmed('fpDeleteConfirm', { n: fp.name })) return;
       window.Cloud.deleteFreeplay(fp, fpRegs(fp), fpAnons(fp)).then(() => { ui.flash = { text: t('fpDeleted') }; render(); }).catch(fpErr);
     },
-    'user-edit': el => { ui.userEdit = el.dataset.uid || null; render(); },
-    'user-delete': el => {
+    'user-edit': el => { if (el.dataset.uid && userLocked(el.dataset.uid)) { warn('adminOnlySuper'); return; } ui.userEdit = el.dataset.uid || null; render(); },
+    'user-delete': el => { if (userLocked(el.dataset.uid)) { warn('adminOnlySuper'); return; }
       // utente dell'app, oppure scheda di un corsista senza account (stessa pulizia: gruppi, piani, pacchetti, scheda)
       const a = !memberByUid(el.dataset.uid) && (S().athletes || []).find(x => x.id === el.dataset.uid);
       const m = memberByUid(el.dataset.uid) || (a ? { uid: a.id, first: a.first || '', last: a.last || '' } : null);
@@ -4286,7 +4291,7 @@
         .catch(() => warn('resetFailed'));
     },
     // admin: manda all'utente l'email di Firebase per scegliere una nuova password (l'admin non la vede mai)
-    'user-reset-pw': el => {
+    'user-reset-pw': el => { if (userLocked(el.dataset.uid)) { warn('adminOnlySuper'); return; }
       const m = memberByUid(el.dataset.uid), email = (S().accounts || {})[el.dataset.uid];
       if (!m || !email || !confirm(t('userResetPwConfirm', { n: personName(m), e: email }))) return;
       el.disabled = true;
@@ -4372,7 +4377,7 @@
         .catch(e => { btn.disabled = false; warn(e.code === 'auth/email-already-in-use' ? 'userCreateExists' : e.code === 'auth/weak-password' ? 'registerWeak' : 'regError', { code: e.code || e.message }); });
     },
     'msg-send': f => sendMessageForm(f),
-    'user-edit-save': f => {
+    'user-edit-save': f => { if (userLocked(f.dataset.uid)) { warn('adminOnlySuper'); return; }
       const uid = f.dataset.uid, d = { first: f.first.value.trim(), last: f.last.value.trim(), gender: f.gender.value };
       if (!d.first || !d.last || !['M', 'F'].includes(d.gender)) return warn('errRegFields');
       const teamIds = (S().teams || []).filter(x => x.captainUid === uid).map(x => x.id);
@@ -4380,7 +4385,7 @@
       window.Cloud.adminUpdateMember(uid, d, teamIds, groupIds).then(() => { ui.userEdit = null; ui.flash = { text: t('saved') }; render(); })
         .catch(e => warn('regError', { code: e.code || e.message }));
     },
-    'nick-save': f => {
+    'nick-save': f => { if (userLocked(f.dataset.uid)) { warn('adminOnlySuper'); return; }
       const uid = f.dataset.uid, nick = f.nick.value.trim();
       const taken = Object.entries(S().nicks || {}).find(([u, n]) => u !== uid && n && n.toLowerCase() === nick.toLowerCase());
       if (nick && taken) return warn('nickTaken');
@@ -4575,7 +4580,7 @@
         fm.querySelector('.ca-rc').hidden = !cash; fm.querySelector('.ca-rc-note').hidden = cash;
         break;
       }
-      case 'role': {
+      case 'role': { if (userLocked(el.dataset.uid)) { warn('adminOnlySuper'); return; }
         if (!admin()) return;
         const m = memberByUid(el.dataset.uid);
         window.Cloud.setRole(el.dataset.uid, el.dataset.role, el.checked, m ? personName(m) : '')
@@ -4583,7 +4588,7 @@
           .catch(err => warn('regError', { code: err.code || err.message }));
         break;
       }
-      case 'admin-role': {
+      case 'admin-role': { if (!iAmSuper()) { warn('adminOnlySuper'); return; }
         if (!admin()) return;
         const m = memberByUid(el.dataset.uid), n = m ? personName(m) : '';
         if (!confirmed(el.checked ? 'adminGrantConfirm' : 'adminRevokeConfirm', { n })) { el.checked = !el.checked; return; }
@@ -4592,7 +4597,7 @@
           .catch(err => { el.checked = !el.checked; warn('regError', { code: err.code || err.message }); });
         break;
       }
-      case 'ban': {
+      case 'ban': { if (userLocked(el.dataset.uid)) { warn('adminOnlySuper'); return; }
         if (!admin()) return;
         const cur = Object.assign({ tour: false, book: false }, banOf(el.dataset.uid));
         cur[el.dataset.what] = el.checked;

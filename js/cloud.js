@@ -88,6 +88,7 @@ function listenRoles() {
   if (rolesUnsub) { rolesUnsub(); rolesUnsub = null; }
   Store.applyRemote('roles', {});
   Store.applyRemote('admins', {});
+  Store.applyRemote('adminsOff', {});
   if (!isAdmin) {
     if (user && member) rolesUnsub = onSnapshot(doc(db, 'roles', user.uid), snap => { roles = snap.exists() ? snap.data() : {}; refresh(); }, () => {});
     return;
@@ -101,11 +102,20 @@ function listenRoles() {
     Store.applyRemote('admins', Object.fromEntries(snap.docs.map(d => [d.id, d.data()])));
     refresh();
   }, onError);
-  rolesUnsub = () => { u1(); u2(); };
+  // ruolo tolto all'account principale (solo il super admin)
+  const u3 = onSnapshot(collection(db, 'adminsOff'), snap => {
+    Store.applyRemote('adminsOff', Object.fromEntries(snap.docs.map(d => [d.id, d.data()])));
+    refresh();
+  }, onError);
+  rolesUnsub = () => { u1(); u2(); u3(); };
 }
-// Solo admin generale: nomina o toglie un altro admin generale (non se stesso).
-function setAdmin(uid, on, name) {
-  return on ? setDoc(doc(db, 'admins', uid), { name: name || '', by: user.uid, at: Date.now() }) : deleteDoc(doc(db, 'admins', uid));
+// Solo il super admin: nomina o toglie un altro admin generale (non se stesso).
+// adminsOff serve per l'account principale (manofuori@gmail.com), che è admin anche senza il documento in "admins".
+async function setAdmin(uid, on, name) {
+  const v = { name: name || '', by: user.uid, at: Date.now() }, b = writeBatch(db);
+  if (on) { b.set(doc(db, 'admins', uid), v); b.delete(doc(db, 'adminsOff', uid)); }
+  else { b.delete(doc(db, 'admins', uid)); b.set(doc(db, 'adminsOff', uid), v); }
+  await b.commit();
 }
 function setRole(uid, role, on, name) {
   return setDoc(doc(db, 'roles', uid), { [role]: !!on, name: name || '', updated: Date.now(), by: user.uid }, { merge: true });
