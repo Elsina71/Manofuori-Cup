@@ -1366,6 +1366,128 @@ html[data-look="c"]:not([data-theme]) .tnext { background: var(--surface-2); }
 html[data-look="c"]:not([data-theme]) .mainnav a.active .ni { background: var(--primary); color: var(--primary-ink); }
 @media (min-width: 1200px) { html[data-look="c"]:not([data-theme]) .mainnav a.active .ni { background: none; color: inherit; } }
 
+/* D · "Tabellone": scuro e sportivo (palette black-crimson, Archivo largo + Martian Mono per numeri e date),
+   tornei in righe orizzontali come un tabellone, angoli quasi vivi, testata nera con la voce attiva sottolineata in rosso */
+html[data-look="d"]:not([data-theme]) {
+  --bg: #0a0a0a; --surface: #151515; --surface-2: #1f1f1f; --text: #efefef; --muted: #b0b0b0;
+  --border: #2a2a2a; --line-strong: #3d3d3d;
+  --primary: #e0283f; --primary-ink: #ffffff; --primary-soft: #3a0d14; --accent: #e0283f; --accent-soft: #3a0d14;
+  --danger: #ff4d5e; --danger-soft: #3a0d14; --ok: #3ddc84; --ok-soft: #0f2a1b; --warn-soft: #3a2f10;
+  --radius: 6px; --radius-s: 4px; --r-sm: 4px; --r-btn: 4px;
+  --shadow-hover: 0 0 0 1px #e0283f;
+  --font-body: "Archivo", "Inter", system-ui, sans-serif; --font-mono: "Martian Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+html[data-look="d"]:not([data-theme]) :is(h1, h2, h3) { font-stretch: 112%; font-weight: 600; letter-spacing: -.02em; }
+html[data-look="d"]:not([data-theme]) h1 { font-size: clamp(32px, 2vw + 22px, 52px); font-weight: 700; }
+html[data-look="d"]:not([data-theme]) :is(.tnext-when, .tprog-lbl, .tlive-score, .vm-score, .vm-when, .tevent-meta span, .table .num) { font-family: var(--font-mono); font-size: 13px; letter-spacing: -.02em; }
+html[data-look="d"]:not([data-theme]) .topbar { background: #000; border-bottom: 1px solid var(--border); }
+html[data-look="d"]:not([data-theme]) .brand-logos img { background: #fff; border-radius: 4px; padding: 2px 4px; }
+html[data-look="d"]:not([data-theme]) .mainnav { background: #000; }
+html[data-look="d"]:not([data-theme]) .mainnav a.active .ni { background: var(--primary); color: #fff; }
+@media (min-width: 1200px) { html[data-look="d"]:not([data-theme]) .mainnav { background: transparent; } html[data-look="d"]:not([data-theme]) .mainnav a.active::after { height: 3px; bottom: -2px; } }
+html[data-look="d"]:not([data-theme]) .card { background: var(--surface); }
+html[data-look="d"]:not([data-theme]) .btn { border-color: var(--line-strong); }
+html[data-look="d"]:not([data-theme]) .tabs { background: transparent; border-radius: 0; padding: 0; gap: 0; width: auto; border-bottom: 1px solid var(--border); }
+html[data-look="d"]:not([data-theme]) .tabs a { border-radius: 0; height: 46px; border-bottom: 3px solid transparent; margin-bottom: -1px; font-stretch: 110%; }
+html[data-look="d"]:not([data-theme]) .tabs a.active { background: transparent; color: var(--text); border-bottom-color: var(--primary); }
+html[data-look="d"]:not([data-theme]) .tchip { background: var(--primary); color: #fff; border-radius: 2px; font-stretch: 115%; font-weight: 600; }
+html[data-look="d"]:not([data-theme]) .tevent-head { border-bottom: 3px solid var(--primary); padding-bottom: 10px; }
+html[data-look="d"]:not([data-theme]) .tevent-head h2 { font-size: 30px; font-weight: 700; font-stretch: 115%; }
+/* tornei come righe di un tabellone */
+html[data-look="d"]:not([data-theme]) .tgrid { grid-template-columns: 1fr !important; gap: 8px; }
+@media (min-width: 900px) {
+  html[data-look="d"]:not([data-theme]) .tcard {
+    display: grid; align-items: center; gap: 4px 28px; padding: 16px 20px;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-areas: "head prog next" "title prog next" "meta lbl next" "live live live";
+  }
+  html[data-look="d"]:not([data-theme]) .tcard-head { grid-area: head; }
+  html[data-look="d"]:not([data-theme]) .tcard h3 { grid-area: title; font-size: 26px; }
+  html[data-look="d"]:not([data-theme]) .tcard-meta { grid-area: meta; }
+  html[data-look="d"]:not([data-theme]) .tprog { grid-area: prog; align-self: end; height: 8px; }
+  html[data-look="d"]:not([data-theme]) .tprog-lbl { grid-area: lbl; margin: 0; align-self: start; }
+  html[data-look="d"]:not([data-theme]) .tlive { grid-area: live; margin-top: 10px; }
+  html[data-look="d"]:not([data-theme]) .tnext { grid-area: next; margin: 0; align-self: stretch; align-content: center; }
+}
+html[data-look="d"]:not([data-theme]) .tcard { border-left: 4px solid var(--primary); }
+html[data-look="d"]:not([data-theme]) .tlive { background: #1a0508; border-color: var(--primary); }
+html[data-look="d"]:not([data-theme]) .tlive-score { font-size: 20px; color: #fff; }
+html[data-look="d"]:not([data-theme]) .vm-teams { font-stretch: 108%; }
+
+/* E · "Menu laterale": app pulita (palette cool-white-slate, Mona Sans + Geist Mono), sul computer il menu è una
+   colonna fissa a sinistra con il logo in alto; contenuto su pannelli grigio ardesia; numeri grandi nelle schede */
+html[data-look="e"]:not([data-theme]) {
+  --bg: #f7f9fa; --surface: #ffffff; --surface-2: #ecf0f2; --text: #1f3038; --muted: #46555c;
+  --border: #dde4e7; --line-strong: #c2ccd1;
+  --primary: #0d7480; --primary-ink: #ffffff; --primary-soft: #dcecee; --accent: #0d7480; --accent-soft: #dcecee;
+  --radius: 14px; --radius-s: 10px; --r-sm: 8px; --r-btn: 10px;
+  --font-body: "Mona Sans", "Inter", system-ui, sans-serif; --font-mono: "Geist Mono", ui-monospace, monospace;
+}
+html[data-look="e"]:not([data-theme]) :is(h1, h2, h3) { font-weight: 600; font-stretch: 104%; }
+html[data-look="e"]:not([data-theme]) .btn { background: var(--surface); border-color: var(--line-strong); }
+html[data-look="e"]:not([data-theme]) .tabs a.active { background: var(--primary); color: #fff; }
+html[data-look="e"]:not([data-theme]) .tchip { background: var(--primary-soft); color: var(--primary); }
+html[data-look="e"]:not([data-theme]) .tprog { height: 8px; }
+html[data-look="e"]:not([data-theme]) .tprog-lbl strong { font-size: 28px; font-weight: 600; font-family: var(--font-mono); letter-spacing: -.04em; }
+html[data-look="e"]:not([data-theme]) .tnext-when { font-family: var(--font-mono); }
+html[data-look="e"]:not([data-theme]) .mainnav a.active .ni { background: var(--primary); color: #fff; }
+@media (min-width: 1200px) {
+  html[data-look="e"]:not([data-theme]) body { padding-left: 248px; }
+  html[data-look="e"]:not([data-theme]) .topbar {
+    position: fixed; inset: 0 auto 0 0; width: 248px; z-index: 30; flex-direction: column; align-items: stretch; gap: 8px;
+    padding: 20px 16px !important; background: #1f3038; color: #f7f9fa; border: 0; overflow-y: auto;
+  }
+  html[data-look="e"]:not([data-theme]) .brand { margin: 0 0 16px; }
+  html[data-look="e"]:not([data-theme]) .brand-logos img { background: #fff; border-radius: 8px; padding: 2px 6px; }
+  html[data-look="e"]:not([data-theme]) .mainnav { flex-direction: column; align-items: stretch; gap: 2px; order: 2; background: transparent; flex: 0 0 auto; justify-content: flex-start; flex-wrap: nowrap; }
+  html[data-look="e"]:not([data-theme]) .mainnav a { justify-content: flex-start; }
+  html[data-look="e"]:not([data-theme]) .topbar .brand { margin-right: 0; }
+  html[data-look="e"]:not([data-theme]) .mainnav a { color: #c9d3d7; padding: 10px 12px; font-size: 15px; border-radius: 10px; }
+  html[data-look="e"]:not([data-theme]) .mainnav a::after { display: none; }
+  html[data-look="e"]:not([data-theme]) .mainnav a:hover { background: rgba(255, 255, 255, .07); color: #fff; }
+  html[data-look="e"]:not([data-theme]) .mainnav a.active { background: #0d7480; color: #fff; }
+  html[data-look="e"]:not([data-theme]) .mainnav a.nav-home::before { content: "Home"; order: 2; }
+  html[data-look="e"]:not([data-theme]) .topbar :is(.theme-link, .login-link, .admin-badge) { order: 3; color: #f7f9fa; border-color: rgba(247, 249, 250, .3); justify-content: flex-start; }
+  html[data-look="e"]:not([data-theme]) .theme-link { margin-top: auto; width: 100%; padding-left: 12px; }
+  html[data-look="e"]:not([data-theme]) .container { max-width: 1240px; padding-top: 40px; }
+  html[data-look="e"]:not([data-theme]) .site-footer { margin-left: auto; }
+  html[data-look="e"]:not([data-theme]) .tgrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+/* F · "Pastello": allegro e morbido (palette mint-pink-accounts, Urbanist + DM Mono), schede con la testata
+   a campo pastello (menta e rosa a turno) e il nome grande, pulsanti a pillola pieni, testata bianca centrata */
+html[data-look="f"]:not([data-theme]) {
+  --bg: #f8f8f8; --surface: #ffffff; --surface-2: #eeeeee; --text: #0a0a0a; --muted: #4a4a4a;
+  --border: #e6e6e6; --line-strong: #cfcfcf;
+  --primary: #1f6b3a; --primary-ink: #ffffff; --primary-soft: #dcf2e3; --accent: #1f6b3a; --accent-soft: #dcf2e3;
+  --mint: #d5f2df; --pink: #fde1ea;
+  --radius: 28px; --radius-s: 18px; --r-sm: 12px; --r-btn: 999px;
+  --font-body: "Urbanist", "Inter", system-ui, sans-serif; --font-mono: "DM Mono", ui-monospace, monospace;
+}
+html[data-look="f"]:not([data-theme]) body { font-size: 17px; }
+html[data-look="f"]:not([data-theme]) :is(h1, h2, h3) { font-weight: 700; letter-spacing: -.03em; }
+html[data-look="f"]:not([data-theme]) h1 { font-size: clamp(34px, 2.2vw + 22px, 56px); }
+html[data-look="f"]:not([data-theme]) .topbar { background: #fff; }
+html[data-look="f"]:not([data-theme]) .btn { border-color: transparent; background: var(--surface-2); font-weight: 600; }
+html[data-look="f"]:not([data-theme]) .btn.primary { background: var(--primary); }
+html[data-look="f"]:not([data-theme]) .tabs { background: #fff; border: 1px solid var(--border); }
+html[data-look="f"]:not([data-theme]) .tabs a.active { background: var(--primary); color: #fff; }
+html[data-look="f"]:not([data-theme]) .mainnav a.active .ni { background: var(--mint); color: var(--primary); }
+@media (min-width: 1200px) { html[data-look="f"]:not([data-theme]) .mainnav { background: transparent; } html[data-look="f"]:not([data-theme]) .mainnav a.active { background: var(--mint); color: var(--primary); } html[data-look="f"]:not([data-theme]) .mainnav a.active::after { display: none; } }
+html[data-look="f"]:not([data-theme]) .card { border: 0; }
+html[data-look="f"]:not([data-theme]) .tcard { border: 0; padding: 0; gap: 12px; overflow: hidden; }
+html[data-look="f"]:not([data-theme]) .tcard > * { margin-left: 20px; margin-right: 20px; }
+html[data-look="f"]:not([data-theme]) .tcard-head { margin: 0; padding: 18px 20px 4px; background: var(--mint); }
+html[data-look="f"]:not([data-theme]) .tcard h3 { margin: -12px 0 0; padding: 0 20px 20px; background: var(--mint); font-size: 26px; font-weight: 800; }
+html[data-look="f"]:not([data-theme]) .tgrid > .tcard:nth-child(even) :is(.tcard-head, h3) { background: var(--pink); }
+html[data-look="f"]:not([data-theme]) .tcard-meta { margin-top: 4px; }
+html[data-look="f"]:not([data-theme]) .tchip { background: rgba(255, 255, 255, .7); }
+html[data-look="f"]:not([data-theme]) .tnext { margin-bottom: 20px; background: #f4f4f4; }
+html[data-look="f"]:not([data-theme]) .tlive { border-radius: var(--radius-s); }
+html[data-look="f"]:not([data-theme]) .tprog { height: 10px; }
+html[data-look="f"]:not([data-theme]) .vm-row { padding: 16px 0; }
+
 /* ===== temi scelti dall'utente (Impostazioni → Colori; solo su quel dispositivo). Pallone nello stile Molten Flistatec. ===== */
 /* temi chiari: valori di base fissi, anche con il telefono in modalità scura */
 [data-theme]:not([data-theme="notte"]):not([data-theme="lavagna"]) {
