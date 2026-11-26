@@ -3197,7 +3197,7 @@
   const vMixed = id => { const tm = teamById(id); return !tm || tm.kind === 'X'; };
   function vEscoreInfo(tour, m) {
     const team = id => ({ name: vTeamName(tour, id), players: rosterOf(id).slice().sort(byShirt)
-      .map(x => ({ no: x.num === '' ? '' : Number(x.num), name: `${x.first} ${x.last}`, gender: x.g === 'F' ? 'F' : 'M', libero: false, captain: false })) });
+      .map(x => ({ no: x.num === '' ? '' : x.num === '00' ? 100 : x.num === '000' ? 1000 : Number(x.num), name: `${x.first} ${x.last}`, gender: x.g === 'F' ? 'F' : 'M', libero: false, captain: false })) });
     const phase = m.stage === 'g' ? `${t('vtGroup', { g: m.group })} · ${t('vmDay', { n: m.day })}`
       : `${((tour.brackets || []).find(b => b.id === m.bracket) || {}).name || t('vtTab_playoff')} · ${t('vmLeg', { n: m.leg })}`;
     return { competition: tour.name, phase, matchNo: m.key, date: m.date || '', time: m.time || '', venue: m.place || '', court: (scorer() && scorer().court) || '',
@@ -3293,7 +3293,7 @@
   function rosterRow(pl) {
     const v = pl || { num: '', last: '', first: '', g: 'M' };
     return `<div class="roster-row">
-      <input name="num" type="number" min="0" max="99" inputmode="numeric" value="${esc(v.num)}" placeholder="${esc(t('tmNumShort'))}" aria-label="${esc(t('tmNum'))}">
+      <input name="num" type="text" inputmode="numeric" maxlength="3" pattern="[0-9]{1,2}|000" value="${esc(v.num)}" placeholder="${esc(t('tmNumShort'))}" aria-label="${esc(t('tmNum'))}">
       <input name="last" maxlength="60" value="${esc(v.last)}" placeholder="${esc(t('lastName'))}" aria-label="${esc(t('lastName'))}">
       <input name="first" maxlength="60" value="${esc(v.first)}" placeholder="${esc(t('firstName'))}" aria-label="${esc(t('firstName'))}">
       <select name="g" aria-label="${esc(t('gender'))}"><option value="M" ${sel(v.g, 'M')}>M</option><option value="F" ${sel(v.g, 'F')}>F</option></select>
@@ -3580,7 +3580,7 @@
       first: r.querySelector('[name=first]').value.trim(), g: r.querySelector('[name=g]').value, uid: r.querySelector('[name=uid]').value
     })).filter(x => x.last || x.first || x.num);
     if (players.some(x => !x.last || !x.first)) return warn('tmPlayerIncomplete');
-    if (players.some(x => x.num !== '' && !(Number(x.num) >= 0 && Number(x.num) <= 99))) return warn('tmNumErr');
+    if (players.some(x => x.num !== '' && !/^(\d{1,2}|000)$/.test(x.num))) return warn('tmNumErr');
     const team = { name: f.name.value.trim(), level: old && f.level.disabled ? old.level : f.level.value, kind: f.kind.value };
     if (!team.name || !team.level) return warn('errRegFields');
     if (tourAdmin()) {
@@ -3590,7 +3590,8 @@
       if (!old) team.status = 'ok';
     } else if (old) team.captainUid = old.captainUid;
     else Object.assign(team, { captainUid: me.uid, captainName: personName(me) });
-    const roster = players.map(x => ({ num: x.num === '' ? '' : Number(x.num), last: x.last, first: x.first, g: x.g === 'F' ? 'F' : 'M', uid: x.uid || '' }));
+    // 0, 00 e 000 sono maglie diverse: 00 e 000 restano scritti così, gli altri come numero
+    const roster = players.map(x => ({ num: x.num === '' ? '' : /^0{2,3}$/.test(x.num) ? x.num : Number(x.num), last: x.last, first: x.first, g: x.g === 'F' ? 'F' : 'M', uid: x.uid || '' }));
     // utenti dell'app nella squadra: vedono le gare della squadra (solo gli id, la rosa resta privata)
     team.memberUids = [...new Set(roster.map(x => x.uid).filter(Boolean))];
     const send = old && !tourAdmin() ? { name: team.name, level: team.level, kind: team.kind, captainUid: old.captainUid, memberUids: team.memberUids } : team;

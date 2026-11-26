@@ -89,10 +89,11 @@
 
   function teamName(m, tm) { return m.teams[tm].name || `Squadra ${tm}`; }
   const roster = (m, tm) => m.teams[tm].players.filter(p => p.no !== '' && p.no != null);
+  const sh = R.shirt, parseShirt = R.parseShirt;   // numeri di maglia, con 00 e 000
   const player = (m, tm, no) => roster(m, tm).find(p => +p.no === +no);
   function pLabel(m, tm, no) {
     const p = player(m, tm, no);
-    return p && p.name ? `${no} ${p.name}` : String(no);
+    return p && p.name ? `${sh(no)} ${p.name}` : sh(no);
   }
   const isWoman = (m, tm, no) => { const p = player(m, tm, no); return !!p && p.gender === 'F'; };
   const playable = (m, tm) => roster(m, tm).filter(p => !p.libero).map(p => +p.no);
@@ -267,7 +268,7 @@
         </div>
         <table class="roster"><thead><tr><th>N.</th><th>Nome e cognome</th><th title="Donna / Uomo">D/U</th><th title="Libero">L</th><th title="Capitano">K</th><th></th></tr></thead>
         <tbody>${T.players.map((p, i) => `<tr data-row="${i}">
-          <td><input class="no" name="${tm}.p.${i}.no" value="${esc(p.no)}" inputmode="numeric" maxlength="2" ${locked ? 'readonly' : ''}></td>
+          <td><input class="no" name="${tm}.p.${i}.no" value="${esc(sh(p.no))}" inputmode="numeric" maxlength="3" ${locked ? 'readonly' : ''}></td>
           <td><input name="${tm}.p.${i}.name" value="${esc(p.name)}"></td>
           <td><select name="${tm}.p.${i}.gender"><option value=""></option><option value="F" ${p.gender === 'F' ? 'selected' : ''}>D</option><option value="M" ${p.gender === 'M' ? 'selected' : ''}>U</option></select></td>
           <td><input type="checkbox" name="${tm}.p.${i}.libero" ${p.libero ? 'checked' : ''} ${locked ? 'disabled' : ''}></td>
@@ -327,7 +328,7 @@
         const cap = get(`${tm}.captain`);
         T.players.forEach((p, i) => {
           const no = get(`${tm}.p.${i}.no`);
-          if (no != null) p.no = no === '' ? '' : (parseInt(no, 10) >= 0 ? parseInt(no, 10) : '');
+          if (no != null) p.no = parseShirt(no);
           p.name = get(`${tm}.p.${i}.name`) || '';
           p.gender = get(`${tm}.p.${i}.gender`) || '';
           if (!locked) p.libero = fd.has(`${tm}.p.${i}.libero`);
@@ -408,20 +409,20 @@
     // un numero che non è in lista entra a referto senza nome all'inizio del set.
     const S0 = R.settingsOf(m);
     const fem = (tm, n) => (n in L.fem[tm] ? L.fem[tm][n] : isWoman(m, tm, n));
-    const num = v => { const n = parseInt(String(v).trim(), 10); return n >= 0 && n <= 99 ? n : ''; };
+    const num = v => parseShirt(v);
     const cellErr = (tm, p) => {
       const v = L.lineup[tm][p];
       if (v === '') return '';
-      if (L.lineup[tm].filter(x => x === v).length > 1) return `n. ${v} ripetuto`;
-      if (L.liberi[tm].includes(v)) return `il n. ${v} è un libero`;
-      if (st.barredMatch[tm][v]) return `il n. ${v} non può più giocare in questa gara`;
+      if (L.lineup[tm].filter(x => x === v).length > 1) return `n. ${sh(v)} ripetuto`;
+      if (L.liberi[tm].includes(v)) return `il n. ${sh(v)} è un libero`;
+      if (st.barredMatch[tm][v]) return `il n. ${sh(v)} non può più giocare in questa gara`;
       return '';
     };
     const libErr = (tm, i) => {
       const v = L.liberi[tm][i];
       if (v === '') return '';
-      if (L.liberi[tm][1 - i] === v) return `libero n. ${v} ripetuto`;
-      if (L.lineup[tm].includes(v)) return `il libero n. ${v} è anche in formazione`;
+      if (L.liberi[tm][1 - i] === v) return `libero n. ${sh(v)} ripetuto`;
+      if (L.lineup[tm].includes(v)) return `il libero n. ${sh(v)} è anche in formazione`;
       return '';
     };
     const wTog = (attr, tm, v) => R.minWomenOf(S0, tm) ? `<button type="button" class="w-tog ${v !== '' && fem(tm, v) ? 'on' : ''}" ${attr} ${v === '' ? 'hidden' : ''} title="Donna">D</button>` : '';
@@ -429,16 +430,16 @@
       const v = L.lineup[tm][p];
       const pl = v !== '' ? player(m, tm, v) : null;
       return `<label class="pos-cell ${cellErr(tm, p) ? 'dup' : ''} ${v !== '' && fem(tm, v) ? 'woman' : ''}" data-cell="${tm}.${p}"><span class="roman">${POS[p]}</span>
-        <input data-pos="${tm}.${p}" value="${v}" inputmode="numeric" maxlength="2" autocomplete="off" list="dl-${tm}" aria-label="${esc(teamName(m, tm))} posto ${POS[p]}">
+        <input data-pos="${tm}.${p}" value="${sh(v)}" inputmode="numeric" maxlength="3" autocomplete="off" list="dl-${tm}" aria-label="${esc(teamName(m, tm))} posto ${POS[p]}">
         <span class="pos-name">${esc(pl && pl.name ? pl.name : '')}</span>${wTog(`data-wpos="${tm}.${p}"`, tm, v)}</label>`;
     };
     const libRow = tm => `<div class="lib-row"><span class="muted small">Liberi</span>${[0, 1].map(i => {
       const v = L.liberi[tm][i], pl = v !== '' ? player(m, tm, v) : null;
       return `<label class="pos-cell lib-cell ${libErr(tm, i) ? 'dup' : ''} ${v !== '' && fem(tm, v) ? 'woman' : ''}" data-libcell="${tm}.${i}"><span class="roman">L${i + 1}</span>
-        <input data-libno="${tm}.${i}" value="${v}" inputmode="numeric" maxlength="2" autocomplete="off" aria-label="${esc(teamName(m, tm))} libero ${i + 1}" ${L.libLocked[tm][i] ? 'readonly title="I liberi restano gli stessi per tutta la gara"' : ''}>
+        <input data-libno="${tm}.${i}" value="${sh(v)}" inputmode="numeric" maxlength="3" autocomplete="off" aria-label="${esc(teamName(m, tm))} libero ${i + 1}" ${L.libLocked[tm][i] ? 'readonly title="I liberi restano gli stessi per tutta la gara"' : ''}>
         <span class="pos-name">${esc(pl && pl.name ? pl.name : '')}</span>${wTog(`data-wlib="${tm}.${i}"`, tm, v)}</label>`;
     }).join('')}</div>`;
-    const dlist = tm => `<datalist id="dl-${tm}">${playable(m, tm).filter(n => !st.barredMatch[tm][n]).map(n => `<option value="${n}">${esc(pLabel(m, tm, n))}</option>`).join('')}</datalist>`;
+    const dlist = tm => `<datalist id="dl-${tm}">${playable(m, tm).filter(n => !st.barredMatch[tm][n]).map(n => `<option value="${sh(n)}">${esc(pLabel(m, tm, n))}</option>`).join('')}</datalist>`;
     const court = (tm, side) => `<div class="lineup-court team-${tm}">
       <h3><span class="dot team-${tm}"></span> ${esc(teamName(m, tm))}${L.serving === tm ? ' · <span class="badge serve">al servizio</span>' : ''}</h3>
       <div class="net-label">rete</div><div class="court-grid">${GRID.map(p => pos(tm, p)).join('')}</div>${dlist(tm)}
@@ -579,7 +580,7 @@
         const srv = serving && p === 0;
         const isLib = lib && lib.no === no;
         return `<button class="pos-live ${srv ? 'srv' : ''} ${isLib ? 'libero' : ''} ${isWoman(m, tm, no) ? 'woman' : ''}" data-${isLib ? 'libero' : 'player'}="${tm}.${no}" title="${esc(pLabel(m, tm, no))}">
-          <span class="roman">${POS[p]}</span><span class="pno">${no}</span>${srv ? '<span class="ball">🏐</span>' : ''}${isLib ? `<span class="lib-tag">L · ${set.occ[tm][lib.col]}</span>` : `<span class="pname">${esc((player(m, tm, no) || {}).name || '')}</span>`}</button>`;
+          <span class="roman">${POS[p]}</span><span class="pno">${sh(no)}</span>${srv ? '<span class="ball">🏐</span>' : ''}${isLib ? `<span class="lib-tag">L · ${sh(set.occ[tm][lib.col])}</span>` : `<span class="pname">${esc((player(m, tm, no) || {}).name || '')}</span>`}</button>`;
       }).join('')}</div>`;
     };
     const panel = (tm, side) => {
@@ -593,7 +594,7 @@
         <div class="tp-foot">
           <button class="btn small" data-to="${tm}" ${to >= S.timeoutsPerSet ? 'disabled' : ''}>Time-out ${to}/${S.timeoutsPerSet}</button>
           <button class="btn small" data-sub="${tm}">Cambio ${set.regSubs[tm]}/${S.subsPerSet}</button>
-          ${liberi(m, tm).length ? `<button class="btn small ${set.libero[tm] ? 'lib-on' : ''}" data-lib="${tm}">Libero${set.libero[tm] ? ' ' + set.libero[tm].no : ''}</button>` : ''}
+          ${liberi(m, tm).length ? `<button class="btn small ${set.libero[tm] ? 'lib-on' : ''}" data-lib="${tm}">Libero${set.libero[tm] ? ' ' + sh(set.libero[tm].no) : ''}</button>` : ''}
           ${setPoint ? '<span class="badge warn">Set point</span>' : ''}
           ${R.minWomenOf(S, tm) && womenIn(m, tm, R.visibleCourt(set, tm)) < R.minWomenOf(S, tm) ? `<span class="badge women">⚠ ${womenIn(m, tm, R.visibleCourt(set, tm))} donne in campo</span>` : ''}
         </div>
@@ -648,10 +649,10 @@
     const items = [];
     ['A', 'B'].forEach(tm => {
       set.timeouts[tm].forEach(x => items.push(`T-O ${esc(teamName(m, tm))} ${x.score[tm]}:${x.score[other(tm)]}`));
-      set.subs[tm].forEach(x => items.push(`${esc(teamName(m, tm))} ${x.out}→${x.in}${x.exceptional ? ' (ecc.)' : ''} ${x.score[tm]}:${x.score[other(tm)]}`));
-      set.liberoLog[tm].forEach(x => items.push(`L ${esc(teamName(m, tm))} ${x.type === 'out' ? `${x.no} esce (rientra ${x.back})` : `${x.no} per ${x.out}`} ${x.score[tm]}:${x.score[other(tm)]}`));
+      set.subs[tm].forEach(x => items.push(`${esc(teamName(m, tm))} ${sh(x.out)}→${sh(x.in)}${x.exceptional ? ' (ecc.)' : ''} ${x.score[tm]}:${x.score[other(tm)]}`));
+      set.liberoLog[tm].forEach(x => items.push(`L ${esc(teamName(m, tm))} ${x.type === 'out' ? `${sh(x.no)} esce (rientra ${sh(x.back)})` : `${sh(x.no)} per ${sh(x.out)}`} ${x.score[tm]}:${x.score[other(tm)]}`));
     });
-    set.sanctions.forEach(s => items.push(`${SAN[s.kind][1]} ${esc(teamName(m, s.team))} ${s.player === 'C' ? 'all.' : s.player === 'T' ? '' : s.player}`));
+    set.sanctions.forEach(s => items.push(`${SAN[s.kind][1]} ${esc(teamName(m, s.team))} ${s.player === 'C' ? 'all.' : s.player === 'T' ? '' : sh(s.player)}`));
     return items.length ? `<p class="muted small">${items.join(' · ')}</p>` : '';
   }
 
@@ -684,7 +685,7 @@
       const S = st.settings, set = st.cur;
       const mw = R.minWomenOf(S, x.team);
       const w = set && mw ? womenIn(m, x.team, R.visibleCourt(set, x.team)) : null;
-      toast(`${teamName(m, x.team)}: il libero ${x.libero} esce, rientra il n. ${x.back}${w != null && w < mw ? ` · ⚠ ${w} donne in campo` : ''}`);
+      toast(`${teamName(m, x.team)}: il libero ${sh(x.libero)} esce, rientra il n. ${sh(x.back)}${w != null && w < mw ? ` · ⚠ ${w} donne in campo` : ''}`);
     });
     if (has('mustSub')) {
       const x = has('mustSub');
@@ -758,15 +759,15 @@
       // giocatore non in lista: il numero scritto entra a referto (senza nome) e si può scegliere
       const hb = document.getElementById('handBtn');
       if (hb) hb.onclick = () => {
-        const n = parseInt(document.getElementById('handNo').value, 10);
-        if (!(n >= 0 && n <= 99)) { toast('Scrivi un numero di maglia (0–99).'); return; }
+        const n = parseShirt(document.getElementById('handNo').value);
+        if (n === '') { toast('Scrivi un numero di maglia (da 0 a 99, oppure 00 o 000).'); return; }
         const p = player(m, tm, n);
-        if (p && p.libero) { toast(`Il n. ${n} è un libero: entra con il pulsante Libero.`); return; }
-        if (R.visibleCourt(set, tm).includes(n)) { toast(`Il n. ${n} è già in campo.`); return; }
+        if (p && p.libero) { toast(`Il n. ${sh(n)} è un libero: entra con il pulsante Libero.`); return; }
+        if (R.visibleCourt(set, tm).includes(n)) { toast(`Il n. ${sh(n)} è già in campo.`); return; }
         if (!p) { m.teams[tm].players.push({ no: n, name: '', gender: document.getElementById('handW') && document.getElementById('handW').checked ? 'F' : 'M', libero: false, captain: false }); touch(m); }
         const o2 = R.subOptions(st, tm, sel.out, playable(m, tm));
         if ((sel.exc ? o2.exceptional : o2.regular).includes(n)) sel.inn = n;
-        else toast(`Il n. ${n} non può entrare con questa sostituzione.`);
+        else toast(`Il n. ${sh(n)} non può entrare con questa sostituzione.`);
         draw();
       };
       $overlay.querySelector('[data-x]').onclick = closeOverlay;
@@ -925,19 +926,19 @@
     const st = stateOf(m);
     const H = m.header;
     const rosterTable = tm => `<table class="p-roster"><thead><tr><th colspan="4" class="team-${tm}-h">${tm} · ${esc(teamName(m, tm))}</th></tr><tr><th>N.</th><th>Nome</th><th>D/U</th><th></th></tr></thead><tbody>
-      ${roster(m, tm).sort((a, b) => a.no - b.no).map(p => `<tr><td>${p.no}</td><td>${esc(p.name)}</td><td>${p.gender === 'F' ? 'D' : p.gender === 'M' ? 'U' : ''}</td><td>${p.libero ? 'L' : ''}${p.captain ? ' K' : ''}</td></tr>`).join('')}
+      ${roster(m, tm).sort((a, b) => a.no - b.no).map(p => `<tr><td>${sh(p.no)}</td><td>${esc(p.name)}</td><td>${p.gender === 'F' ? 'D' : p.gender === 'M' ? 'U' : ''}</td><td>${p.libero ? 'L' : ''}${p.captain ? ' K' : ''}</td></tr>`).join('')}
       <tr><td colspan="4">Allenatore: ${esc(m.teams[tm].coach)}</td></tr></tbody></table>`;
     const setBlock = s => {
       if (!s.lineup) return `<div class="p-set"><h3>Set ${s.index + 1} — non giocato, assegnato ${s.score.A}–${s.score.B}</h3></div>`;
       const team = tm => {
         const turnsByCol = [0, 1, 2, 3, 4, 5].map(c => s.turns.filter(t => t.team === tm && t.col === c && t.end != null).map(t => t.end));
         return `<tr><th class="team-${tm}-h">${esc(teamName(m, tm))}${s.firstServing === tm ? ' (S)' : ' (R)'}</th>
-          ${[0, 1, 2, 3, 4, 5].map(c => `<td><b>${s.lineup[tm][c]}</b>${s.subs[tm].filter(x => x.col === c).map(x => `<div class="p-sub">${x.out}→${x.in} ${x.score[tm]}:${x.score[other(tm)]}${x.exceptional ? ' ecc.' : ''}</div>`).join('')}<div class="p-turns">${turnsByCol[c].join(' ')}</div></td>`).join('')}
+          ${[0, 1, 2, 3, 4, 5].map(c => `<td><b>${sh(s.lineup[tm][c])}</b>${s.subs[tm].filter(x => x.col === c).map(x => `<div class="p-sub">${sh(x.out)}→${sh(x.in)} ${x.score[tm]}:${x.score[other(tm)]}${x.exceptional ? ' ecc.' : ''}</div>`).join('')}<div class="p-turns">${turnsByCol[c].join(' ')}</div></td>`).join('')}
           <td>${s.timeouts[tm].map(x => `${x.score[tm]}:${x.score[other(tm)]}`).join('<br>') || '—'}</td><td class="p-pts">${s.score[tm]}</td></tr>`;
       };
       return `<div class="p-set"><h3>Set ${s.index + 1} · ${hhmm(s.startTime)}–${hhmm(s.endTime)} (${mins(s.startTime, s.endTime) ?? '—'}′) · vince ${s.winner ? esc(teamName(m, s.winner)) : '—'}${s.switchScore ? ` · cambio campo ${s.switchScore.A}:${s.switchScore.B}` : ''}${s.awarded ? ' · assegnato' : ''}</h3>
         <table class="p-grid"><thead><tr><th></th>${POS.map(r => `<th>${r}</th>`).join('')}<th>T-O</th><th>Punti</th></tr></thead><tbody>${team('A')}${team('B')}</tbody></table>
-        ${['A', 'B'].filter(tm => s.liberoLog[tm].length).map(tm => `<p class="p-note">Libero ${esc(teamName(m, tm))}: ${s.liberoLog[tm].map(x => `${x.type === 'out' ? `${x.no} esce (rientra ${x.back})` : `${x.no} per ${x.out}`} ${x.score[tm]}:${x.score[other(tm)]}`).join(' · ')}</p>`).join('')}</div>`;
+        ${['A', 'B'].filter(tm => s.liberoLog[tm].length).map(tm => `<p class="p-note">Libero ${esc(teamName(m, tm))}: ${s.liberoLog[tm].map(x => `${x.type === 'out' ? `${sh(x.no)} esce (rientra ${sh(x.back)})` : `${sh(x.no)} per ${sh(x.out)}`} ${x.score[tm]}:${x.score[other(tm)]}`).join(' · ')}</p>`).join('')}</div>`;
     };
     const sanctions = st.sanctions.length ? `<h3>Sanzioni</h3><table class="p-san"><thead><tr><th>Tipo</th><th>Squadra</th><th>A chi</th><th>Set</th><th>Punteggio</th></tr></thead><tbody>
       ${st.sanctions.map(x => `<tr><td>${SAN[x.kind][0]}</td><td>${esc(teamName(m, x.team))}</td><td>${x.player === 'C' ? 'Allenatore' : x.player === 'T' ? 'Squadra' : esc(pLabel(m, x.team, x.player))}</td><td>${x.set + 1}</td><td>${x.score[x.team]}:${x.score[other(x.team)]}</td></tr>`).join('')}</tbody></table>` : '';
@@ -1016,7 +1017,7 @@
         if (src.coach) T.coach = src.coach;
         if (Array.isArray(src.players) && src.players.length) {
           T.players = src.players.map(p => (typeof p === 'string' ? { no: '', name: p } : p)).map(p => ({
-            no: p.no === '' || p.no == null ? '' : +p.no, name: p.name || '', gender: p.gender === 'F' || p.gender === 'M' ? p.gender : '', libero: !!p.libero, captain: !!p.captain
+            no: parseShirt(p.no), name: p.name || '', gender: p.gender === 'F' || p.gender === 'M' ? p.gender : '', libero: !!p.libero, captain: !!p.captain
           }));
         }
       });

@@ -269,3 +269,12 @@ test('cambio di campo a metà set scelto a ogni set: anche nel 1° set, oppure m
   st = R.replay(match([start('A', 'A'), ...pts('A'.repeat(13))]));
   assert.equal(st.cur.switched, false);
 });
+
+test('numeri di maglia 0, 00 e 000: tre giocatori diversi', () => {
+  assert.equal(R.parseShirt('0'), 0); assert.equal(R.parseShirt('00'), 100); assert.equal(R.parseShirt('000'), 1000);
+  assert.equal(R.parseShirt('07'), 7); assert.equal(R.parseShirt('123'), ''); assert.equal(R.parseShirt('x'), '');
+  assert.equal(R.shirt(0), '0'); assert.equal(R.shirt(100), '00'); assert.equal(R.shirt(1000), '000'); assert.equal(R.shirt(12), '12');
+  const L = [0, 100, 1000, 4, 5, 6];
+  const st = R.replay(match([start('A', 'A', { A: L, B: LB }), sub('A', 100, 7)]));
+  assert.deepEqual(R.courtOf(st.cur, 'A'), [0, 7, 1000, 4, 5, 6]);
+});

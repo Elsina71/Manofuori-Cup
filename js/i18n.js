@@ -695,7 +695,7 @@ const I18n = (() => {
       tmNone: "Nessuna squadra iscritta.",
       tmPendingAdmin: "{n} squadre in attesa di conferma.",
       tmPlayerIncomplete: "Per ogni giocatore servono cognome e nome.",
-      tmNumErr: "Il numero di maglia va da 0 a 99.",
+      tmNumErr: "Il numero di maglia va da 0 a 99, oppure 00 o 000.",
       tmLevelsTitle: "Livelli",
       tmLevelsHelp: "Un livello per riga, dal meno al più forte. Le squadre già iscritte mantengono il nome del livello scelto.",
       vtIntro: "Gironi all’italiana e, dove previsti, semifinali e finali. Ogni set vinto vale 1 punto in classifica.",

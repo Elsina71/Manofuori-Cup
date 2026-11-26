@@ -437,7 +437,20 @@
     return { regular, exceptional: bench, rule };
   }
 
+  // Numeri di maglia 00 e 000: dentro il referto sono 100 e 1000 (numeri che non esistono in campo), così le
+  // regole lavorano sempre con numeri; si scrivono e si vedono come 00 e 000. 0 resta 0.
+  const SHIRTS = { 100: '00', 1000: '000' };
+  function shirt(n) { return n === '' || n == null ? '' : (SHIRTS[+n] || String(n)); }
+  function parseShirt(v) {
+    const s = String(v == null ? '' : v).trim();
+    if (s === '00') return 100;
+    if (s === '000') return 1000;
+    if (s === '100' || s === '1000') return +s;   // già convertito
+    return /^\d{1,2}$/.test(s) ? +s : '';
+  }
+
   const api = {
+    shirt, parseShirt,
     DEFAULT_SETTINGS, SANCTIONS, ROMAN, replay, nextSetDefaults, servingFromChoice, subOptions,
     other, settingsOf, minWomenOf, midSwitchOf, setsToWin, targetOf, isDeciding, needsToss, courtOf, visibleCourt, positionOf, onCourt, BACK_ROW
   };

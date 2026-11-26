@@ -8,6 +8,7 @@
   const BLUE = [11, 110, 153];
   const WOMAN = [194, 37, 92];
   const POS = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
+  const sh = n => (window.Rules && window.Rules.shirt ? window.Rules.shirt(n) : String(n));   // 00 e 000
   let libPromise = null;
   let fontCache = null;
 
@@ -140,7 +141,7 @@
       roster(tm).forEach((p, i) => {
         if (i % 2 === 0) { doc.setFillColor(...LIGHT); doc.rect(x, yy - 0.2, half, rh, 'F'); }
         const col = p.gender === 'F' ? WOMAN : INK;
-        font(8.5, 'bold', col); doc.text(clean(String(p.no)), x + 2, yy + 3);
+        font(8.5, 'bold', col); doc.text(clean(sh(p.no)), x + 2, yy + 3);
         fit(p.name || '', x + 12, yy + 3, half - 36, 8.5, 'normal', INK);
         font(8, 'bold', col); doc.text(p.gender === 'F' ? 'D' : p.gender === 'M' ? 'U' : '', x + half - 21, yy + 3);
         font(8, 'bold', INK); doc.text(clean([p.libero ? 'L' : '', p.captain ? 'K' : ''].filter(Boolean).join(' ')), x + half - 12, yy + 3);
@@ -168,7 +169,7 @@
       }
       const lines = tm => [0, 1, 2, 3, 4, 5].map(c => {
         const out = [];
-        s.subs[tm].filter(x => x.col === c).forEach(x => out.push({ t: `${x.out} > ${x.in}  (${x.score[tm]}:${x.score[other(tm)]})${x.exceptional ? ' ecc.' : ''}`, sub: true }));
+        s.subs[tm].filter(x => x.col === c).forEach(x => out.push({ t: `${sh(x.out)} > ${sh(x.in)}  (${x.score[tm]}:${x.score[other(tm)]})${x.exceptional ? ' ecc.' : ''}`, sub: true }));
         font(7, 'normal');
         const turns = s.turns.filter(t => t.team === tm && t.col === c && t.end != null).map(t => t.end).join(' ');
         if (turns) doc.splitTextToSize(clean(turns), cellW - 3).forEach(l => out.push({ t: l }));
@@ -176,7 +177,7 @@
       });
       const L = { A: lines('A'), B: lines('B') };
       const rowH = tm => Math.max(9, 5.5 + Math.max(0, ...L[tm].map(a => a.length)) * 3.1 + 1);
-      const libLine = ['A', 'B'].filter(tm => s.liberoLog[tm].length).map(tm => `Libero ${tn(tm)}: ` + s.liberoLog[tm].map(x => `${x.type === 'out' ? `${x.no} esce (rientra ${x.back})` : `${x.no} per ${x.out}`} ${x.score[tm]}:${x.score[other(tm)]}`).join(' · '));
+      const libLine = ['A', 'B'].filter(tm => s.liberoLog[tm].length).map(tm => `Libero ${tn(tm)}: ` + s.liberoLog[tm].map(x => `${x.type === 'out' ? `${sh(x.no)} esce (rientra ${sh(x.back)})` : `${sh(x.no)} per ${sh(x.out)}`} ${x.score[tm]}:${x.score[other(tm)]}`).join(' · '));
       const blockH = 6 + 5 + rowH('A') + rowH('B') + libLine.length * 3.6 + 3;
       need(blockH);
       // titolo del set
@@ -202,7 +203,7 @@
           box(x, y, cellW, h);
           const no = s.lineup[tm][i];
           const p = m.teams[tm].players.find(pp => +pp.no === +no);
-          font(10, 'bold', p && p.gender === 'F' ? WOMAN : INK); doc.text(clean(String(no)), x + 1.5, y + 4.3);
+          font(10, 'bold', p && p.gender === 'F' ? WOMAN : INK); doc.text(clean(sh(no)), x + 1.5, y + 4.3);
           let ly = y + 7.4;
           L[tm][i].forEach(l => { font(7, l.sub ? 'bold' : 'normal', l.sub ? INK : GREY); doc.text(clean(l.t), x + 1.5, ly); ly += 3.1; });
         }
@@ -222,7 +223,7 @@
       need(10 + st.sanctions.length * 4);
       font(9, 'bold'); doc.text('Sanzioni', M, y + 4); y += 6;
       st.sanctions.forEach(x => {
-        const who = x.player === 'C' ? 'Allenatore' : x.player === 'T' ? 'Squadra' : `n. ${x.player}`;
+        const who = x.player === 'C' ? 'Allenatore' : x.player === 'T' ? 'Squadra' : `n. ${sh(x.player)}`;
         fit(`${SAN[x.kind] || x.kind} — ${tn(x.team)}, ${who} — set ${x.set + 1} al punteggio ${x.score[x.team]}:${x.score[other(x.team)]}`, M + 2, y + 3, CW - 4, 8, 'normal');
         y += 4;
       });
