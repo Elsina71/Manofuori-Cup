@@ -2757,6 +2757,15 @@
     </form>`;
   }
 
+  // Data e palestra uguali per tutta la giornata (admin). Se tutte le gare le hanno già, resta chiuso in un comando piccolo.
+  function vmDayForm(tour, g, d, dm) {
+    const form = `<form class="vm-dayform" data-form="vm-day" data-tid="${tour.id}" data-g="${g.id}" data-d="${d}">
+      <input type="date" name="date" aria-label="${esc(t('vmDayDate'))}"><input name="place" maxlength="80" placeholder="${esc(t('placeLabel'))}" aria-label="${esc(t('placeLabel'))}">
+      <button class="btn small">${esc(t('vmDayApply'))}</button></form>`;
+    if (!dm.every(m => m.date && m.place)) return form;
+    return `<details class="vm-day-more"><summary class="muted small">${esc(t('vmDaySame'))}</summary>${form}</details>`;
+  }
+
   function vtCalendar(tour) {
     const ms = vtMatches(tour.id).filter(m => m.stage === 'g');
     if (!ms.length) return `<div class="empty">${esc(t('vtNoCalendar'))}</div>`;
@@ -2772,9 +2781,7 @@
         ${days.map(d => {
           const dm = gm.filter(m => m.day === d).sort((a, b) => (a.date || '9').localeCompare(b.date || '9') || (a.time || '').localeCompare(b.time || ''));
           return `<div class="vm-day"><h3>${esc(t('vmDay', { n: d }))}${dm[0].leg === 2 ? ` <small class="muted">· ${esc(t('vmReturn'))}</small>` : ''}</h3>
-            ${tourAdmin() ? `<form class="vm-dayform" data-form="vm-day" data-tid="${tour.id}" data-g="${g.id}" data-d="${d}">
-              <input type="date" name="date" aria-label="${esc(t('vmDayDate'))}"><input name="place" maxlength="80" placeholder="${esc(t('placeLabel'))}" aria-label="${esc(t('placeLabel'))}">
-              <button class="btn small">${esc(t('vmDayApply'))}</button></form>` : ''}
+            ${tourAdmin() ? vmDayForm(tour, g, d, dm) : ''}
             <ul class="vm-list">${dm.map(m => vmRow(tour, m)).join('')}</ul></div>`;
         }).join('')}</div>`;
     }).join('');

@@ -514,6 +514,7 @@ const I18n = (() => {
       panImportHelp: "Calendario della prima fase: {s} squadre, {t} tornei e {g} gare con data, ora e palestra. Gironi a sola andata, 3 set a 25; poi semifinali e finali dalla scheda Playoff (Start incrociate tra Rosso e Blu, Master 1ª–4ª e 2ª–3ª).",
       panImportBtn: "Importa squadre, tornei e calendario", panImportConfirm: "Creare {t} tornei del Torneo Panettone 2026 con squadre e calendario?",
       panImportDone: "Torneo Panettone importato: {t} tornei, {g} gare.",
+      vmDaySame: "Stessa data e palestra per tutta la giornata",
       freeRefTitle: "Referto di prova / amichevole",
       freeRefHelp: "Referto elettronico scollegato dai tornei: per provarlo o per una partita amichevole. Con la gara di esempio trovi già due squadre con giocatori inventati, tutto modificabile; oppure parti da un referto vuoto e scrivi a mano squadre e giocatori (arbitri e segnapunti facoltativi). Le gare restano salvate solo su questo dispositivo e non vanno in calendario né in classifica; il PDF si scarica dal referto.",
       freeRefOpen: "Apri il referto vuoto",

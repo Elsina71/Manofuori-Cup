@@ -1225,3 +1225,8 @@ li.is-void { opacity: .6; }
 .sign-prev img { max-width: 100%; max-height: 110px; background: #fff; border-radius: 6px; }
 .parent-box { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 0; }
 .parent-box legend { font-weight: 700; padding: 0 6px; }
+
+/* calendario: data e palestra per tutta la giornata, chiuso quando le gare le hanno già */
+.vm-day-more { margin: 0 0 8px; }
+.vm-day-more > summary { cursor: pointer; width: fit-content; }
+.vm-day-more[open] > summary { margin-bottom: 6px; }
