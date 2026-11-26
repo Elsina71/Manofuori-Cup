@@ -653,6 +653,8 @@ const I18n = (() => {
       rim_new: 'nuova lista', rim_replace: 'sostituisce la lista attuale ({n})', rim_kept: 'lista già inserita ({n}): non cambia', rim_missing: 'squadra non trovata',
       rimReplace: 'Sostituisci anche le liste già inserite', rimGo: 'Salva {k} liste', rimDone: 'Liste salvate: {k} squadre, {p} giocatori.',
       rimBadFile: 'File non valido: serve il file .json delle liste dei giocatori.',
+      userResetPw: 'Email per cambiare la password', userResetPwConfirm: 'Mandare a {n} ({e}) l\'email per scegliere una nuova password?',
+      userResetPwSent: 'Email per cambiare la password inviata a {n} ({e}). Il link vale circa un\'ora.',
       tmLoginFirst: "Le squadre le iscrivono i capitani abilitati dall’organizzatore: accedi con il tuo account da capitano.",
       tmName: "Nome della squadra",
       tmLevel: "Livello",

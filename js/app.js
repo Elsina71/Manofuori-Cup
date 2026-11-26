@@ -454,6 +454,7 @@
             <button class="btn small" data-action="user-edit" data-uid="${m.uid}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t('userEditName'))}</button>`}
             ${homs.has(m.uid) ? `<span class="badge warn-b">${esc(t('homonym'))}</span>` : ''}<br>
             <small class="muted">${esc(acc[m.uid] || '—')}</small>
+            ${acc[m.uid] ? `<button class="btn small" data-action="user-reset-pw" data-uid="${m.uid}"><i class="ti ti-mail-forward" aria-hidden="true"></i> ${esc(t('userResetPw'))}</button>` : ''}
             <button class="btn small danger" data-action="user-delete" data-uid="${m.uid}"><i class="ti ti-user-x" aria-hidden="true"></i> ${esc(t('userDelete'))}</button>
             <span class="ban-row">${verifyBadge(m.uid)} ${m.privacyAt ? `<span class="badge st-done" title="${esc(t('privacyAcceptedOn', { d: fmtDate(new Date(m.privacyAt).toLocaleDateString('sv')) }))}"><i class="ti ti-shield-check" aria-hidden="true"></i> ${esc(t('privacyOkBadge'))}</span>` : `<span class="badge tess-no">${esc(t('privacyNoBadge'))}</span>`}${m.deleteReq ? ` <span class="badge st-full">${esc(t('deleteRequested', { d: fmtDate(new Date(m.deleteReq).toLocaleDateString('sv')) }))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('rolesTitle'))}:
@@ -4046,6 +4047,15 @@
       window.Cloud.resetPassword(email)
         .then(() => { ui.flash = { text: t('resetSent') }; render(); })
         .catch(() => warn('resetFailed'));
+    },
+    // admin: manda all'utente l'email di Firebase per scegliere una nuova password (l'admin non la vede mai)
+    'user-reset-pw': el => {
+      const m = memberByUid(el.dataset.uid), email = (S().accounts || {})[el.dataset.uid];
+      if (!m || !email || !confirm(t('userResetPwConfirm', { n: personName(m), e: email }))) return;
+      el.disabled = true;
+      window.Cloud.resetPassword(email)
+        .then(() => { ui.flash = { text: t('userResetPwSent', { n: personName(m), e: email }) }; render(); })
+        .catch(() => { el.disabled = false; warn('resetFailed'); });
     },
     'close-dialog': () => $dialog.close(),
 
