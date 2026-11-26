@@ -2490,12 +2490,13 @@
     const ms = vtMatches(tour.id), done = ms.filter(m => m.status === 'done').length, pct = ms.length ? Math.round(done * 100 / ms.length) : 0;
     const teams = new Set((tour.groups || []).flatMap(g => g.teams)).size, nx = vNextMatch(tour);
     const st = tour.status || 'draft';
+    const state = `<span class="tstate"><i aria-hidden="true"></i>${esc(t('vtSt_' + st))}</span>`;
     return `<a class="tcard st-${st}" href="#/vt/${tour.id}" style="--lv:${levelHue(tour.level)}">
-      <div class="tcard-head"><span class="tchip">${esc(tour.level)}</span><span class="tstate"><i aria-hidden="true"></i>${esc(t('vtSt_' + st))}</span></div>
+      <div class="tcard-head"><span class="tchip" title="${esc(tour.level)}">${esc(tour.level)}</span>${ms.length ? '' : state}</div>
       <h3>${esc(inEvent ? vtShortName(tour) : tour.name)}</h3>
       <p class="tcard-meta">${esc(t(tour.rr === 'a' ? 'vtRr_a' : 'vtRr_ar'))}${tour.playoff ? ' + ' + esc(t('vtPlayoff')) : ''} · ${esc(t('vtGroupsN', { n: (tour.groups || []).length }))}${teams ? ` · ${esc(t('vtTeamsN', { n: teams }))}` : ''}</p>
       ${ms.length ? `<div class="tprog" role="img" aria-label="${esc(t('vtPlayedOf', { d: done, n: ms.length }))}"><span style="width:${pct}%"></span></div>
-        <p class="tprog-lbl"><strong>${done}</strong> / ${ms.length} ${esc(t('vtMatchesWord'))}</p>` : ''}
+        <p class="tprog-lbl"><span><strong>${done}</strong> / ${ms.length} ${esc(t('vtMatchesWord'))}</span>${state}</p>` : ''}
       <div class="tnext">${nx ? `<span class="tnext-lbl">${esc(t('vtNextMatch'))}</span>
         <span class="tnext-when">${esc(fmtDate(nx.date))}${nx.time ? ` · ${esc(nx.time)}` : ''}</span>
         <span class="tnext-who">${esc(vTeamName(tour, nx.home))} – ${esc(vTeamName(tour, nx.away))}</span>`
@@ -2819,7 +2820,7 @@
   // Data e palestra uguali per tutta la giornata (admin). Se tutte le gare le hanno già, resta chiuso in un comando piccolo.
   function vmDayForm(tour, g, d, dm) {
     const form = `<form class="vm-dayform" data-form="vm-day" data-tid="${tour.id}" data-g="${g.id}" data-d="${d}">
-      <input type="date" name="date" aria-label="${esc(t('vmDayDate'))}"><input name="place" maxlength="80" placeholder="${esc(t('placeLabel'))}" aria-label="${esc(t('placeLabel'))}">
+      <label>${esc(t('vmDayDate'))}<input type="date" name="date"></label><label>${esc(t('placeLabel'))}<input name="place" maxlength="80"></label>
       <button class="btn small">${esc(t('vmDayApply'))}</button></form>`;
     if (!dm.every(m => m.date && m.place)) return form;
     return `<details class="vm-day-more"><summary class="muted small">${esc(t('vmDaySame'))}</summary>${form}</details>`;
@@ -3483,7 +3484,7 @@
   // [id, colore principale, sfondo, colore accento]
   // Tavolozze di colori: [id, primario, sfondo, accento]. Per ora solo il tema neutro (colori in :root di css/style.css).
   const THEMES = [
-    ['logo', '#2f4a6d', '#f4f5f7', '#d9822b'],
+    ['logo', '#000000', '#f7f7f5', '#d0106f'],
     ['palestra', '#0b5563', '#e9b77b', '#e36414'],
     ['gialloblu', '#0a3fa8', '#f3f6fb', '#ffcc00'],
     ['notte', '#38d0ff', '#0a0f1e', '#ffe14d'],

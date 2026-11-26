@@ -991,6 +991,8 @@ li.is-void { opacity: .6; }
 .vm-day h3 { margin: 0 0 6px; font-size: 1rem; }
 .vm-dayform { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .vm-dayform input { flex: 1 1 140px; min-width: 0; }
+.vm-dayform { align-items: flex-end; }
+.vm-dayform label { flex: 1 1 160px; min-width: 0; }
 .vm-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .vm-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .vm-row.done { background: var(--surface-2); }
@@ -1077,6 +1079,7 @@ li.is-void { opacity: .6; }
 .tprog span { display: block; height: 100%; border-radius: inherit; background: var(--lvc); min-width: 0; }
 .tprog-lbl { margin: -4px 0 0; font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tprog-lbl strong { color: var(--text); }
+.tprog-lbl { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .tnext { margin-top: auto; display: grid; gap: 1px; padding: 10px 12px; border-radius: var(--radius-s); background: var(--surface-2); font-size: .84rem; }
 .tnext-lbl { font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .tnext-when { font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -1094,6 +1097,186 @@ li.is-void { opacity: .6; }
 .del-opt small { color: var(--muted); font-size: .82rem; }
 .del-opt:has(input:checked) { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); background: var(--surface); }
 .trash-card .trash-exp { color: var(--danger); font-weight: 600; }
+
+/* ===== Tema base "Manofuori" nel sistema Taste (design-taste-frontend): palette card-pastels, Schibsted Grotesk,
+   raggi soft 8/12/20, pulsanti "solid", strato di movimento (hover e pressione), bordi sinistro e destro uguali.
+   Vale solo senza tema scelto: i temi di Impostazioni → Colori restano come sono. ===== */
+html:not([data-theme]) {
+  --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f0f0ed; --text: #000000; --muted: #4f4f4b;
+  --border: #e3e3df; --line-strong: #c9c9c4;
+  --primary: #d0106f; --primary-ink: #ffffff; --primary-soft: #fbe8f1;
+  --accent: #d0106f; --accent-soft: #fbe8f1;
+  --radius: 20px; --radius-s: 12px; --r-sm: 8px; --r-btn: 8px;
+  --shadow: none; --shadow-hover: 0 12px 24px -12px rgba(0, 0, 0, .10);
+  --ease: cubic-bezier(.2, .8, .2, 1); --m-in: 150ms; --m-out: 120ms; --m-press: 90ms;
+  --font-body: "Schibsted Grotesk", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-head: var(--font-body);
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --nav-h: 66px;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    --bg: #0e0e0d; --surface: #161615; --surface-2: #1e1e1c; --text: #f7f7f5; --muted: #a3a3a0;
+    --border: #2b2b29; --line-strong: #454542;
+    --primary: #f0418f; --primary-ink: #0e0e0d; --primary-soft: #3a1426; --accent: #f0418f; --accent-soft: #3a1426;
+    --shadow-hover: 0 12px 24px -12px rgba(0, 0, 0, .6);
+  }
+}
+html:not([data-theme]) body { font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+/* titoli: display a 400 con spaziatura stretta (coppia "schibsted") */
+html:not([data-theme]) h1 { font-size: clamp(30px, 1.6vw + 22px, 44px); font-weight: 400; letter-spacing: -.035em; line-height: 1.08; }
+html:not([data-theme]) h2 { font-size: 24px; font-weight: 500; letter-spacing: -.02em; line-height: 1.2; }
+html:not([data-theme]) h3 { font-size: 18px; font-weight: 500; letter-spacing: -.01em; }
+html:not([data-theme]) .page-head { margin: 8px 0 24px; }
+html:not([data-theme]) .page-head > .muted, html:not([data-theme]) .page-head > p { font-size: 17px; max-width: 62ch; margin: 10px 0 0; }
+/* niente sotto i 13px, etichette in maiuscoletto sostituite da etichette normali a 13px/500 */
+html:not([data-theme]) .small { font-size: 14px; }
+html:not([data-theme]) :is(.badge, .tchip, .tnext-lbl, .table th, .stat span, .tevent-meta span) {
+  font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none;
+}
+
+/* testata: fondo della pagina, una linea sottile sotto, nessuna fascia colorata */
+html:not([data-theme]) .topbar { background: var(--bg); color: var(--text); border-bottom: 1px solid var(--border); }
+html:not([data-theme]) .topbar::after { display: none; }
+html:not([data-theme]) .brand-logos img { filter: none; }
+html:not([data-theme]) :is(.login-link, .admin-badge) {
+  height: 36px; padding: 0 14px; border-radius: var(--r-btn); font-size: 14px; font-weight: 500;
+  color: var(--text); background: transparent; border: 1px solid var(--line-strong); display: inline-flex; align-items: center; gap: 6px;
+}
+@media (max-width: 639px) { html:not([data-theme]) :is(.login-link, .admin-badge, .theme-link) { min-height: 44px; min-width: 44px; justify-content: center; } }
+html:not([data-theme]) .sub-form:not([open]) { padding-top: 8px; padding-bottom: 8px; }
+html:not([data-theme]) :is(.form-card, .sub-form) > summary { min-height: 44px; display: flex; align-items: center; gap: 6px; }
+html:not([data-theme]) .site-footer { margin-top: 0; font-size: 13px; }
+html:not([data-theme]) .theme-link { color: var(--text); border-radius: var(--r-btn); }
+html:not([data-theme]) .mainnav { background: var(--bg); border-top-color: var(--border); }
+html:not([data-theme]) .mainnav a { color: var(--muted); font-weight: 500; }
+html:not([data-theme]) .mainnav a.active { color: var(--text); }
+html:not([data-theme]) .mainnav a.active .ni { background: var(--text); color: var(--bg); }
+@media (min-width: 1200px) {
+  html:not([data-theme]) .mainnav a { position: relative; color: var(--text); font-size: 15px; border-radius: var(--r-btn); }
+  html:not([data-theme]) .mainnav a .ni { background: none !important; color: inherit; }
+  html:not([data-theme]) .mainnav a:hover { background: transparent; color: var(--text); }
+  html:not([data-theme]) .mainnav a::after {
+    content: ""; position: absolute; left: 14px; right: 14px; bottom: 2px; height: 1px; background: currentColor;
+    transform: scaleX(0); transform-origin: right; transition: transform var(--m-out) var(--ease);
+  }
+  html:not([data-theme]) .mainnav a:hover::after { transform: scaleX(1); transform-origin: left; transition-duration: var(--m-in); }
+  html:not([data-theme]) .mainnav a.active { background: transparent; color: var(--text); }
+  html:not([data-theme]) .mainnav a.active .ni { color: inherit; }
+  html:not([data-theme]) .mainnav a.nav-home::after { left: 8px; right: 8px; }
+  html:not([data-theme]) .mainnav a.active::after { height: 2px; transform: none; background: var(--primary); }
+}
+
+/* bordi uguali: le schede non sporgono oltre il contenuto */
+html:not([data-theme]) .container { padding: 24px 16px 8px; }
+@media (min-width: 640px) { html:not([data-theme]) .container { padding: 32px 24px 8px; } }
+html:not([data-theme]) .tabs { margin: 0 0 24px; padding: 4px; gap: 2px; border: 0; width: max-content; max-width: 100%; border-radius: 999px; background: var(--surface-2); }
+html:not([data-theme]) .tabs a {
+  padding: 0 16px; height: 36px; display: inline-flex; align-items: center; border: 0; margin: 0;
+  border-radius: 999px; color: var(--muted); font-weight: 500; transition: background-color var(--m-out) var(--ease), color var(--m-out) var(--ease);
+}
+html:not([data-theme]) .tabs a:hover { color: var(--text); background: color-mix(in oklab, var(--text) 6%, transparent); transition-duration: var(--m-in); }
+html:not([data-theme]) .tabs a.active { background: var(--text); color: var(--bg); }
+html:not([data-theme]) .tabs a.tab-admin { color: var(--primary); }
+html:not([data-theme]) .tabs a.tab-admin.active { color: var(--bg); }
+
+/* una sola scheda: raggio 20, linea di 1px, nessuna ombra a riposo */
+html:not([data-theme]) .card { border-radius: var(--radius); border-color: var(--border); box-shadow: none; padding: 24px; margin-bottom: 24px; }
+@media (max-width: 639px) { html:not([data-theme]) .card { padding: 16px; margin-bottom: 16px; } }
+html:not([data-theme]) .cards { gap: 16px; }
+html:not([data-theme]) :is(.note) { background: var(--surface-2); border-radius: var(--radius-s); }
+html:not([data-theme]) .note.warn { background: var(--warn-soft); }
+html:not([data-theme]) .flash { border-radius: var(--radius-s); font-weight: 500; }
+html:not([data-theme]) .form-card summary { color: var(--text); font-weight: 500; }
+html:not([data-theme]) .stat { border-radius: var(--radius-s); }
+html:not([data-theme]) .table th { color: var(--muted); }
+
+/* un solo sistema di pulsanti ("solid"): 44px, pieno solo il principale, contorno per gli altri */
+html:not([data-theme]) .btn {
+  min-height: 44px; padding: 0 20px; border-radius: var(--r-btn); font-weight: 500; font-size: 16px;
+  background: transparent; color: var(--text); border-color: var(--line-strong);
+  transition: background-color var(--m-out) var(--ease), border-color var(--m-out) var(--ease), color var(--m-out) var(--ease), transform var(--m-press) var(--ease);
+}
+html:not([data-theme]) .btn.small { min-height: 36px; padding: 0 14px; font-size: 14px; }
+html:not([data-theme]) .btn:hover { background: color-mix(in oklab, var(--text) 5%, transparent); border-color: color-mix(in oklab, var(--text) 35%, transparent); }
+html:not([data-theme]) .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+html:not([data-theme]) .btn.primary:hover { background: color-mix(in oklab, var(--primary) 86%, var(--text)); border-color: transparent; }
+html:not([data-theme]) .btn.danger { color: var(--danger); }
+html:not([data-theme]) .btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+html:not([data-theme]) .btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+html:not([data-theme]) .btn.danger-solid:hover { background: color-mix(in oklab, var(--danger) 86%, #000); }
+html:not([data-theme]) .segmented { border-radius: var(--r-btn); border-color: var(--line-strong); }
+html:not([data-theme]) .segmented button { font-weight: 500; }
+html:not([data-theme]) .segmented button[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+html:not([data-theme]) .icon-btn { border-radius: var(--r-btn); }
+html:not([data-theme]) input, html:not([data-theme]) select, html:not([data-theme]) textarea {
+  min-height: 44px; border-radius: var(--r-sm); background: var(--surface); border-color: var(--line-strong); font-size: 16px;
+  transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease);
+}
+html:not([data-theme]) :is(input, select, textarea):focus { outline: 0; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+html:not([data-theme]) label { font-size: 14px; font-weight: 500; }
+html:not([data-theme]) label.check { font-size: 16px; font-weight: 400; }
+html:not([data-theme]) :is(a, button, summary, [tabindex]):focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; transition: none; }
+html:not([data-theme]) .badge { border-radius: 999px; padding: 2px 10px; }
+html:not([data-theme]) .badge.wc { color: #fff; }
+
+/* strato di movimento: solo con un puntatore fine; il pulsante sale di 1px, si abbassa e si stringe alla pressione;
+   la scheda con link sale di 2px, linea più scura e ombra morbida solo al passaggio */
+@media (hover: hover) and (pointer: fine) {
+  html:not([data-theme]) .btn:hover { transform: translateY(-1px); transition-duration: var(--m-in); }
+  html:not([data-theme]) :is(.tcard, .tour-card):hover {
+    transform: translateY(-2px); border-color: var(--line-strong); box-shadow: var(--shadow-hover); transition-duration: 180ms;
+  }
+}
+html:not([data-theme]) .btn:active { transform: translateY(1px) scale(.985); transition-duration: var(--m-press); }
+html:not([data-theme]) :is(.tcard, .tour-card) {
+  transition: transform var(--m-out) var(--ease), border-color var(--m-out) var(--ease), box-shadow var(--m-out) var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-theme]) :is(.btn, .tcard, .tour-card) { transition-property: background-color, border-color, color, opacity; transform: none !important; }
+  html:not([data-theme]) .btn.primary:active { background: color-mix(in oklab, var(--primary) 74%, var(--text)); }
+}
+
+/* pagina Tornei: interfaccia neutra, un solo colore d'accento (la barra di avanzamento e lo stato) */
+html:not([data-theme]) .tevent { margin: 0 0 48px; }
+html:not([data-theme]) .tevent-head { border-bottom: 0; padding-bottom: 0; margin-bottom: 16px; }
+html:not([data-theme]) .tevent-head h2 { font-size: 26px; font-weight: 400; letter-spacing: -.03em; }
+html:not([data-theme]) .tevent-meta span { background: transparent; border-color: var(--line-strong); color: var(--muted); }
+html:not([data-theme]) .tgrid { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+/* 2 o 4 tornei: righe piene, senza buchi a destra (4 → 2+2 sugli schermi medi, 4 in fila sui grandi) */
+@media (min-width: 560px) { html:not([data-theme]) .tgrid:is(:has(> :nth-child(2):last-child), :has(> :nth-child(4):last-child)) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { html:not([data-theme]) .tgrid:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+html:not([data-theme]) .tcard { --lvc: var(--text); padding: 20px; gap: 12px; border-radius: var(--radius); box-shadow: none; }
+html:not([data-theme]) .tcard::before { display: none; }
+html:not([data-theme]) .tchip { color: var(--text); background: var(--surface-2); border-radius: 999px; padding: 3px 10px; }
+html:not([data-theme]) .tcard h3 { font-size: 20px; font-weight: 400; letter-spacing: -.025em; }
+html:not([data-theme]) .tcard-meta { font-size: 14px; }
+html:not([data-theme]) .tprog { height: 4px; background: var(--surface-2); }
+html:not([data-theme]) .tprog span { background: var(--primary); }
+html:not([data-theme]) .tprog-lbl { font-size: 14px; margin: -6px 0 0; }
+html:not([data-theme]) .tcard.st-live .tstate { color: var(--text); }
+html:not([data-theme]) .tcard.st-live .tstate i { background: var(--primary); animation: none; box-shadow: none; }
+html:not([data-theme]) .tnext { border-radius: var(--radius-s); padding: 12px 14px; font-size: 15px; gap: 2px; }
+html:not([data-theme]) .tnext-when { font-weight: 500; }
+html:not([data-theme]) .del-opt { border-radius: var(--radius-s); }
+html:not([data-theme]) .del-opt:has(input:checked) { border-color: var(--text); box-shadow: none; }
+html:not([data-theme]) .del-opt input, html:not([data-theme]) label.check input { accent-color: var(--text); }
+
+/* testata allineata al contenuto: logo sul bordo sinistro della pagina, pulsanti sul destro */
+@media (min-width: 640px) {
+  html:not([data-theme]) .topbar { padding-left: max(24px, calc((100% - 1180px) / 2 + 24px)); padding-right: max(24px, calc((100% - 1180px) / 2 + 24px)); }
+}
+html:not([data-theme]) .segmented.wrap { margin-bottom: 16px; }
+/* le gare: righe aperte separate da una linea, non riquadri dentro la scheda */
+html:not([data-theme]) .vm-list { gap: 0; }
+html:not([data-theme]) .vm-row { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; padding: 14px 0; }
+html:not([data-theme]) .vm-row.done { background: transparent; }
+html:not([data-theme]) .vm-teams { font-weight: 500; font-size: 17px; }
+html:not([data-theme]) .vm-day { margin-top: 24px; }
+html:not([data-theme]) .vm-day h3 { font-size: 16px; font-weight: 500; color: var(--muted); }
+html:not([data-theme]) .tchip { max-width: none; flex: 0 1 auto; min-width: 0; }
+html:not([data-theme]) .tstate { flex: 0 0 auto; }
+@media (max-width: 639px) { html:not([data-theme]) .topbar { padding-left: 16px; padding-right: 16px; } }
 
 /* ===== temi scelti dall'utente (Impostazioni → Colori; solo su quel dispositivo). Pallone nello stile Molten Flistatec. ===== */
 /* temi chiari: valori di base fissi, anche con il telefono in modalità scura */
