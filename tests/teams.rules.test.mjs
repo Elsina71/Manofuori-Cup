@@ -81,6 +81,26 @@ await t('ammessa: capitano cambia nome e rosa', assertSucceeds(batchSave(cap, 't
 await t('ammessa: capitano non la ritira', assertFails(deleteDoc(doc(cap, 'teams', 't1'))));
 await t('admin tornei elimina squadra e rosa', assertSucceeds((() => { const b = writeBatch(org); b.delete(doc(org, 'rosters', 't1')); b.delete(doc(org, 'teams', 't1')); return b.commit(); })()));
 await t('capitano crea e ritira in attesa', assertSucceeds((async () => { await batchSave(cap, 't5', team, []); const b = writeBatch(cap); b.delete(doc(cap, 'rosters', 't5')); b.delete(doc(cap, 'teams', 't5')); await b.commit(); })()));
+// codice del capitano: l'admin crea il codice, chi lo ha (account registrato) diventa capitano; vale una volta sola
+await env.withSecurityRulesDisabled(async c => { const db = c.firestore(); await setDoc(doc(db, 'teams', 'tc'), { ...team, captainUid: '', captainName: '', status: 'ok' }); await setDoc(doc(db, 'rosters', 'tc'), { captainUid: '', players: [{ num: 7, last: 'Rossi', first: 'Anna', g: 'F', uid: '' }], updated: 1 }); await setDoc(doc(db, 'members', 'newcap'), { first: 'C', last: 'D', gender: 'M' }); });
+const newcap = env.authenticatedContext('newcap', {}).firestore();
+const claim = (db, code, tid, uid) => { const b = writeBatch(db); b.update(doc(db, 'teams', tid), { captainUid: uid, captainName: 'D C', claimCode: code, updated: 9 }); b.delete(doc(db, 'teamCodes', code)); return b.commit(); };
+await t('admin tornei crea un codice', assertSucceeds(setDoc(doc(org, 'teamCodes', 'ABCD-EFGH'), { teamId: 'tc', created: 1, by: 'org' })));
+await t('admin tornei vede l\'elenco dei codici', assertSucceeds(getDocs(collection(org, 'teamCodes'))));
+await t('un utente non vede l\'elenco dei codici', assertFails(getDocs(collection(newcap, 'teamCodes'))));
+await t('senza accesso non si legge un codice', assertFails(getDoc(doc(anon, 'teamCodes', 'ABCD-EFGH'))));
+await t('un utente non crea codici', assertFails(setDoc(doc(newcap, 'teamCodes', 'ZZZZ-ZZZZ'), { teamId: 'tc' })));
+await t('codice sbagliato: non diventa capitano', assertFails(claim(newcap, 'ZZZZ-ZZZZ', 'tc', 'newcap')));
+await t('senza cancellare il codice: rifiutato', assertFails(updateDoc(doc(newcap, 'teams', 'tc'), { captainUid: 'newcap', captainName: 'D C', claimCode: 'ABCD-EFGH', updated: 9 })));
+await t('con il codice di un\'altra squadra: rifiutato', assertFails(claim(newcap, 'ABCD-EFGH', 't3', 'newcap')));
+await t('non si nomina capitano un altro utente', assertFails(claim(newcap, 'ABCD-EFGH', 'tc', 'other')));
+await t('chi ha il codice diventa capitano', assertSucceeds(claim(newcap, 'ABCD-EFGH', 'tc', 'newcap')));
+await t('il nuovo capitano legge la lista già inserita', assertSucceeds(getDoc(doc(newcap, 'rosters', 'tc'))));
+await t('e la prende in carico', assertSucceeds(updateDoc(doc(newcap, 'rosters', 'tc'), { captainUid: 'newcap', updated: 10 })));
+await t('e inserisce i giocatori', assertSucceeds((() => { const b = writeBatch(newcap); b.update(doc(newcap, 'teams', 'tc'), { name: 'Fenicotteri', level: 'MASTER', kind: 'X', captainUid: 'newcap', memberUids: [], updated: 11 }); b.set(doc(newcap, 'rosters', 'tc'), { captainUid: 'newcap', players: [{ num: 9, last: 'Neri', first: 'Ugo', g: 'M', uid: '' }], updated: 11 }); return b.commit(); })()));
+await t('il codice usato non vale più (anche se si legge nella squadra)', assertFails(claim(other, 'ABCD-EFGH', 'tc', 'other')));
+await t('un altro utente non legge la lista', assertFails(getDoc(doc(other, 'rosters', 'tc'))));
+await t('il capitano non toglie il codice di altre squadre', assertSucceeds(setDoc(doc(org, 'teamCodes', 'QQQQ-QQQQ'), { teamId: 'ta', created: 1, by: 'org' })).then(() => assertFails(deleteDoc(doc(newcap, 'teamCodes', 'QQQQ-QQQQ')))));
 console.log(`\n${ok} ok, ${ko} falliti`);
 await env.cleanup();
 process.exit(ko ? 1 : 0);

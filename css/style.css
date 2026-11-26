@@ -93,6 +93,12 @@ h3 { font-size: .95rem; margin: 0 0 .5rem; font-weight: 600; }
 .theme-link { color: var(--primary); font-size: 1.3rem; text-decoration: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 99px; }
 .theme-link:hover { background: var(--primary-soft); }
 
+/* codice del capitano */
+.code-pill { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .95rem; font-weight: 700; letter-spacing: .06em; padding: 2px 8px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap; }
+.tm-code { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 8px; }
+.claim-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.claim-row label { flex: 1 1 200px; max-width: 280px; }
+.claim-row input { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; text-transform: uppercase; letter-spacing: .08em; }
 .theme-group { margin: 18px 0 8px; font-size: .95rem; }
 /* menu delle grafiche aperto dall'icona in testata */
 .theme-pop {

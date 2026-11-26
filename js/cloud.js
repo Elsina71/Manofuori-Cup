@@ -870,6 +870,52 @@ function updateVMatch(id, patch) { return updateDoc(doc(db, 'vmatches', id), Obj
 // trash/{id}: copia completa di un torneo tolto dalle pagine (torneo, gare con i risultati, squadre e rose scelte):
 // archiviato (senza scadenza) oppure nel cestino per 7 giorni. Si ripristina in ogni momento; scaduti i 7 giorni la
 // copia del cestino si cancella da sola alla prima apertura di un admin tornei.
+// ---------- codici dei capitani (teamCodes/{codice} = { teamId }) ----------
+let codesUnsub = null;
+function listenTeamCodes() {
+  if (codesUnsub) { codesUnsub(); codesUnsub = null; }
+  Store.applyRemote('teamCodes', []);
+  if (!user || !canTour()) return;
+  codesUnsub = onSnapshot(collection(db, 'teamCodes'), snap => {
+    Store.applyRemote('teamCodes', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
+    refresh();
+  }, onError);
+}
+// codice di 8 caratteri senza lettere e cifre che si confondono (0/O, 1/I/L), es. K7QM-3XPA
+const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function newCode() {
+  const r = crypto.getRandomValues(new Uint32Array(8));
+  const s = Array.from(r, x => CODE_CHARS[x % CODE_CHARS.length]).join('');
+  return s.slice(0, 4) + '-' + s.slice(4);
+}
+const normCode = c => { const s = String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return s.length === 8 ? s.slice(0, 4) + '-' + s.slice(4) : ''; };
+// Nuovo codice per una o più squadre: quelli vecchi delle stesse squadre smettono di valere
+async function makeTeamCodes(teamIds) {
+  const old = await getDocs(collection(db, 'teamCodes'));
+  const batch = writeBatch(db), now = Date.now(), out = {};
+  old.docs.filter(d => teamIds.includes(d.data().teamId)).forEach(d => batch.delete(d.ref));
+  teamIds.forEach(id => { const c = newCode(); out[id] = c; batch.set(doc(db, 'teamCodes', c), { teamId: id, created: now, by: user.email || '' }); });
+  await batch.commit();
+  return out;
+}
+// Il capitano inserisce il codice: diventa capitano della squadra e la lista passa a lui
+async function claimTeam(code, captainName) {
+  const c = normCode(code);
+  if (!c) throw Object.assign(new Error('bad-code'), { code: 'bad-code' });
+  let snap;
+  try { snap = await getDoc(doc(db, 'teamCodes', c)); } catch (e) { throw Object.assign(new Error('bad-code'), { code: 'bad-code' }); }
+  if (!snap.exists()) throw Object.assign(new Error('bad-code'), { code: 'bad-code' });
+  const tid = snap.data().teamId, now = Date.now();
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'teams', tid), { captainUid: user.uid, captainName: captainName || '', claimCode: c, updated: now });
+  batch.delete(doc(db, 'teamCodes', c));
+  await batch.commit();
+  const rref = doc(db, 'rosters', tid);
+  const r = await getDoc(rref).catch(() => null);
+  if (r && r.exists()) await updateDoc(rref, { captainUid: user.uid, updated: now });
+  return tid;
+}
+
 const TRASH_DAYS = 7;
 let trashUnsub = null;
 function listenTrash() {
@@ -931,6 +977,7 @@ onSnapshot(collection(db, 'teams'), snap => {
 let rosterUnsub = null;
 function listenRosters() {
   listenTrash();
+  listenTeamCodes();
   if (rosterUnsub) { rosterUnsub(); rosterUnsub = null; }
   Store.applyRemote('rosters', []);
   if (!user || !(canTour() || member || scorer)) return;
@@ -1222,6 +1269,8 @@ window.Cloud = {
   updateVMatch,
   deleteVTour,
   trashVTour,
+  makeTeamCodes,
+  claimTeam,
   restoreVTour,
   purgeTrash,
   saveTeam,

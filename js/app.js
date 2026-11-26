@@ -102,6 +102,8 @@
     else if (r[0] === 'mine') { nav = 'mine'; html = viewMineVolley(); }
     else if (r[0] === 'me') { nav = 'me'; html = viewProfile(); }
     else if (r[0] === 'teams') { nav = 'teams'; html = viewTeams(); }
+    // link del codice del capitano: apre Squadre con il codice già scritto
+    else if (r[0] === 'codice') { ui.claimCode = r[1] || ''; try { sessionStorage.setItem('pcm-claim', ui.claimCode); } catch (e) { /* niente */ } location.replace('#/teams'); return; }
     else if (r[0] === 'tema') { nav = 'settings'; html = viewTheme(); }
     else if (r[0] === 'livelli' && tourAdmin()) { nav = 'settings'; html = viewLevels(); }
     else if (r[0] === 'gare') { nav = 'gare'; html = viewMyMatches(); }
@@ -3324,6 +3326,44 @@
     </form>`;
   }
 
+  // ---------- codice del capitano ----------
+  const teamCodeOf = id => (S().teamCodes || []).find(x => x.teamId === id);
+  const codeLink = c => `${location.origin}${location.pathname}#/codice/${c}`;
+  function copyText(txt) {
+    const done = () => { ui.flash = { text: t('copied') }; render(); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(() => prompt(t('tmCodeCopy'), txt));
+    else prompt(t('tmCodeCopy'), txt);
+  }
+  function teamCodeLine(tm) {
+    const c = teamCodeOf(tm.id);
+    return `<div class="tm-code">${c ? `<span class="muted small">${esc(t('tmCodeLbl'))}</span> <code class="code-pill">${esc(c.id)}</code>
+        <button class="btn small" data-action="tm-code-copy" data-code="${esc(c.id)}"><i class="ti ti-link" aria-hidden="true"></i> ${esc(t('tmCodeCopy'))}</button>
+        <button class="btn small" data-action="tm-code" data-id="${tm.id}" data-renew="1"><i class="ti ti-refresh" aria-hidden="true"></i> ${esc(t('tmCodeNew'))}</button>`
+      : `<button class="btn small" data-action="tm-code" data-id="${tm.id}"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmCodeMake'))}</button>`}</div>`;
+  }
+  // admin: tutti i codici in un riquadro (crea quelli mancanti, copia l'elenco da mandare ai capitani)
+  function teamCodesCard(all) {
+    const missing = all.filter(x => !teamCodeOf(x.id)).length;
+    return `<details class="card sub-form" data-keep="tm-codes" ${keepOpen('tm-codes')}><summary><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmCodesTitle'))}</summary>
+      <p class="muted small">${esc(t('tmCodesHelp'))}</p>
+      <div class="btn-row">${missing ? `<button class="btn primary" data-action="tm-codes-all"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmCodesMake', { n: missing }))}</button>` : ''}
+        ${all.length > missing ? `<button class="btn" data-action="tm-codes-copy"><i class="ti ti-copy" aria-hidden="true"></i> ${esc(t('tmCodesCopy'))}</button>` : ''}</div>
+      <div class="table-wrap"><table class="table"><thead><tr><th>${esc(t('navTeams'))}</th><th>${esc(t('tmLevel'))}</th><th>${esc(t('tmCaptain'))}</th><th>${esc(t('tmCodeLbl'))}</th></tr></thead>
+        <tbody>${all.map(x => { const c = teamCodeOf(x.id); return `<tr><td>${esc(x.name)}</td><td>${esc(x.level)}</td><td>${esc(x.captainName || '—')}</td><td>${c ? `<code class="code-pill">${esc(c.id)}</code>` : `<span class="muted small">${esc(t(x.claimCode ? 'tmCodeUsed' : 'tmCodeNone'))}</span>`}</td></tr>`; }).join('')}</tbody></table></div>
+    </details>`;
+  }
+  // capitano: inserisce il codice ricevuto (serve un account: accesso o registrazione)
+  function claimCard() {
+    let pre = ui.claimCode || '';
+    if (!pre) { try { pre = sessionStorage.getItem('pcm-claim') || ''; } catch (e) { /* niente */ } }
+    if (!member()) return `<div class="card claim-card"><h2><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmClaimTitle'))}</h2>
+      <p class="muted">${esc(t('tmClaimLogin'))}</p>${pre ? `<p>${esc(t('tmClaimYour'))} <code class="code-pill">${esc(pre)}</code></p>` : ''}<a class="btn primary" href="#/settings">${esc(t('login'))}</a></div>`;
+    return `<form class="card claim-card" data-form="tm-claim" autocomplete="off"><h2><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmClaimTitle'))}</h2>
+      <p class="muted small">${esc(t('tmClaimHelp'))}</p>
+      <div class="claim-row"><label>${esc(t('tmCodeLbl'))}<input name="code" required maxlength="12" value="${esc(pre)}" placeholder="ABCD-EFGH" autocapitalize="characters" spellcheck="false"></label>
+        <button class="btn primary">${esc(t('tmClaimGo'))}</button></div></form>`;
+  }
+
   function teamStatusBadge(tm) {
     return tm.status === 'ok' ? `<span class="badge st-done">${esc(t('tmStatus_ok'))}</span>` : `<span class="badge warn-b">${esc(t('tmStatus_pending'))}</span>`;
   }
@@ -3338,6 +3378,7 @@
       <div class="ch-head"><span class="badge">${esc(tm.level)}</span> <span class="badge">${esc(t('tmKind_' + tm.kind))}</span> ${teamStatusBadge(tm)}</div>
       <h3>${esc(tm.name)}</h3>
       <p class="muted small">${esc(t('tmCaptain'))}: ${esc(tm.captainName || '—')}</p>
+      ${tourAdmin() ? teamCodeLine(tm) : ''}
       ${seeRoster ? `<details class="sub-form" data-keep="tmr-${tm.id}" ${keepOpen('tmr-' + tm.id)}>
         <summary><i class="ti ti-users" aria-hidden="true"></i> ${esc(t('tmRosterCount', { n: players.length, m: nM, f: nF }))}</summary>
         ${players.length ? `<table class="table roster-table"><thead><tr><th class="num">${esc(t('tmNumShort'))}</th><th>${esc(t('player'))}</th><th>${esc(t('gender'))}</th></tr></thead>
@@ -3376,6 +3417,7 @@
     return `${verifyNotice()}
       <div class="page-head"><h1><i class="ti ti-shirt-sport" aria-hidden="true"></i> ${esc(t('navTeams'))}</h1><p class="muted">${esc(t('tmIntro'))}</p></div>
       ${mine.length ? `<section class="feat-block"><h2>${esc(t('tmMine'))}</h2><div class="ch-grid">${mine.map(teamCard).join('')}</div></section>` : ''}
+      ${tourAdmin() ? teamCodesCard(all) : !scorer() && (!mine.length || ui.claimCode) ? claimCard() : ''}
       ${create}
       ${pending ? `<p class="note warn"><i class="ti ti-clock" aria-hidden="true"></i> ${esc(t('tmPendingAdmin', { n: pending }))}</p>` : ''}
       ${groups.length ? groups.map(g => `<section class="feat-block"><h2>${esc(g.l)} <small class="muted">(${g.list.length})</small></h2>
@@ -3486,6 +3528,18 @@
   };
   const teamForms = {
     'team-save': f => teamSave(f),
+    'tm-claim': f => {
+      const me = member();
+      if (!me || !window.Cloud) return warn('tmClaimLogin');
+      const btn = f.querySelector('button'); if (btn) btn.disabled = true;
+      window.Cloud.claimTeam(f.code.value, personName(me)).then(tid => {
+        ui.claimCode = ''; try { sessionStorage.removeItem('pcm-claim'); } catch (e) { /* niente */ }
+        const tm = teamById(tid);
+        ui.tmEdit = tid; ui.flash = { text: t('tmClaimDone', { n: tm ? tm.name : '' }) };
+        if (location.hash !== '#/teams') location.hash = '#/teams'; render();
+        setTimeout(() => { const el = document.getElementById('tm-' + tid); if (el) el.scrollIntoView({ block: 'start' }); }, 300);
+      }).catch(err => { if (btn) btn.disabled = false; warn(err && err.code === 'bad-code' ? 'tmClaimBad' : 'regError', { code: (err && (err.code || err.message)) || '' }); });
+    },
     'levels-save': f => {
       const list = [...new Set(f.levels.value.split('\n').map(x => x.trim()).filter(Boolean))];
       if (!list.length) return warn('errRegFields');
@@ -3896,6 +3950,18 @@
     'verify-check': () => window.Cloud.checkVerified().then(ok => { if (ok) { ui.flash = { text: t('verifyOk') }; render(); } else warn('verifyNotYet'); }),
     'notice-dismiss': el => { S().notices = (S().notices || []).filter(n => n.id !== el.dataset.id); window.Cloud.dismissNotice(el.dataset.id); render(); },
     'set-theme': el => setTheme(el.dataset.themeId),
+    'tm-code': el => {
+      if (el.dataset.renew && !confirm(t('tmCodeRenewConfirm'))) return;
+      window.Cloud.makeTeamCodes([el.dataset.id]).then(() => { ui.flash = { text: t('tmCodeMade') }; render(); }).catch(vErr);
+    },
+    'tm-codes-all': () => {
+      const ids = (S().teams || []).filter(x => !teamCodeOf(x.id)).map(x => x.id);
+      if (!ids.length) return;
+      window.Cloud.makeTeamCodes(ids).then(() => { ui.flash = { text: t('tmCodesMade', { n: ids.length }) }; render(); }).catch(vErr);
+    },
+    'tm-code-copy': el => copyText(t('tmCodeMsg', { c: el.dataset.code, l: codeLink(el.dataset.code) })),
+    'tm-codes-copy': () => copyText((S().teams || []).slice().sort(byLevel).filter(x => teamCodeOf(x.id))
+      .map(x => `${x.name} (${x.level}): ${teamCodeOf(x.id).id} · ${codeLink(teamCodeOf(x.id).id)}`).join('\n')),
     'set-design': el => setDesign(el.dataset.designId),
     'notice-edit': el => { ui.editNotice = el.dataset.scope; render(); },
     // iscrizioni online
@@ -4042,7 +4108,7 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
+  const TOUR_ACTIONS = new Set(['tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
   const TOUR_FORMS = new Set(['vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
@@ -4051,7 +4117,7 @@
   const PUBLIC_FORMS = new Set(['login', 'register', 'complete-profile']);
   const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
   const MEMBER_ACTIONS = new Set(['profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
-  const MEMBER_FORMS = new Set(['profile-save', 'fp-join', 'fp-blocks', 'team-save']);
+  const MEMBER_FORMS = new Set(['tm-claim', 'profile-save', 'fp-join', 'fp-blocks', 'team-save']);
   let submitMode = 'save';
 
   // reminder delle prenotazioni: la prima pagina si aggiorna ogni minuto (compaiono e spariscono da soli)
