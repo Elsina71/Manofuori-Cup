@@ -1959,3 +1959,7 @@ body.lu-full.lv-full { background: #0e1a22 !important; }
 /* riga della gara: i nomi delle squadre non si schiacciano mai; sul telefono squadre sopra e risultato sotto */
 .vm-row { grid-template-columns: minmax(min(12em, 100%), 1fr) auto; }
 @media (max-width: 560px) { .vm-row { grid-template-columns: minmax(0, 1fr); } .vm-row > * { grid-column: 1 !important; } .vm-row .vm-score { justify-self: start; text-align: left; white-space: normal; } .vm-row > .btn { grid-row: auto; justify-self: start; } }
+/* Gare in corso: i punti a due cifre restano dentro la scheda */
+.livetop-row { grid-template-columns: minmax(0, 1fr) auto minmax(2.4ch, auto); }
+.livetop-pts { min-width: 2.4ch; padding-right: 2px; font-family: Inter, system-ui, sans-serif; letter-spacing: -.02em; }
+.livetop-card { overflow: hidden; }
