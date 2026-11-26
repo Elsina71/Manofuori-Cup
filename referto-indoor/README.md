@@ -18,6 +18,11 @@ di Data Project usato nelle gare internazionali.
    su due righe da 3, con la rete in alto: in alto i posti 4, 3, 2, in basso i posti 5, 6, 1 (senso antiorario,
    posto 1 in basso a destra = al servizio). Negli altri set il sistema propone già il cambio di campo, la squadra al
    servizio (quella che ha ricevuto per prima nel set precedente) e la formazione del set prima.
+   **Numeri a mano**: la lista dei giocatori non è obbligatoria. In ogni posto si scrive il numero di maglia
+   (se la squadra ha la lista compare l'elenco da cui scegliere); sotto la formazione si scrivono i **2 liberi**
+   della gara, che poi restano gli stessi. Un numero che non è in lista entra a referto senza nome; nelle gare
+   miste si tocca **D** per le donne. Anche nel **cambio** si può far entrare un numero scritto a mano.
+   Nelle gare del torneo i nomi delle squadre arrivano dal calendario e le liste dalle squadre, se ci sono.
 3. **Gara**: si tocca **+1 punto** sotto la squadra che vince l'azione. Il resto è automatico:
    - **rotazioni**: quando la squadra che riceve vince l'azione conquista il servizio e ruota in senso
      orario (il giocatore del posto 2 va al servizio al posto 1); ogni giocatore resta col suo numero di maglia e

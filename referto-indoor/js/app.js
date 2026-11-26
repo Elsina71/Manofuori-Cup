@@ -368,10 +368,8 @@
       const nos = r.map(p => +p.no);
       if (new Set(nos).size !== nos.length) return `${teamName(m, tm)}: due giocatori con lo stesso numero.`;
       if (m.teams[tm].players.some(p => p.name && (p.no === '' || p.no == null))) return `${teamName(m, tm)}: manca il numero di maglia di un giocatore.`;
-      if (r.filter(p => !p.libero).length < 6) return `${teamName(m, tm)}: servono almeno 6 giocatori (liberi esclusi).`;
+      // senza lista (o con una lista incompleta) i numeri si scrivono a mano nella formazione di ogni set
       if (r.filter(p => p.libero).length > 2) return `${teamName(m, tm)}: al massimo 2 liberi.`;
-      const mw = R.minWomenOf(S, tm);
-      if (mw && r.filter(p => p.gender === 'F').length < mw) return `${teamName(m, tm)}: servono almeno ${mw} donne a referto, libero compreso (indica D/U per ogni giocatore).`;
     }
     if (!m.teams.A.name || !m.teams.B.name) return 'Inserisci il nome delle due squadre.';
     return null;
@@ -390,7 +388,11 @@
       ui.lineup = {
         index: d.index, needsToss: d.needsToss, winner: null, choice: null, otherChoice: null,
         serving: d.serving, left: d.left,
-        lineup: { A: d.lineup.A.length === 6 ? d.lineup.A.slice() : ['', '', '', '', '', ''], B: d.lineup.B.length === 6 ? d.lineup.B.slice() : ['', '', '', '', '', ''] }
+        lineup: { A: d.lineup.A.length === 6 ? d.lineup.A.slice() : ['', '', '', '', '', ''], B: d.lineup.B.length === 6 ? d.lineup.B.slice() : ['', '', '', '', '', ''] },
+        // liberi della gara (al massimo 2): presi dalla lista, oppure scritti a mano prima del 1° set; fem: D/U scritti qui
+        liberi: { A: [0, 1].map(i => liberi(m, 'A')[i] ?? ''), B: [0, 1].map(i => liberi(m, 'B')[i] ?? '') },
+        libLocked: { A: [0, 1].map(i => m.events.length > 0 && liberi(m, 'A')[i] != null), B: [0, 1].map(i => m.events.length > 0 && liberi(m, 'B')[i] != null) },
+        fem: { A: {}, B: {} }
       };
     }
     const L = ui.lineup;
@@ -399,21 +401,53 @@
     const opt = (key, val, label, on, cls) => `<button type="button" class="opt ${cls || ''} ${on ? 'on' : ''}" data-k="${key}" data-v="${val}">${label}</button>`;
     const teamOpts = key => ['A', 'B'].map(tm => opt(key, tm, esc(teamName(m, tm)), L[key] === tm, `team-${tm}`)).join('');
 
-    const pos = (tm, p) => {
-      const cand = playable(m, tm).filter(n => !st.barredMatch[tm][n]);
+    // Formazione scritta a mano: un numero per posto (con l'elenco dei giocatori della lista come suggerimento);
+    // un numero che non è in lista entra a referto senza nome all'inizio del set.
+    const S0 = R.settingsOf(m);
+    const fem = (tm, n) => (n in L.fem[tm] ? L.fem[tm][n] : isWoman(m, tm, n));
+    const num = v => { const n = parseInt(String(v).trim(), 10); return n >= 0 && n <= 99 ? n : ''; };
+    const cellErr = (tm, p) => {
       const v = L.lineup[tm][p];
-      const dup = v !== '' && L.lineup[tm].filter(x => x === v).length > 1;
-      return `<label class="pos-cell ${dup ? 'dup' : ''} ${v !== '' && isWoman(m, tm, v) ? 'woman' : ''}"><span class="roman">${POS[p]}</span>
-        <select data-pos="${tm}.${p}"><option value=""></option>${cand.map(n => `<option value="${n}" ${+v === n && v !== '' ? 'selected' : ''}>${esc(pLabel(m, tm, n))}</option>`).join('')}</select></label>`;
+      if (v === '') return '';
+      if (L.lineup[tm].filter(x => x === v).length > 1) return `n. ${v} ripetuto`;
+      if (L.liberi[tm].includes(v)) return `il n. ${v} è un libero`;
+      if (st.barredMatch[tm][v]) return `il n. ${v} non può più giocare in questa gara`;
+      return '';
     };
+    const libErr = (tm, i) => {
+      const v = L.liberi[tm][i];
+      if (v === '') return '';
+      if (L.liberi[tm][1 - i] === v) return `libero n. ${v} ripetuto`;
+      if (L.lineup[tm].includes(v)) return `il libero n. ${v} è anche in formazione`;
+      return '';
+    };
+    const wTog = (attr, tm, v) => R.minWomenOf(S0, tm) ? `<button type="button" class="w-tog ${v !== '' && fem(tm, v) ? 'on' : ''}" ${attr} ${v === '' ? 'hidden' : ''} title="Donna">D</button>` : '';
+    const pos = (tm, p) => {
+      const v = L.lineup[tm][p];
+      const pl = v !== '' ? player(m, tm, v) : null;
+      return `<label class="pos-cell ${cellErr(tm, p) ? 'dup' : ''} ${v !== '' && fem(tm, v) ? 'woman' : ''}" data-cell="${tm}.${p}"><span class="roman">${POS[p]}</span>
+        <input data-pos="${tm}.${p}" value="${v}" inputmode="numeric" maxlength="2" autocomplete="off" list="dl-${tm}" aria-label="${esc(teamName(m, tm))} posto ${POS[p]}">
+        <span class="pos-name">${esc(pl && pl.name ? pl.name : '')}</span>${wTog(`data-wpos="${tm}.${p}"`, tm, v)}</label>`;
+    };
+    const libRow = tm => `<div class="lib-row"><span class="muted small">Liberi</span>${[0, 1].map(i => {
+      const v = L.liberi[tm][i], pl = v !== '' ? player(m, tm, v) : null;
+      return `<label class="pos-cell lib-cell ${libErr(tm, i) ? 'dup' : ''} ${v !== '' && fem(tm, v) ? 'woman' : ''}" data-libcell="${tm}.${i}"><span class="roman">L${i + 1}</span>
+        <input data-libno="${tm}.${i}" value="${v}" inputmode="numeric" maxlength="2" autocomplete="off" aria-label="${esc(teamName(m, tm))} libero ${i + 1}" ${L.libLocked[tm][i] ? 'readonly title="I liberi restano gli stessi per tutta la gara"' : ''}>
+        <span class="pos-name">${esc(pl && pl.name ? pl.name : '')}</span>${wTog(`data-wlib="${tm}.${i}"`, tm, v)}</label>`;
+    }).join('')}</div>`;
+    const dlist = tm => `<datalist id="dl-${tm}">${playable(m, tm).filter(n => !st.barredMatch[tm][n]).map(n => `<option value="${n}">${esc(pLabel(m, tm, n))}</option>`).join('')}</datalist>`;
     const court = (tm, side) => `<div class="lineup-court team-${tm}">
       <h3><span class="dot team-${tm}"></span> ${esc(teamName(m, tm))}${L.serving === tm ? ' · <span class="badge serve">al servizio</span>' : ''}</h3>
-      <div class="net-label">rete</div><div class="court-grid">${GRID.map(p => pos(tm, p)).join('')}</div>
+      <div class="net-label">rete</div><div class="court-grid">${GRID.map(p => pos(tm, p)).join('')}</div>${dlist(tm)}
+      ${libRow(tm)}
       <div class="row rot-row"><span class="muted small">P1 = al servizio · rotazione:</span>
         <button type="button" class="btn small" data-rot="${tm}" data-dir="-1" title="Rotazione indietro: P1 torna in P2">↺ Indietro</button>
         <button type="button" class="btn small" data-rot="${tm}" data-dir="1" title="Rotazione avanti: P2 va al servizio in P1">↻ Avanti</button></div></div>`;
 
-    const ready = L.serving && L.left && ['A', 'B'].every(tm => L.lineup[tm].every(x => x !== '') && new Set(L.lineup[tm]).size === 6);
+    const problems = () => ['A', 'B'].flatMap(tm => [0, 1, 2, 3, 4, 5].map(p => cellErr(tm, p)).concat([0, 1].map(i => libErr(tm, i)))
+      .filter(Boolean).map(x => `${teamName(m, tm)}: ${x}`));
+    const isReady = () => !!(L.serving && L.left && ['A', 'B'].every(tm => L.lineup[tm].every(x => x !== '')) && !problems().length);
+    const ready = isReady();
     $app.innerHTML = `
       <section class="card"><h1>Set ${d.index + 1}</h1>
         ${L.needsToss ? `
@@ -429,7 +463,7 @@
           <div class="q"><h3>A sinistra del segnapunti</h3><div class="opts">${teamOpts('left')}</div></div>`}
       </section>
       <section class="card"><h2>Formazioni (posto 1 → 6)</h2>
-        <p class="muted small">Scegli il giocatore di ogni posizione come sul tagliando della formazione. I liberi non entrano nella formazione.</p>
+        <p class="muted small">Scrivi il numero di maglia di ogni posto come sul tagliando della formazione (se la squadra ha la lista, compare l'elenco da cui scegliere; un numero non in lista si aggiunge al referto). Sotto, i liberi della gara (al massimo 2): non entrano nella formazione.${R.minWomenOf(S0, 'A') || R.minWomenOf(S0, 'B') ? ' Tocca <b>D</b> per le donne.' : ''}</p>
         <div class="lineups">${court(left, 'left')}${court(right, 'right')}</div>
       </section>
       <p class="error" id="luErr"></p>
@@ -445,11 +479,46 @@
       if (b.dataset.k === 'choice' && b.dataset.v !== 'side') L.otherChoice = null;
       render();
     });
-    $app.querySelectorAll('[data-pos]').forEach(s => s.onchange = () => {
-      const [tm, p] = s.dataset.pos.split('.');
-      L.lineup[tm][+p] = s.value === '' ? '' : +s.value;
-      render();
+    // aggiornamento sul posto (senza ridisegnare: il cursore resta nel campo)
+    const errBox = document.getElementById('luErr');
+    const update = () => {
+      ['A', 'B'].forEach(tm => {
+        [0, 1, 2, 3, 4, 5].forEach(p => {
+          const el = $app.querySelector(`[data-cell="${tm}.${p}"]`), v = L.lineup[tm][p], pl = v !== '' ? player(m, tm, v) : null;
+          el.classList.toggle('dup', !!cellErr(tm, p)); el.classList.toggle('woman', v !== '' && fem(tm, v));
+          el.querySelector('.pos-name').textContent = pl && pl.name ? pl.name : '';
+          const w = el.querySelector('.w-tog'); if (w) { w.hidden = v === ''; w.classList.toggle('on', v !== '' && fem(tm, v)); }
+        });
+        [0, 1].forEach(i => {
+          const el = $app.querySelector(`[data-libcell="${tm}.${i}"]`), v = L.liberi[tm][i], pl = v !== '' ? player(m, tm, v) : null;
+          el.classList.toggle('dup', !!libErr(tm, i)); el.classList.toggle('woman', v !== '' && fem(tm, v));
+          el.querySelector('.pos-name').textContent = pl && pl.name ? pl.name : '';
+          const w = el.querySelector('.w-tog'); if (w) { w.hidden = v === ''; w.classList.toggle('on', v !== '' && fem(tm, v)); }
+        });
+      });
+      errBox.textContent = problems().join(' · ');
+      document.getElementById('goBtn').disabled = !isReady();
+    };
+    $app.querySelectorAll('[data-pos]').forEach(inp => inp.oninput = () => {
+      const [tm, p] = inp.dataset.pos.split('.');
+      L.lineup[tm][+p] = num(inp.value);
+      update();
     });
+    $app.querySelectorAll('[data-libno]').forEach(inp => inp.oninput = () => {
+      const [tm, i] = inp.dataset.libno.split('.');
+      if (L.libLocked[tm][+i]) return;
+      L.liberi[tm][+i] = num(inp.value);
+      update();
+    });
+    $app.querySelectorAll('[data-wpos], [data-wlib]').forEach(b => b.onclick = e => {
+      e.preventDefault();
+      const [tm, k] = (b.dataset.wpos || b.dataset.wlib).split('.');
+      const v = b.dataset.wpos ? L.lineup[tm][+k] : L.liberi[tm][+k];
+      if (v === '') return;
+      L.fem[tm][v] = !fem(tm, v);
+      update();
+    });
+    update();
     // rotazione della formazione: avanti = come al cambio palla (P2→P1, P3→P2 … P1→P6), indietro = al contrario
     $app.querySelectorAll('[data-rot]').forEach(b => b.onclick = () => {
       const l = L.lineup[b.dataset.rot], d = +b.dataset.dir;
@@ -460,7 +529,18 @@
     const ub = document.getElementById('undoBtn');
     if (ub) ub.onclick = () => undoLast(m);
     document.getElementById('goBtn').onclick = () => {
+      if (!isReady()) return;
       const S = R.settingsOf(m);
+      // numeri scritti a mano: entrano a referto (senza nome) e i liberi della gara si segnano come tali
+      ['A', 'B'].forEach(tm => {
+        const T = m.teams[tm];
+        const ensure = n => { let p = player(m, tm, n); if (!p) { p = { no: n, name: '', gender: '', libero: false, captain: false }; T.players.push(p); } return p; };
+        if (!m.events.length) T.players.forEach(p => { if (p.no !== '' && p.no != null) p.libero = L.liberi[tm].includes(+p.no); });
+        L.liberi[tm].filter(n => n !== '').forEach(n => { ensure(n).libero = true; });
+        L.lineup[tm].forEach(n => ensure(n));
+        Object.keys(L.fem[tm]).forEach(n => { const p = player(m, tm, n); if (p) p.gender = L.fem[tm][n] ? 'F' : (p.gender === 'F' ? 'M' : p.gender || 'M'); });
+      });
+      touch(m);
       // il libero donna può essere una delle donne: entra in seconda linea prima del primo servizio
       const short = ['A', 'B'].filter(tm => R.minWomenOf(S, tm) && womenIn(m, tm, L.lineup[tm]) + (liberi(m, tm).some(n => isWoman(m, tm, n) && !stateOf(m).barredMatch[tm][n]) ? 1 : 0) < R.minWomenOf(S, tm));
       const start = () => {
@@ -655,6 +735,9 @@
         <div class="q"><h3>Esce</h3><div class="opts">${c.map(n => `<button class="opt team-${tm} ${sel.out === n ? 'on' : ''}" data-out="${n}">${esc(pLabel(m, tm, n))}</button>`).join('')}</div></div>
         ${o ? `<div class="q"><h3>Entra</h3>
           <div class="opts">${list.map(n => `<button class="opt ${sel.inn === n ? 'on' : ''} ${isWoman(m, tm, n) ? 'woman' : ''}" data-in="${n}">${esc(pLabel(m, tm, n))}</button>`).join('') || `<span class="muted small">${why || 'Nessun giocatore disponibile.'}</span>`}</div>
+          <div class="row hand-no"><input id="handNo" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="n." aria-label="Numero di chi entra, scritto a mano">
+            ${R.minWomenOf(S, tm) ? '<label class="check"><input type="checkbox" id="handW"> Donna</label>' : ''}
+            <button type="button" class="btn small" id="handBtn">Entra un altro numero</button></div>
           <label class="check"><input type="checkbox" id="excChk" ${sel.exc ? 'checked' : ''}> Sostituzione eccezionale (infortunio, espulsione, squalifica): non conta, e chi esce non può più rientrare nella gara</label></div>` : ''}
         <p class="muted small">Sostituzioni regolari: ${set.regSubs[tm]}/${S.subsPerSet}</p>
         <div class="row end"><button class="btn ghost" data-x>Annulla</button><button class="btn primary" data-ok ${sel.out != null && sel.inn != null ? '' : 'disabled'}>Registra</button></div>`, { dismiss: !forced });
@@ -662,6 +745,20 @@
       $overlay.querySelectorAll('[data-in]').forEach(b => b.onclick = () => { sel.inn = +b.dataset.in; draw(); });
       const chk = document.getElementById('excChk');
       if (chk) chk.onchange = () => { sel.exc = chk.checked; sel.inn = null; draw(); };
+      // giocatore non in lista: il numero scritto entra a referto (senza nome) e si può scegliere
+      const hb = document.getElementById('handBtn');
+      if (hb) hb.onclick = () => {
+        const n = parseInt(document.getElementById('handNo').value, 10);
+        if (!(n >= 0 && n <= 99)) { toast('Scrivi un numero di maglia (0–99).'); return; }
+        const p = player(m, tm, n);
+        if (p && p.libero) { toast(`Il n. ${n} è un libero: entra con il pulsante Libero.`); return; }
+        if (R.visibleCourt(set, tm).includes(n)) { toast(`Il n. ${n} è già in campo.`); return; }
+        if (!p) { m.teams[tm].players.push({ no: n, name: '', gender: document.getElementById('handW') && document.getElementById('handW').checked ? 'F' : 'M', libero: false, captain: false }); touch(m); }
+        const o2 = R.subOptions(st, tm, sel.out, playable(m, tm));
+        if ((sel.exc ? o2.exceptional : o2.regular).includes(n)) sel.inn = n;
+        else toast(`Il n. ${n} non può entrare con questa sostituzione.`);
+        draw();
+      };
       $overlay.querySelector('[data-x]').onclick = closeOverlay;
       $overlay.querySelector('[data-ok]').onclick = () => {
         const ev = { type: 'sub', team: tm, out: sel.out, in: sel.inn, exceptional: sel.exc };
