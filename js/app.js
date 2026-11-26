@@ -2540,6 +2540,7 @@
         <h1>${esc(tour.name)}</h1>
         <p class="meta"><span class="badge cat">${esc(tour.level)}</span> <span class="badge ${tour.status === 'live' ? 'st-main' : ''}">${esc(t('vtSt_' + (tour.status || 'draft')))}</span>
           <span class="muted">${esc(t(tour.rr === 'a' ? 'vtRr_a' : 'vtRr_ar'))}${tour.playoff ? ' + ' + esc(t('vtPlayoff')) : ''}</span></p>
+        ${tourAdmin() ? `<div class="btn-row"><button type="button" class="btn small danger" data-action="vt-delete" data-id="${tour.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('vtDelete'))}</button></div>` : ''}
       </div>
       <nav class="tabs" aria-label="${esc(t('sections'))}">${tabs.map(k => `<a href="#/vt/${tour.id}/${k}" class="${k === tab ? 'active' : ''}">${esc(t('vtTab_' + k))}</a>`).join('')}</nav>
       <section class="tab-body">${body}</section>`;
@@ -2952,8 +2953,17 @@
     },
     'vt-delete': el => {
       const tour = vtById(el.dataset.id);
-      if (!tour || !confirmed('vtDeleteConfirm', { n: tour.name })) return;
-      window.Cloud.deleteVTour(tour.id, vtMatches(tour.id).map(m => m.id)).then(() => { ui.flash = { text: t('vtDeleted') }; location.hash = '#/tornei'; render(); }).catch(vErr);
+      if (!tour) return;
+      const ms = vtMatches(tour.id), played = ms.filter(m => m.status === 'done').length;
+      if (!confirmed(played ? 'vtDeleteConfirmPlayed' : 'vtDeleteConfirm', { n: tour.name, k: played })) return;
+      // squadre usate solo in questo torneo (non in altri tornei): si possono eliminare insieme al torneo
+      const inTour = (o, id) => (o.groups || []).some(g => g.teams.includes(id)) || (o.brackets || []).some(b => b.seeds.includes(id));
+      const mine = [...new Set((tour.groups || []).flatMap(g => g.teams))].filter(id => teamById(id));
+      const only = mine.filter(id => !(S().vtours || []).some(o => o.id !== tour.id && inTour(o, id)));
+      const alsoTeams = only.length && confirmed('vtDeleteTeamsAsk', { k: only.length, l: only.map(id => vTeamName(tour, id)).join(', ') });
+      window.Cloud.deleteVTour(tour.id, ms.map(m => m.id))
+        .then(() => (alsoTeams ? Promise.all(only.map(id => window.Cloud.deleteTeam(id))) : null))
+        .then(() => { ui.flash = { text: t(alsoTeams ? 'vtDeletedTeams' : 'vtDeleted', { k: only.length }) }; location.hash = '#/tornei'; render(); }).catch(vErr);
     },
     'vt-seed': el => {
       const tour = vtById(el.dataset.id), i = Number(el.dataset.i), j = i + Number(el.dataset.d);
