@@ -433,7 +433,7 @@
         ${row('shirt-sport', t('role_captain'), t('roleHelp_captain'), who('captain'))}
         ${row('trophy', t('role_tour'), t('roleHelp_tour'), who('tour'))}
         ${row('cash-register', t('role_cash'), t('roleHelp_cash'), who('cash'))}
-        ${row('whistle', t('role_coach'), t('roleHelp_coach'), coaches)}
+        ${row('clipboard-text', t('role_coach'), t('roleHelp_coach'), coaches)}
         ${row('device-mobile', t('role_scorer'), t('roleHelp_scorer'), [])}
       </ul></div>`;
   }
@@ -738,7 +738,7 @@
       <div class="ch-head"><span class="badge lvl-${tr.level}">${esc(t('fpLevel_' + tr.level))}</span> <span class="badge ${full ? 'st-full' : ''}">${uids.length}/${tr.max}</span></div>
       <h3>${esc(trTitle(tr))}</h3>
       <p class="muted cap"><i class="ti ti-calendar-repeat" aria-hidden="true"></i> ${esc(trLabel(tr))}</p>
-      <p class="muted small">${tr.coachUid ? `<i class="ti ti-whistle" aria-hidden="true"></i> ${esc(t('trCoach'))}: ${esc(coachName(tr.coachUid))}` : ''}
+      <p class="muted small">${tr.coachUid ? `<i class="ti ti-clipboard-text" aria-hidden="true"></i> ${esc(t('trCoach'))}: ${esc(coachName(tr.coachUid))}` : ''}
         ${tr.coachUid && tr.place ? ' · ' : ''}${tr.place ? `<i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(tr.place)}` : ''}</p>
       <h4>${esc(t('grpTitle', { m: monthLabel(month) }))}</h4>
       ${od && uids.length ? `<p class="muted small"><i class="ti ti-calendar-check" aria-hidden="true"></i> ${esc(t(oc && oc.cancelled ? 'occCancelledOn' : 'attOfDay', { d: longDate(od) }))}</p>` : ''}
@@ -789,7 +789,7 @@
     const list = (S().coaches || []).slice().sort((a, b) => coachName(a.id).localeCompare(coachName(b.id)));
     const others = (S().members || []).filter(m => !coachOf(m.uid)).sort((a, b) => personName(a).localeCompare(personName(b)));
     return `<div class="card" id="coaches">
-      <h2><i class="ti ti-whistle" aria-hidden="true"></i> ${esc(t('coachTitle'))}</h2>
+      <h2><i class="ti ti-clipboard-text" aria-hidden="true"></i> ${esc(t('coachTitle'))}</h2>
       <p class="muted small">${esc(t('coachHelp'))}</p>
       ${list.length ? `<ul class="reg-list coach-list">${list.map(c => `<li><span class="reg-names"><strong>${esc(coachName(c.id))}</strong></span>
         <select data-change="coach-all" data-uid="${c.id}" aria-label="${esc(t('coachSees'))}">
@@ -1108,7 +1108,7 @@
         <div class="ch-head"><span class="badge lvl-${tr.level}">${esc(t('fpLevel_' + tr.level))}</span> ${free > 0 ? freeBadge(tr, date) : ''}</div>
         <h3>${esc(trTitle(tr))}</h3>
         <p class="muted cap"><i class="ti ti-calendar" aria-hidden="true"></i> ${esc(longDate(date))} · ${tr.from}–${tr.to}</p>
-        ${tr.coachUid ? `<p class="muted small"><i class="ti ti-whistle" aria-hidden="true"></i> ${esc(coachName(tr.coachUid))}</p>` : ''}
+        ${tr.coachUid ? `<p class="muted small"><i class="ti ti-clipboard-text" aria-hidden="true"></i> ${esc(coachName(tr.coachUid))}</p>` : ''}
         <p class="muted small">${esc(m && activePack(m.uid) ? t('spotPackInfo') : t('spotPriceInfo', { p: euro((S().prices || {}).spot) }))}</p>
         ${act}</div>`;
     };
@@ -1961,7 +1961,7 @@
       </div>` : ''}
       ${rpTable(t('rpByTraining'), 'barbell', r.byTr)}
       ${rpTable(t('rpByLevel'), 'stairs', r.byLvl)}
-      ${rpTable(t('rpByCoach'), 'whistle', r.byCoach)}
+      ${rpTable(t('rpByCoach'), 'clipboard-text', r.byCoach)}
       ${rpTable(t('rpByDay'), 'calendar-week', r.byDay)}`;
   }
 

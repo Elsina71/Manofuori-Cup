@@ -341,3 +341,7 @@ js/app.js         interfaccia
 referto-indoor/   referto elettronico di gara (6 contro 6) → /referto-indoor/
 vendor/           Firebase, jsPDF, JSZip
 ```
+
+## Icone (Tabler) alleggerite
+`vendor/tabler/` contiene solo le icone usate dall'app (circa 45 kB invece di 1,1 MB). Il pacchetto completo è in `tools/tabler/` (non pubblicato).
+Se aggiungi un'icona nuova (classe `ti ti-nome`), rigenera con `python3 tools/tabler-subset.py` (serve `pip install fonttools brotli`).
