@@ -1418,7 +1418,7 @@ function removeScorer(email) {
 // lineups/{torneo}_{gara}_{A|B}_{set}: la formazione di un set data dal capitano; il referto la propone al refertista.
 async function saveLineup(d) {
   const id = `${d.mid}_${d.side}_${d.set}`;
-  const data = { tid: d.tid, mid: d.mid, team: d.team, side: d.side, set: d.set, lineup: d.lineup, liberi: d.liberi || [], by: user.uid, at: Date.now() };
+  const data = { tid: d.tid, mid: d.mid, team: d.team, side: d.side, set: d.set, lineup: d.lineup, liberi: d.liberi || [], sign: d.sign || '', by: user.uid, at: Date.now() };
   await setDoc(doc(db, 'lineups', id), data);
   Store.applyRemote('myLineups', Object.assign({}, Store.state.myLineups || {}, { [id]: data }));
   if (lineupUnsubs.has(id)) { lineupUnsubs.get(id)(); lineupUnsubs.delete(id); }

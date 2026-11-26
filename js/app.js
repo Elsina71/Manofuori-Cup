@@ -93,7 +93,7 @@
     }
     const r = route();
     if (window.Cloud && window.Cloud.watchLive) {
-      window.Cloud.watchLive(r[0] === 'vt' && vtById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? liveTourIds() : r[0] === 'gare' || r[0] === 'me' || (r[0] === 'teams' && teamCap()) ? myTourIds()
+      window.Cloud.watchLive(r[0] === 'vt' && vtById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? liveTourIds() : r[0] === 'gare' || r[0] === 'me' || r[0] === 'formazione' || (r[0] === 'teams' && teamCap()) ? myTourIds()
         // prima pagina e pagina Tornei: risultati in diretta delle gare dei tornei in corso (e di quelli delle mie squadre)
         : !r[0] || r[0] === 'tornei' || r[0] === 'tournaments' ? [...new Set((S().vtours || []).filter(x => x.status === 'live').map(x => x.id).concat(myTourIds()))] : null);
       // formazioni dei capitani: quelle che si possono dare adesso (per sapere se sono già state inviate)
@@ -113,6 +113,7 @@
     else if (r[0] === 'tema') { nav = 'settings'; html = viewTheme(); }
     else if (r[0] === 'livelli' && tourAdmin()) { nav = 'settings'; html = viewLevels(); }
     else if (r[0] === 'gare') { nav = 'gare'; html = viewMyMatches(); }
+    else if (r[0] === 'formazione' && r[1]) { nav = 'teams'; html = viewLineupSheet(decodeURIComponent(r[1])); }
     else if (r[0] === 'tornei' || r[0] === 'tournaments') { html = viewVTours(); }
     else if (r[0] === 'vt' && vtById(r[1])) { html = viewVTour(vtById(r[1]), r[2]); }
     else if (r[0] === 'free') { nav = 'free'; html = viewFreeplay(); }
@@ -128,6 +129,9 @@
     else { nav = 'home'; html = viewFeatured(); }
     $app.innerHTML = flashHtml() + html;
     updateChrome(nav);
+    // scheda della formazione: a tutto schermo (senza intestazione e menu), con la firma
+    document.body.classList.toggle('lu-full', r[0] === 'formazione');
+    if (r[0] === 'formazione') { luSignPad(); const inp = $app.querySelector('[data-lu-num]'); if (inp) { inp.focus(); inp.select(); } }
     fitEditorial();
   }
 
@@ -185,7 +189,7 @@
 
   function refresh() {
     if (ui.afterLogin && scorer()) { ui.afterLogin = false; if (location.hash !== '#/mine') { location.hash = '#/mine'; return; } }
-    if (isTyping()) { pendingRender = true; return; }
+    if (isTyping() || ui.signing) { pendingRender = true; return; }
     render();
   }
 
@@ -3289,37 +3293,115 @@
   function luWatchIds() {
     return myTeams().flatMap(tm => teamMatches(tm.id)).map(m => { const c = luMine(m), n = luNext(vLive(m)); return c && n && m.status !== 'done' ? luId(m, c.side, n) : null; }).filter(Boolean);
   }
+  const LU_POS = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
   function luBox(tour, m) {
     const c = luMine(m), n = c && m.status !== 'done' ? luNext(vLive(m)) : 0;
     if (!n) return '';
     const sent = (S().myLineups || {})[luId(m, c.side, n)];
-    const players = rosterOf(c.tm.id).filter(p => String(p.num || '') !== '');
-    const who = no => { const p = players.find(x => luShirt(x.num) === no); return p ? `${luShow(no)} ${p.last} ${p.first}` : luShow(no); };
-    const POSN = ['I', 'II', 'III', 'IV', 'V', 'VI'];
     if (sent) return `<div class="lu-box sent"><span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('luSent', { n }))}</span>
-      <span class="muted small">${sent.lineup.map((no, i) => `${POSN[i]} ${esc(luShow(no))}`).join(' · ')}${(sent.liberi || []).length ? ` · L ${sent.liberi.map(x => esc(luShow(x))).join(', ')}` : ''}</span></div>`;
-    const F = ui.luForm && ui.luForm.id === luId(m, c.side, n) ? ui.luForm : null;
-    if (!F) return `<div class="lu-box"><button class="btn small primary" data-action="lu-open" data-id="${m.id}"><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('luGive', { n }))}</button></div>`;
-    if (!players.length) return `<div class="lu-box"><p class="note warn">${esc(t('luNoNums'))}</p><button class="btn small" data-action="lu-cancel">${esc(t('cancel'))}</button></div>`;
-    const opts = (v, skip) => `<option value="">—</option>${players.slice().sort(byShirt).map(p => { const no = luShirt(p.num); return `<option value="${no}" ${v === no ? 'selected' : ''} ${skip.includes(no) && v !== no ? 'disabled' : ''}>${esc(luShow(no))} · ${esc(p.last)} ${esc(p.first)}</option>`; }).join('')}`;
+      <span class="muted small">${sent.lineup.map((no, i) => `${LU_POS[i]} ${esc(luShow(no))}`).join(' · ')}${(sent.liberi || []).length ? ` · L ${sent.liberi.map(x => esc(luShow(x))).join(', ')}` : ''}</span></div>`;
+    return `<div class="lu-box"><button class="btn small primary" data-action="lu-open" data-id="${m.id}"><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('luGive', { n }))}</button></div>`;
+  }
+
+  // Scheda a tutto schermo (dal telefono): campo con la rete, i 6 posti come cerchi, i liberi (1° set);
+  // poi controllo finale con la firma del capitano e "Conferma e invia".
+  const luParse = v => { v = String(v || '').trim(); if (v === '00') return 100; if (v === '000') return 1000; return /^\d{1,2}$/.test(v) ? Number(v) : null; };
+  const LU_XY = [[83, 58], [83, 6], [50, 4], [17, 6], [17, 58], [50, 64]];   // P1…P6 nel campo (sinistra %, alto %)
+  function luState(mid) {
+    const m = vmById(mid), c = m && luMine(m), n = m && luNext(vLive(m));
+    if (!c || !n || m.status === 'done') return null;
+    const id = luId(m, c.side, n);
+    if (!ui.luForm || ui.luForm.id !== id) ui.luForm = { id, lineup: ['', '', '', '', '', ''], liberi: ['', ''], sel: 'p0', hand: false, step: 'edit', sign: '', err: '' };
+    return { m, c, n, F: ui.luForm, sent: (S().myLineups || {})[id] };
+  }
+  function viewLineupSheet(mid) {
+    const st = luState(mid);
+    if (!st) return `<div class="lus"><div class="lus-in"><p class="muted">${esc(t('luLate'))}</p><button class="btn" data-action="lu-close">${esc(t('luBackApp'))}</button></div></div>`;
+    const { m, c, n, F, sent } = st, tour = vtById(m.tid) || { name: '' };
+    const players = rosterOf(c.tm.id).filter(p => String(p.num || '') !== '').sort(byShirt);
+    const hasList = players.length > 0;
+    const nameOf = no => { const p = players.find(x => luShirt(x.num) === no); return p ? p.last : t('luHand'); };
+    const opp = vTeamName(tour, c.side === 'A' ? m.away : m.home);
+    const head = `<button class="lus-x" data-action="lu-close" aria-label="${esc(t('luBackApp'))}"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
+      <header class="lus-hd"><div class="lus-brand"><img src="img/logo-fenicottero.png" alt=""><span class="lus-word">manofuori</span><span class="lus-cup">CUP</span></div>
+      <div class="lus-team">${esc(c.tm.name)}</div><div class="lus-match">${esc(t('luVs'))} <b>${esc(opp)}</b> · ${esc(vWhen(m) || '')}${m.place ? ' · ' + esc(m.place.split(' – ')[0]) : ''}</div>
+      <span class="lus-pill">${esc(t('luTitle', { n }))}</span></header>`;
+    if (sent) return `<div class="lus"><div class="lus-in">${head}<div class="lus-done"><i class="ti ti-circle-check" aria-hidden="true"></i><p>${esc(t('luDone', { n }))}</p>
+      <button class="lus-btn go" data-action="lu-close">${esc(t('luBackApp'))}</button></div></div></div>`;
+    const confirm = F.step === 'confirm';
+    const selKey = confirm ? '' : F.sel;
+    const tok = i => {
+      const v = F.lineup[i], k = 'p' + i, on = selKey === k, [x, y] = LU_XY[i];
+      const circle = on && (F.hand || !hasList) ? `<input class="lus-in-num" data-lu-num inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" value="${v === '' ? '' : esc(luShow(v))}" aria-label="${esc(t('luPos', { p: LU_POS[i] }))}">` : `<b>${v === '' ? '+' : esc(luShow(v))}</b>`;
+      const tag = on && (F.hand || !hasList) ? 'div' : 'button';
+      return `<${tag} ${tag === 'button' ? 'type="button"' : ''} class="lus-tok ${v === '' ? 'empty' : ''} ${i === 0 ? 'srv' : ''} ${on ? 'on' : ''}" style="left:${x}%;top:${y}%" ${confirm ? 'tabindex="-1"' : tag === 'button' ? `data-action="lu-sel" data-k="${k}"` : ''} aria-label="${esc(t('luPos', { p: LU_POS[i] }))}">
+        <span class="pl">${LU_POS[i]}</span><span class="c">${circle}</span>${i === 0 ? '<i class="ball" aria-hidden="true"></i>' : ''}${v !== '' ? `<span class="nm ${players.some(p => luShirt(p.num) === v) ? '' : 'hand'}">${esc(nameOf(v))}</span>` : ''}</${tag}>`;
+    };
+    const ltok = i => {
+      const v = F.liberi[i], k = 'l' + i, on = selKey === k;
+      const circle = on && (F.hand || !hasList) ? `<input class="lus-in-num" data-lu-num inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" value="${v === '' ? '' : esc(luShow(v))}" aria-label="${esc(t('luLib', { i: i + 1 }))}">` : `<b>${v === '' ? '+' : esc(luShow(v))}</b>`;
+      const tag = on && (F.hand || !hasList) ? 'div' : 'button';
+      return `<${tag} ${tag === 'button' ? 'type="button"' : ''} class="lus-lib ${v === '' ? 'empty' : ''} ${on ? 'on' : ''}" ${confirm ? 'tabindex="-1"' : tag === 'button' ? `data-action="lu-sel" data-k="${k}"` : ''}><span class="c">${circle}</span><span class="nm">${v === '' ? 'L' + (i + 1) : esc(nameOf(v))}</span></${tag}>`;
+    };
+    const court = `<div class="lus-arena ${confirm ? 'small' : ''}"><div class="lus-court"><div class="lus-net"><span>${esc(t('luNet'))}</span></div><div class="lus-att"></div>${[3, 2, 1, 4, 5, 0].map(tok).join('')}</div>
+      ${n === 1 ? `<div class="lus-librow"><span class="lt">${esc(t('luLiberi'))}${confirm ? '' : `<small>${esc(t('luOptional'))}</small>`}</span>${ltok(0)}${ltok(1)}</div>` : ''}</div>`;
+    if (confirm) return `<div class="lus"><div class="lus-in">${head}
+      <div class="lus-warn"><i class="ti ti-alert-triangle" aria-hidden="true"></i><span>${esc(t('luCheck'))}</span></div>${court}
+      <div class="lus-sign"><div class="lus-slbl">${esc(t('luSign'))} <button type="button" class="lus-link" data-action="lu-sign-clear">${esc(t('luSignClear'))}</button></div>
+        <div class="lus-pad"><canvas id="luSign" aria-label="${esc(t('luSign'))}"></canvas><span class="lus-padph" ${F.sign ? 'hidden' : ''}>${esc(t('luSignHere'))}</span></div>
+        <p class="lus-small">${esc(t('luFinal'))}</p></div>
+      <div class="lus-bar two"><button class="lus-btn sec" data-action="lu-back">${esc(t('luEdit'))}</button>
+        <button class="lus-btn go" data-action="lu-confirm" data-id="${m.id}" ${F.sign ? '' : 'disabled'}><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('luConfirm'))}</button></div></div></div>`;
+    // sotto il campo: compagni della lista da toccare, oppure il numero a mano
     const used = F.lineup.concat(F.liberi).filter(x => x !== '');
-    if (F.step === 'confirm') return `<div class="lu-box lu-confirm" role="dialog" aria-label="${esc(t('luCheck'))}">
-      <h4><i class="ti ti-alert-triangle" aria-hidden="true"></i> ${esc(t('luCheck'))}</h4>
-      <p class="muted small">${esc(c.tm.name)} · ${esc(t('luSetN', { n }))}</p>
-      <ol class="lu-sum">${F.lineup.map((no, i) => `<li><b>${POSN[i]}</b>${i === 0 ? ` <small class="muted">(${esc(t('luServe'))})</small>` : ''} ${esc(who(no))}</li>`).join('')}</ol>
-      ${n === 1 ? `<p class="small"><b>${esc(t('luLiberi'))}:</b> ${F.liberi.filter(x => x !== '').map(x => esc(who(x))).join(', ') || esc(t('luNoLib'))}</p>` : ''}
-      <p class="muted small">${esc(t('luFinal'))}</p>
-      <div class="btn-row"><button class="btn small" data-action="lu-back">${esc(t('luEdit'))}</button>
-        <button class="btn small primary" data-action="lu-confirm" data-id="${m.id}"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('luConfirm'))}</button></div></div>`;
-    const cell = i => `<label class="lu-pos"><span>${POSN[i]}${i === 0 ? ' · ' + esc(t('luServe')) : ''}</span><select data-change="lu-pos" data-i="${i}" aria-label="${esc(t('luPos', { p: POSN[i] }))}">${opts(F.lineup[i], used)}</select></label>`;
-    const ok = F.lineup.every(x => x !== '');
-    return `<div class="lu-box lu-form"><h4><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('luTitle', { n }))} · ${esc(c.tm.name)}</h4>
-      <p class="muted small">${esc(t('luHelp'))}</p>
-      <div class="lu-net">${esc(t('luNet'))}</div>
-      <div class="lu-grid">${[3, 2, 1, 4, 5, 0].map(cell).join('')}</div>
-      ${n === 1 ? `<div class="lu-lib">${[0, 1].map(i => `<label class="lu-pos"><span>${esc(t('luLib', { i: i + 1 }))}</span><select data-change="lu-lib" data-i="${i}">${opts(F.liberi[i], used)}</select></label>`).join('')}</div>` : ''}
-      <div class="btn-row"><button class="btn small" data-action="lu-cancel">${esc(t('cancel'))}</button>
-        <button class="btn small primary" data-action="lu-send" ${ok ? '' : 'disabled'}><i class="ti ti-send" aria-hidden="true"></i> ${esc(t('luSend'))}</button></div></div>`;
+    const selLabel = F.sel ? (F.sel[0] === 'p' ? LU_POS[+F.sel[1]] : t('luLib', { i: +F.sel[1] + 1 })) : '';
+    const curVal = F.sel ? (F.sel[0] === 'p' ? F.lineup : F.liberi)[+F.sel[1]] : '';
+    let bench;
+    if (!F.sel) bench = `<p class="lus-hint">${esc(t('luAllSet'))}</p>`;
+    else if (F.hand || !hasList) bench = `<div class="lus-bhead">${esc(t(hasList ? 'luHandHead' : 'luNoListHead', { p: selLabel }))}</div>
+      <div class="lus-chips"><button type="button" class="lus-chip on" data-action="lu-handok"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('luOk'))}</button>
+      ${hasList ? `<button type="button" class="lus-chip" data-action="lu-hand" data-v="0">${esc(t('luFromList'))}</button>` : ''}
+      ${curVal !== '' ? `<button type="button" class="lus-chip" data-action="lu-clear">${esc(t('luClear'))}</button>` : ''}</div>`;
+    else bench = `<div class="lus-bhead">${esc(t('luPickHead', { p: selLabel }))}</div>
+      <div class="lus-chips">${players.filter(p => !used.includes(luShirt(p.num)) || luShirt(p.num) === curVal).map(p => { const no = luShirt(p.num); return `<button type="button" class="lus-chip ${no === curVal ? 'on' : ''}" data-action="lu-pick" data-no="${no}"><b>${esc(luShow(no))}</b>${esc(p.last)}</button>`; }).join('')}
+      <button type="button" class="lus-chip hand" data-action="lu-hand" data-v="1">+ ${esc(t('luByHand'))}</button>
+      ${curVal !== '' ? `<button type="button" class="lus-chip" data-action="lu-clear">${esc(t('luClear'))}</button>` : ''}</div>`;
+    const ready = F.lineup.every(x => x !== '');
+    return `<div class="lus"><div class="lus-in">${head}${hasList ? '' : `<p class="lus-note">${esc(t('luNoList'))}</p>`}${court}
+      ${F.err ? `<p class="lus-err" role="alert">${esc(F.err)}</p>` : ''}<div class="lus-bench">${bench}</div>
+      <div class="lus-bar"><button class="lus-btn go" data-action="lu-next" ${ready ? '' : 'disabled'}>${esc(t('luNext'))}</button></div></div></div>`;
+  }
+  // assegna un numero al posto scelto e passa al prossimo posto vuoto
+  function luAssign(no) {
+    const F = ui.luForm; if (!F || !F.sel) return;
+    const arr = F.sel[0] === 'p' ? F.lineup : F.liberi, i = +F.sel[1];
+    if (no !== '' && F.lineup.concat(F.liberi).some((x, j) => x === no && !(arr === F.lineup ? j === i : j === 6 + i))) { F.err = t('luDup', { n: luShow(no) }); return; }
+    F.err = ''; arr[i] = no;
+    const next = F.lineup.findIndex(x => x === '');
+    F.sel = next >= 0 ? 'p' + next : null;
+  }
+  // firma con il dito sul riquadro (canvas): si salva come immagine alla fine di ogni tratto
+  function luSignPad() {
+    const cv = document.getElementById('luSign'), F = ui.luForm;
+    if (!cv || !F) return;
+    const r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+    const g = cv.getContext('2d'); g.scale(dpr, dpr); g.lineWidth = 2.6; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#16231d';
+    if (F.sign) { const im = new Image(); im.onload = () => g.drawImage(im, 0, 0, r.width, r.height); im.src = F.sign; }
+    let last = null;
+    const pt = e => { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; };
+    cv.onpointerdown = e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); ui.signing = true; last = pt(e); g.beginPath(); g.arc(last[0], last[1], 1, 0, 7); g.fillStyle = '#16231d'; g.fill(); };
+    cv.onpointermove = e => { if (!last) return; e.preventDefault(); const p = pt(e); g.beginPath(); g.moveTo(last[0], last[1]); g.lineTo(p[0], p[1]); g.stroke(); last = p; };
+    cv.onpointerup = cv.onpointercancel = () => {
+      if (!last) return; last = null; ui.signing = false;
+      // immagine piccola (larghezza 480) per il database
+      const out = document.createElement('canvas'), w = 480; out.width = w; out.height = Math.round(w * cv.height / cv.width);
+      const o = out.getContext('2d'); o.fillStyle = '#fff'; o.fillRect(0, 0, out.width, out.height); o.drawImage(cv, 0, 0, out.width, out.height);
+      F.sign = out.toDataURL('image/jpeg', 0.7);
+      const ph = document.querySelector('.lus-padph'); if (ph) ph.hidden = true;
+      const go = document.querySelector('[data-action=lu-confirm]'); if (go) go.disabled = false;
+      if (pendingRender) render();
+    };
   }
   function myMatchesBlocks(limit) {
     return myTeams().map(tm => {
@@ -4394,20 +4476,34 @@
     },
     'tm-nums-edit': el => { ui.tmNums = el.dataset.id || null; render(); },
     'lu-open': el => {
-      const m = vmById(el.dataset.id), c = m && luMine(m), n = m && luNext(vLive(m));
-      if (!c || !n) return;
-      ui.luForm = { id: luId(m, c.side, n), lineup: ['', '', '', '', '', ''], liberi: ['', ''], step: 'edit' }; render();
+      const m = vmById(el.dataset.id);
+      if (!m || !luState(m.id)) return;
+      ui.luBack = location.hash || '#/'; location.hash = '#/formazione/' + m.id;
     },
-    'lu-cancel': () => { ui.luForm = null; render(); },
-    'lu-send': () => { const F = ui.luForm; if (F && F.lineup.every(x => x !== '')) { F.step = 'confirm'; render(); } },
-    'lu-back': () => { if (ui.luForm) { ui.luForm.step = 'edit'; render(); } },
+    'lu-close': () => { location.hash = ui.luBack && !ui.luBack.startsWith('#/formazione') ? ui.luBack : '#/'; },
+    'lu-sel': el => { const F = ui.luForm; if (!F) return; F.sel = el.dataset.k; F.err = ''; render(); },
+    'lu-pick': el => { luAssign(Number(el.dataset.no)); render(); },
+    'lu-hand': el => { const F = ui.luForm; if (!F) return; F.hand = el.dataset.v === '1'; render(); },
+    'lu-handok': () => {
+      const F = ui.luForm, inp = $app.querySelector('[data-lu-num]'); if (!F) return;
+      const v = inp ? inp.value : '';
+      if (v.trim() === '') { F.err = ''; render(); return; }
+      const no = luParse(v);
+      if (no == null) { F.err = t('luBadNum'); render(); return; }
+      luAssign(no); render();
+    },
+    'lu-clear': () => { const F = ui.luForm; if (!F || !F.sel) return; (F.sel[0] === 'p' ? F.lineup : F.liberi)[+F.sel[1]] = ''; F.err = ''; render(); },
+    'lu-next': () => { const F = ui.luForm; if (F && F.lineup.every(x => x !== '')) { F.step = 'confirm'; F.sel = null; window.scrollTo(0, 0); render(); } },
+    'lu-back': () => { const F = ui.luForm; if (F) { F.step = 'edit'; F.sel = F.lineup.findIndex(x => x === '') >= 0 ? 'p' + F.lineup.findIndex(x => x === '') : null; render(); } },
+    'lu-sign-clear': () => { const F = ui.luForm; if (F) { F.sign = ''; render(); } },
     'lu-confirm': el => {
-      const m = vmById(el.dataset.id), c = m && luMine(m), n = m && luNext(vLive(m)), F = ui.luForm;
-      if (!c || !n || !F || F.id !== luId(m, c.side, n)) { ui.luForm = null; return warn('luLate'); }
+      const m = vmById(el.dataset.id), st = m && luState(m.id);
+      if (!st || !st.F.sign || !st.F.lineup.every(x => x !== '')) return warn('luLate');
+      const { c, n, F } = st;
       el.disabled = true;
-      window.Cloud.saveLineup({ tid: m.tid, mid: m.id, team: c.tm.id, side: c.side, set: n, lineup: F.lineup.slice(), liberi: n === 1 ? F.liberi.filter(x => x !== '') : [] })
-        .then(() => { ui.luForm = null; ui.flash = { text: t('luDone', { n }) }; render(); })
-        .catch(err => { el.disabled = false; ui.luForm = null; warn(err.code === 'permission-denied' ? 'luLate' : 'regError', { code: err.code || err.message }); });
+      window.Cloud.saveLineup({ tid: m.tid, mid: m.id, team: c.tm.id, side: c.side, set: n, lineup: F.lineup.slice(), liberi: n === 1 ? F.liberi.filter(x => x !== '') : [], sign: F.sign })
+        .then(() => { ui.luForm = null; render(); })
+        .catch(err => { el.disabled = false; warn(err.code === 'permission-denied' ? 'luLate' : 'regError', { code: err.code || err.message }); });
     },
     'scorer-remove': el => {
       if (!confirmed('scorerRemoveConfirm', { e: el.dataset.email })) return;
@@ -4527,6 +4623,8 @@
   });
 
   // Azioni consentite a tutti; le altre solo agli amministratori.
+  // scheda della formazione del capitano: le azioni controllano da sole chi è il capitano (luMine)
+  const LU_ACTIONS = new Set(['lu-open', 'lu-close', 'lu-sel', 'lu-pick', 'lu-hand', 'lu-handok', 'lu-clear', 'lu-next', 'lu-back', 'lu-sign-clear', 'lu-confirm']);
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
   const TOUR_ACTIONS = new Set(['vm-approve', 'vm-reopen', 'ref-remove', 'ref-resetpw', 'tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
@@ -4539,8 +4637,8 @@
   const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'pdf-view', 'pdf-zip']);
   const PUBLIC_FORMS = new Set(['tm-codelogin', 'login', 'register', 'complete-profile']);
   const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
-  const MEMBER_ACTIONS = new Set(['lu-open', 'lu-cancel', 'lu-send', 'lu-back', 'lu-confirm', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
-  const CODE_ACTIONS = new Set(['lu-open', 'lu-cancel', 'lu-send', 'lu-back', 'lu-confirm', 'tm-edit', 'tm-addrow', 'tm-delrow', 'logout']);   // account del codice capitano: solo la sua squadra
+  const MEMBER_ACTIONS = new Set(['profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
+  const CODE_ACTIONS = new Set(['tm-edit', 'tm-addrow', 'tm-delrow', 'logout']);   // account del codice capitano: solo la sua squadra
   const MEMBER_FORMS = new Set(['profile-save', 'fp-join', 'fp-blocks', 'team-save']);
   let submitMode = 'save';
 
@@ -4558,7 +4656,7 @@
     const fn = actions[el.dataset.action];
     if (!fn) return;
     e.preventDefault();
-    if (!admin() && !PUBLIC_ACTIONS.has(el.dataset.action) && !(tourAdmin() && TOUR_ACTIONS.has(el.dataset.action)) && !(cashier() && CASH_ACTIONS.has(el.dataset.action)) && !(scorer() && SCORER_ACTIONS.has(el.dataset.action)) && !(member() && MEMBER_ACTIONS.has(el.dataset.action)) && !(teamCap() && CODE_ACTIONS.has(el.dataset.action)) && !(refBoss() && REFS_ACTIONS.has(el.dataset.action)) && !(isRef() && REF_ACTIONS.has(el.dataset.action))) return;
+    if (!admin() && !PUBLIC_ACTIONS.has(el.dataset.action) && !(LU_ACTIONS.has(el.dataset.action) && myUid()) && !(tourAdmin() && TOUR_ACTIONS.has(el.dataset.action)) && !(cashier() && CASH_ACTIONS.has(el.dataset.action)) && !(scorer() && SCORER_ACTIONS.has(el.dataset.action)) && !(member() && MEMBER_ACTIONS.has(el.dataset.action)) && !(teamCap() && CODE_ACTIONS.has(el.dataset.action)) && !(refBoss() && REFS_ACTIONS.has(el.dataset.action)) && !(isRef() && REF_ACTIONS.has(el.dataset.action))) return;
     fn(el);
   });
 
@@ -4582,6 +4680,10 @@
       if (!data || data.kind !== 'manofuori-rosters' || typeof data.teams !== 'object') throw new Error('format');
       ui.rosterImport = { name: file.name, data, replace: false }; render();
     }).catch(() => warn('rimBadFile'));
+  });
+  // scheda della formazione: Invio (o "Fatto" della tastiera) nel numero di maglia = OK
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-lu-num]')) { e.preventDefault(); const b = $app.querySelector('[data-action=lu-handok]'); if (b) b.click(); }
   });
   document.addEventListener('change', e => {
     const el = e.target;
@@ -4686,11 +4788,6 @@
         break;
       }
       case 'ref-free': ui.refFree = el.checked; render(); break;
-      case 'lu-pos': case 'lu-lib': {
-        const F = ui.luForm; if (!F) break;
-        (el.dataset.change === 'lu-pos' ? F.lineup : F.liberi)[+el.dataset.i] = el.value === '' ? '' : Number(el.value);
-        render(); break;
-      }
       case 'ref-filter': ui.refF = Object.assign({}, ui.refF, { [el.dataset.key]: el.value }); render(); break;
       case 'scorer-tour':
         if (!tourAdmin()) return;

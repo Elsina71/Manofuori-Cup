@@ -150,7 +150,8 @@ service cloud.firestore {
     function vmDoc(mid) { return /databases/$(database)/documents/vmatches/$(mid); }
     match /lineups/{id} {
       allow read: if isStaff() || capOf(resource.data.team);
-      allow create: if request.resource.data.keys().hasOnly(['tid', 'mid', 'team', 'side', 'set', 'lineup', 'liberi', 'by', 'at'])
+      allow create: if request.resource.data.keys().hasOnly(['tid', 'mid', 'team', 'side', 'set', 'lineup', 'liberi', 'sign', 'by', 'at'])
+        && (!('sign' in request.resource.data) || (request.resource.data.sign is string && request.resource.data.sign.size() <= 200000))
         && request.resource.data.side in ['A', 'B'] && request.resource.data.set is int
         && id == request.resource.data.mid + '_' + request.resource.data.side + '_' + string(request.resource.data.set)
         && request.resource.data.by == request.auth.uid

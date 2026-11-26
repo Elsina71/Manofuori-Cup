@@ -427,9 +427,11 @@
     const capNote = tm => {
       const c = capOf(tm);
       if (!c) return '';
-      if (L.fromCap[tm] && L.capAt[tm] === c.at) return '<p class="cap-note ok">✔ Formazione data dal capitano · puoi correggerla</p>';
+      // firma del capitano (immagine salvata con la formazione)
+      const sign = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(c.sign || '') ? `<img class="cap-sign" src="${c.sign}" alt="Firma del capitano" title="Firma del capitano">` : '';
+      if (L.fromCap[tm] && L.capAt[tm] === c.at) return `<p class="cap-note ok">✔ Formazione data dal capitano · puoi correggerla${sign}</p>`;
       return `<p class="cap-note">📋 Il capitano ha dato la formazione: ${c.lineup.map((n, i) => `${POS[i]} ${sh(+n)}`).join(' · ')}${d.index === 0 && c.liberi && c.liberi.length ? ` · L ${c.liberi.map(n => sh(+n)).join(', ')}` : ''}
-        <button type="button" class="btn small" data-usecap="${tm}">Usa questa</button></p>`;
+        <button type="button" class="btn small" data-usecap="${tm}">Usa questa</button>${sign}</p>`;
     };
     const left = L.left || 'A', right = other(left);
     const opt = (key, val, label, on, cls) => `<button type="button" class="opt ${cls || ''} ${on ? 'on' : ''}" data-k="${key}" data-v="${val}">${label}</button>`;
