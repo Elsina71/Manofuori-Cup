@@ -2868,13 +2868,14 @@
     const liveNow = !done && lv && lv.status === 'live' && ((lv.sets || []).length || lv.cur);
     const refDone = !done && lv && lv.status === 'finished' && (lv.sets || []).length;
     const name = (id, w) => `<span class="${w ? 'vm-win' : ''}">${esc(vTeamName(tour, id))}</span>`;
-    return `<li class="vm-row ${done ? 'done' : ''}" id="vm-${m.id}">
+    return `<li class="vm-row ${done ? 'done' : ''} ${liveNow ? 'is-live' : ''}" id="vm-${m.id}">
       <div class="vm-teams">${name(m.home, r && r.winner === 'h')} <span class="muted">–</span> ${name(m.away, r && r.winner === 'a')}</div>
       <div class="vm-score">${done ? `<strong>${vResult(m)}</strong> <small class="muted">(${esc(vSetsText(m))})</small> ${m.approvedAt ? `<span class="badge st-done"><i class="ti ti-rosette-discount-check" aria-hidden="true"></i> ${esc(t('vmApproved'))}</span>` : `<span class="badge ref-todo">${esc(t('vmPending'))}</span>`}`
-        : liveNow ? `<span class="badge live-b">${esc(t('vmLive'))}</span> <strong>${esc(vLiveText(lv))}</strong> <a class="btn small tlive-follow" href="#/live/${encodeURIComponent(m.id)}"><i class="ti ti-broadcast" aria-hidden="true"></i> ${esc(t('lvFollow'))}</a>`
+        : liveNow ? `<span class="badge live-b">${esc(t('vmLive'))}</span> <strong>${esc(vLiveText(lv))}</strong>`
         : refDone ? `<span class="badge warn-b">${esc(t('vmRefDone'))}</span> <strong>${esc(vLiveText(lv))}</strong>`
         : `<span class="muted small">${esc(t('vmToPlay'))}</span>`}</div>
       <div class="vm-when muted small">${m.date || m.time ? `<i class="ti ti-calendar" aria-hidden="true"></i> ${esc(vWhen(m))}` : esc(t('vmNoDate'))}${m.place ? ` · <i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(m.place)}` : ''}${m.mode === 'bo5' ? ` · ${esc(t('vmBo5'))}` : ''}${m.refereeName && (tourAdmin() || scorer()) ? ` · <i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(m.refereeName)}` : ''}</div>
+      ${liveNow ? `<div class="vm-follow"><a class="btn small tlive-follow" href="#/live/${encodeURIComponent(m.id)}"><i class="ti ti-broadcast" aria-hidden="true"></i> ${esc(t('lvFollow'))}</a></div>` : ''}
       ${luBox(tour, m)}
       ${vCanScore(tour, m) && !editing ? `<div class="btn-row vm-actions">
         ${tourAdmin() && done && !m.approvedAt ? `<button class="btn small primary" data-action="vm-approve" data-id="${m.id}"><i class="ti ti-rosette-discount-check" aria-hidden="true"></i> ${esc(t('vmApprove'))}</button>` : ''}
