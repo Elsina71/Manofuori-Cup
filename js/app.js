@@ -3942,19 +3942,43 @@
     const tours = (S().vtours || []).filter(x => x.status !== 'done').slice().sort((a, b) => (teamLevels().indexOf(a.level) + 1 || 99) - (teamLevels().indexOf(b.level) + 1 || 99) || a.name.localeCompare(b.name));
     const count = uid => (S().vmatches || []).filter(m => m.referee === uid && m.status !== 'done').length;
     const opts = m => `<option value="">${esc(t('refNone'))}</option>${refs.map(r => `<option value="${esc(r.uid)}" ${m.referee === r.uid ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}`;
-    const onlyFree = !!ui.refFree;
-    const block = tour => {
-      const ms = vtMatches(tour.id).filter(m => m.status !== 'done' && m.home && m.away && (!onlyFree || !m.referee))
-        .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
-      if (!ms.length) return '';
-      return `<details class="card sub-form" data-keep="ref-${tour.id}" ${keepOpen('ref-' + tour.id, true)}><summary><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(tour.name)} <small class="muted">(${ms.length})</small></summary>
-        <ul class="ref-games">${ms.map(m => `<li>
+    const onlyFree = !!ui.refFree, F = ui.refF || {};
+    // gare da arbitrare (non giocate, con le due squadre) e filtri: torneo, giorno, orario, palestra
+    const pool = tours.flatMap(tour => vtMatches(tour.id).filter(m => m.status !== 'done' && m.home && m.away).map(m => ({ m, tour })));
+    const uniq = a => [...new Set(a.filter(Boolean))];
+    const days = uniq(pool.map(x => x.m.date)).sort(), times = uniq(pool.map(x => x.m.time)).sort(), places = uniq(pool.map(x => x.m.place)).sort((a, b) => a.localeCompare(b));
+    const keep = (v, list) => (v && list.includes(v) ? v : '');
+    const fT = keep(F.tour, tours.map(x => x.id)), fD = keep(F.day, days), fH = keep(F.time, times), fP = keep(F.place, places);
+    const byDay = F.group === 'day';
+    const when = m => (m.date || '9999') + ' ' + (m.time || '99:99');
+    const shown = pool.filter(({ m, tour }) => (!onlyFree || !m.referee) && (!fT || tour.id === fT) && (!fD || m.date === fD) && (!fH || m.time === fH) && (!fP || m.place === fP))
+      .sort((a, b) => when(a.m).localeCompare(when(b.m)));
+    // meno di 24 ore all'inizio (ora del dispositivo)
+    const soon = m => { if (!m.date) return false; const s = new Date(`${m.date}T${/^\d{1,2}:\d{2}$/.test(m.time || '') ? m.time.padStart(5, '0') : '00:00'}:00`).getTime() - Date.now(); return s >= 0 && s <= 864e5; };
+    const sel = (key, val, all, list, lab) => `<label>${esc(t(lab))}<select data-change="ref-filter" data-key="${key}"><option value="">${esc(t(all))}</option>${list.map(([v, l]) => `<option value="${esc(v)}" ${v === val ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
+    const dayLbl = d => { const x = new Date(d + 'T12:00:00'); return isNaN(x) ? d : `${x.toLocaleDateString(I18n.locale(), { weekday: 'short' })} ${fmtDate(d)}`; };
+    const filters = `<div class="card ref-filters"><div class="grid-form">
+        ${sel('tour', fT, 'refFAllTours', tours.map(x => [x.id, x.name]), 'refFTour')}
+        ${sel('day', fD, 'refFAllDays', days.map(d => [d, dayLbl(d)]), 'refFDay')}
+        ${sel('time', fH, 'refFAllTimes', times.map(h => [h, h]), 'refFTime')}
+        ${sel('place', fP, 'refFAllPlaces', places.map(p => [p, p]), 'refFPlace')}
+        ${sel('group', byDay ? 'day' : '', 'refFGroupTour', [['day', t('refFGroupDay')]], 'refFGroup')}</div>
+        <div class="btn-row"><label class="check"><input type="checkbox" data-change="ref-free" ${onlyFree ? 'checked' : ''}> ${esc(t('refOnlyFree'))}</label>
+        ${fT || fD || fH || fP || onlyFree ? `<button class="btn small" data-action="ref-filter-reset"><i class="ti ti-filter-off" aria-hidden="true"></i> ${esc(t('refFReset'))}</button>` : ''}
+        <span class="muted small">${esc(t('refFCount', { n: shown.length, k: shown.filter(x => !x.m.referee).length }))}</span></div></div>`;
+    const row = ({ m, tour }, showTour) => `<li class="${!m.referee && soon(m) ? 'ref-urgent' : ''}">
           <div><strong>${esc(vTeamName(tour, m.home))} – ${esc(vTeamName(tour, m.away))}</strong>
-            <div class="muted small">${m.date || m.time ? esc(vWhen(m)) : esc(t('vmNoDate'))}${m.place ? ' · ' + esc(m.place) : ''}</div></div>
+            ${showTour ? `<div class="small ref-tour"><i class="ti ti-trophy" aria-hidden="true"></i> ${esc(tour.name)}</div>` : ''}
+            <div class="muted small">${m.date || m.time ? esc(vWhen(m)) : esc(t('vmNoDate'))}${m.place ? ' · ' + esc(m.place) : ''}</div>
+            ${!m.referee && soon(m) ? `<span class="badge ref-no"><i class="ti ti-alarm" aria-hidden="true"></i> ${esc(t('refSoonNoRef'))}</span>` : ''}</div>
           <div class="ref-pick"><select data-change="ref-assign" data-id="${m.id}" aria-label="${esc(t('refOf'))}" ${refs.length ? '' : 'disabled'}>${opts(m)}</select>
             ${m.referee ? (m.refConfirmedAt ? `<span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('refConfirmed'))}</span>` : m.refDeclinedAt ? `<span class="badge ref-no"><i class="ti ti-x" aria-hidden="true"></i> ${esc(t('refDeclined'))}</span>` : `<span class="badge ref-todo">${esc(t('refToConfirm'))}</span>`)
-              + ` <button class="btn small danger" data-action="ref-revoke" data-id="${m.id}"><i class="ti ti-user-x" aria-hidden="true"></i> ${esc(t('refRevoke'))}</button>` : ''}</div></li>`).join('')}</ul></details>`;
-    };
+              + ` <button class="btn small danger" data-action="ref-revoke" data-id="${m.id}"><i class="ti ti-user-x" aria-hidden="true"></i> ${esc(t('refRevoke'))}</button>` : ''}</div></li>`;
+    const groups = [];
+    shown.forEach(x => { const k = byDay ? (x.m.date || '') : x.tour.id; let g = groups.find(y => y.k === k); if (!g) groups.push(g = { k, tour: x.tour, items: [] }); g.items.push(x); });
+    if (!byDay) groups.sort((a, b) => tours.indexOf(a.tour) - tours.indexOf(b.tour));
+    const block = g => `<details class="card sub-form" data-keep="ref-${g.k || 'nodate'}" ${keepOpen('ref-' + (g.k || 'nodate'), true)}><summary><i class="ti ti-${byDay ? 'calendar' : 'trophy'}" aria-hidden="true"></i> ${esc(byDay ? (g.k ? dayLbl(g.k) : t('vmNoDate')) : g.tour.name)} <small class="muted">(${g.items.length})</small></summary>
+        <ul class="ref-games">${g.items.map(x => row(x, byDay)).join('')}</ul></details>`;
     return `<div class="page-head"><h1><i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(t('navRefs'))}</h1><p class="muted">${esc(t('refIntro'))}</p></div>
       <details class="card sub-form" data-keep="ref-new" ${keepOpen('ref-new', !refs.length)}><summary><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('refNew'))}</summary>
         <form class="grid-form" data-form="ref-add" autocomplete="off">
@@ -3971,8 +3995,8 @@
           <button class="btn small danger" data-action="ref-remove" data-email="${esc(r.email)}" data-uid="${esc(r.uid || '')}"><i class="ti ti-user-off" aria-hidden="true"></i> ${esc(t('refRemove'))}</button></span></li>`).join('')}</ul>`
           : `<p class="muted">${esc(t('refNoneYet'))}</p>`}</div>
       <h2 class="section-title">${esc(t('refAssignTitle'))}</h2>
-      <label class="check"><input type="checkbox" data-change="ref-free" ${onlyFree ? 'checked' : ''}> ${esc(t('refOnlyFree'))}</label>
-      ${tours.map(block).join('') || `<div class="card"><p class="muted">${esc(t('refNoGames'))}</p></div>`}`;
+      ${filters}
+      ${groups.map(block).join('') || `<div class="card"><p class="muted">${esc(t(pool.length ? 'refFNone' : 'refNoGames'))}</p></div>`}`;
   }
 
   // Tornei tra cui scegliere per un account del campo: non chiusi, dal più vicino.
@@ -4289,6 +4313,7 @@
       window.Cloud.declineReferee(m.id, t('refDeclineNotice', { n: sc.name || '', g: refMatchLine(m) }))
         .then(() => { ui.flash = { text: t('refDeclineDone') }; render(); }).catch(e => { el.disabled = false; vErr(e); });
     },
+    'ref-filter-reset': () => { ui.refF = { group: (ui.refF || {}).group || '' }; ui.refFree = false; render(); },
     'ref-revoke': el => {
       const m = vmById(el.dataset.id);
       if (!m || !refBoss() || !confirm(t('refRevokeConfirm', { n: m.refereeName || '' }))) return;
@@ -4436,7 +4461,7 @@
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
-  const REFS_ACTIONS = new Set(['ref-revoke', 'ref-code-copy', 'ref-code-renew', 'ref-remove', 'ref-resetpw', 'notice-dismiss']);   // responsabile arbitri
+  const REFS_ACTIONS = new Set(['ref-revoke', 'ref-filter-reset', 'ref-code-copy', 'ref-code-renew', 'ref-remove', 'ref-resetpw', 'notice-dismiss']);   // responsabile arbitri
   const REF_ACTIONS = new Set(['ref-confirm', 'ref-decline', 'tm-nums-edit', 'notice-dismiss']);   // arbitro
   const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'pdf-view', 'pdf-zip']);
   const PUBLIC_FORMS = new Set(['tm-codelogin', 'login', 'register', 'complete-profile']);
@@ -4588,6 +4613,7 @@
         break;
       }
       case 'ref-free': ui.refFree = el.checked; render(); break;
+      case 'ref-filter': ui.refF = Object.assign({}, ui.refF, { [el.dataset.key]: el.value }); render(); break;
       case 'scorer-tour':
         if (!tourAdmin()) return;
         window.Cloud.setScorerTournament(el.dataset.email, el.value)

@@ -1736,3 +1736,11 @@ html[data-look="f"]:not([data-theme]) .vm-row { padding: 16px 0; }
 .vm-day-more { margin: 0 0 8px; }
 .vm-day-more > summary { cursor: pointer; width: fit-content; }
 .vm-day-more[open] > summary { margin-bottom: 6px; }
+
+/* Arbitri: filtri delle gare e gare entro 24 ore senza arbitro */
+.ref-filters .grid-form { margin-bottom: 10px; }
+@media (min-width: 980px) { .ref-filters .grid-form { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.ref-filters .btn-row { align-items: center; gap: 12px; }
+.ref-games li.ref-urgent { box-shadow: inset 4px 0 0 #c92a2a; padding-left: 12px; }
+.ref-games .ref-tour { opacity: .85; margin-top: 2px; }
+.ref-games .badge.ref-no { margin-top: 6px; display: inline-flex; gap: 4px; align-items: center; }

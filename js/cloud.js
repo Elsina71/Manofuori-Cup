@@ -242,8 +242,8 @@ function listenAccount() {
   // Avvisi delle prenotazioni (modificate o cancellate): all'utente i suoi, all'admin quelli per "admins".
   const noteParts = {};
   const notes = isAdmin ? { a: query(collection(db, 'notices'), where('to', '==', 'admins')) } : { u: query(collection(db, 'notices'), where('to', '==', user.uid)) };
-  // responsabile arbitri: anche gli avvisi delle conferme degli arbitri
-  if (!isAdmin && roles.refs) notes.r = query(collection(db, 'notices'), where('to', '==', 'refs'));
+  // responsabile arbitri e admin dei tornei: anche gli avvisi sugli arbitri (conferme, gare senza arbitro)
+  if (!isAdmin && (roles.refs || roles.tour)) notes.r = query(collection(db, 'notices'), where('to', '==', 'refs'));
   Object.entries(notes).forEach(([k, src]) => noteUnsubs.push(onSnapshot(src, snap => {
     noteParts[k] = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     Store.applyRemote('notices', Object.values(noteParts).flat().sort((a, b) => (b.at || 0) - (a.at || 0)));

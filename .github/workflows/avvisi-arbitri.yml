@@ -1,0 +1,37 @@
+# Ogni ora: se manca un giorno a una gara e non c'è ancora un arbitro, avvisa gli admin e i responsabili arbitri.
+# Usa lo stesso secret della pubblicazione (FIREBASE_SA_MANOFUORI). Si può lanciare a mano: Actions → "Avvisi arbitri" → Run workflow.
+name: Avvisi arbitri
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: avvisi-arbitri
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  avvisi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Gare di domani senza arbitro
+        env:
+          CHIAVE: ${{ secrets.FIREBASE_SA_MANOFUORI }}
+        run: |
+          if [ -z "$CHIAVE" ]; then echo "::error::Manca il secret FIREBASE_SA_MANOFUORI"; exit 1; fi
+          PROGETTO=$(node -p "JSON.parse(require('fs').readFileSync('.firebaserc', 'utf8')).projects.default")
+          printf '%s' "$CHIAVE" > "$RUNNER_TEMP/chiave.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/chiave.json"
+          mkdir -p "$RUNNER_TEMP/av" && cp .github/avvisi-arbitri.mjs "$RUNNER_TEMP/av/"
+          cd "$RUNNER_TEMP/av" && npm init -y > /dev/null && npm i --silent firebase-admin@13
+          set +e; node avvisi-arbitri.mjs "$PROGETTO"; ESITO=$?; set -e
+          rm -f "$RUNNER_TEMP/chiave.json"
+          exit $ESITO

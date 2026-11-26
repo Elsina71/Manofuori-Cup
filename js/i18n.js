@@ -663,6 +663,7 @@ const I18n = (() => {
       refRemoveConfirm: "Togliere l'arbitro {e}? Non potrà più compilare referti e viene tolto dalle gare assegnate.", refRemoved: 'Arbitro tolto.',
       refAdded: 'Arbitro creato: {n} ({e}).', refExists: "Questa email ha già un account con un'altra password: usa la sua password o un'altra email.",
       refMember: "Questa email è di un giocatore registrato nell'app: per l'arbitro usa un'altra email.",
+      refFTour: 'Torneo', refFAllTours: 'Tutti i tornei', refFDay: 'Giorno', refFAllDays: 'Tutti i giorni', refFTime: 'Orario', refFAllTimes: 'Tutti gli orari', refFPlace: 'Palestra', refFAllPlaces: 'Tutte le palestre', refFGroup: 'Raggruppa', refFGroupTour: 'Per torneo', refFGroupDay: 'Per giorno', refFReset: 'Togli i filtri', refFCount: '{n} gare, {k} senza arbitro', refFNone: 'Nessuna gara con questi filtri.', refSoonNoRef: 'Entro 24 ore e senza arbitro',
       refAssignTitle: 'Assegna gli arbitri alle gare', refOnlyFree: 'Solo le gare senza arbitro', refNone: '— nessun arbitro —', refOf: 'Arbitro della gara',
       refNoGames: 'Nessuna gara da giocare nei tornei aperti.', refAssigned: 'Arbitro assegnato: {n}.', refUnassigned: 'Arbitro tolto dalla gara.',
       refMineHelp: 'Ciao {n}: qui trovi le gare che ti sono state assegnate. Apri il referto elettronico con E-scoresheet.', refBadge: 'Arbitro: {n}',
