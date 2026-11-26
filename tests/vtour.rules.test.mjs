@@ -120,6 +120,15 @@ await t('l\'arbitro legge il suo avviso', assertSucceeds(getDoc(doc(ref1, 'notic
 await t('un altro arbitro non lo legge', assertFails(getDoc(doc(ref2, 'notices', 'n3'))));
 await t('l\'arbitro lo toglie dopo averlo letto', assertSucceeds(deleteDoc(doc(ref1, 'notices', 'n3'))));
 await t('un utente normale non manda avvisi agli arbitri', assertFails(setDoc(doc(user, 'notices', 'n4'), { to: 'ref1', text: 'x', at: 3, by: 'u1' })));
+// telefoni dei responsabili delle squadre: solo admin generali e admin dei tornei
+await t('admin tornei salva il contatto di una squadra', assertSucceeds(setDoc(doc(org, 'teamContacts', 'tm1'), { name: 'Luca Meloni', phone: '3930000000', updated: 1 })));
+await t('admin tornei lo legge', assertSucceeds(getDoc(doc(org, 'teamContacts', 'tm1'))));
+await t('il responsabile arbitri non lo legge', assertFails(getDoc(doc(boss, 'teamContacts', 'tm1'))));
+await t('l\'arbitro non lo legge', assertFails(getDoc(doc(ref1, 'teamContacts', 'tm1'))));
+await t('l\'account del campo non lo legge', assertFails(getDoc(doc(sc1, 'teamContacts', 'tm1'))));
+await t('un utente registrato non lo legge', assertFails(getDoc(doc(user, 'teamContacts', 'tm1'))));
+await t('chi non ha fatto l\'accesso non lo legge', assertFails(getDoc(doc(anon, 'teamContacts', 'tm1'))));
+await t('un utente non lo scrive', assertFails(setDoc(doc(user, 'teamContacts', 'tm2'), { name: 'x', phone: '1' })));
 console.log(`\n${ok} ok, ${ko} falliti`);
 await env.cleanup();
 process.exit(ko ? 1 : 0);

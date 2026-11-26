@@ -760,7 +760,7 @@
       const o = sel.out != null ? R.subOptions(st, tm, sel.out, playable(m, tm)) : null;
       const list = o ? (sel.exc ? o.exceptional : o.regular) : [];
       const why = o && !sel.exc && !o.regular.length
-        ? (set.regSubs[tm] >= S.subsPerSet ? `Sostituzioni regolari esaurite (${S.subsPerSet}).` : o.rule && o.rule.only != null ? `Può rientrare solo il n. ${o.rule.only}, che non è disponibile.` : 'Questo giocatore non può più uscire con una sostituzione regolare in questo set.')
+        ? (set.regSubs[tm] >= S.subsPerSet ? `Sostituzioni regolari esaurite (${S.subsPerSet}).` : o.rule && o.rule.only != null ? `Può rientrare solo il n. ${sh(o.rule.only)}, che non è disponibile.` : !playable(m, tm).some(n => !R.visibleCourt(set, tm).includes(n)) ? 'Nessun giocatore in panchina: scrivi qui sotto il numero di chi entra.' : 'Questo giocatore non può più uscire con una sostituzione regolare in questo set.')
         : '';
       openOverlay(`<h2>Sostituzione · ${esc(teamName(m, tm))}</h2>
         ${forced ? '<p class="warn-box">Il giocatore sanzionato deve lasciare il campo: sostituiscilo (regolare se possibile, altrimenti eccezionale). Se nessuno può entrare la squadra è incompleta (Altro…).</p>' : ''}

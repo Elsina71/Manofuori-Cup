@@ -923,6 +923,12 @@ async function makeTeamCodes(teamIds) {
 }
 // Liste dei giocatori importate da un file (admin dei tornei): una lista per squadra; il capitano scritto nel file
 // va nella squadra solo se non ha già un capitano nell'app
+function importContacts(list) {
+  if (!canTour() || !list.length) return Promise.resolve();
+  const batch = writeBatch(db), now = Date.now();
+  list.forEach(x => batch.set(doc(db, 'teamContacts', x.id), { name: x.name || '', phone: x.phone || '', updated: now }));
+  return batch.commit();
+}
 async function importRosters(entries) {
   const now = Date.now();
   for (let i = 0; i < entries.length; i += 200) {
@@ -1013,8 +1019,20 @@ onSnapshot(collection(db, 'teams'), snap => {
   refresh();
 }, onError);
 let rosterUnsub = null;
+// telefoni dei responsabili delle squadre (solo admin generali e admin dei tornei)
+let contactsUnsub = null;
+function listenTeamContacts() {
+  if (contactsUnsub) { contactsUnsub(); contactsUnsub = null; }
+  Store.applyRemote('teamContacts', []);
+  if (!user || !canTour()) return;
+  contactsUnsub = onSnapshot(collection(db, 'teamContacts'), snap => {
+    Store.applyRemote('teamContacts', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
+    refresh();
+  }, onError);
+}
 function listenRosters() {
   listenTrash();
+  listenTeamContacts();
   listenTeamCodes();
   if (rosterUnsub) { rosterUnsub(); rosterUnsub = null; }
   Store.applyRemote('rosters', []);
@@ -1414,6 +1432,7 @@ window.Cloud = {
   makeTeamCodes,
   codeLogin,
   importRosters,
+  importContacts,
   restoreVTour,
   purgeTrash,
   saveTeam,

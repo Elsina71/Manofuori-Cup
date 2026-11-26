@@ -217,6 +217,11 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'kind', 'memberUids', 'updated'])
         && teamFields(request.resource.data);
     }
+    // teamContacts/{idSquadra} = { name, phone }: responsabile della squadra e telefono. Riservato: lo leggono e lo
+    // scrivono solo gli admin generali e gli admin dei tornei (non capitani, arbitri, responsabili arbitri o visitatori).
+    match /teamContacts/{id} {
+      allow read, write: if isTourAdmin();
+    }
     // teamCodes/{codice} = { teamId, uid }: il codice del capitano di una squadra, con l'account per entrare (vedi codeUid).
     // Li crea e li vede tutti solo l'admin dei tornei; un account legge un codice solo se lo conosce (nessun elenco).
     match /teamCodes/{code} {

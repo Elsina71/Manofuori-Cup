@@ -3355,6 +3355,14 @@
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(() => prompt(t('tmCodeCopy'), txt));
     else prompt(t('tmCodeCopy'), txt);
   }
+  // responsabile e telefono della squadra: solo admin generali e admin dei tornei (teamContacts)
+  const fmtPhone = p => { const d = String(p || '').replace(/^\+?39(?=3\d{9}$)/, ''); return /^3\d{9}$/.test(d) ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : String(p || ''); };
+  function teamContactLine(tm) {
+    const c = (S().teamContacts || []).find(x => x.id === tm.id);
+    if (!c || !(c.phone || c.name)) return '';
+    const tel = String(c.phone || '').replace(/[^\d+]/g, ''), href = /^3\d{9}$/.test(tel) ? '+39' + tel : tel;
+    return `<p class="small tm-contact"><i class="ti ti-phone" aria-hidden="true"></i> ${esc(c.name || '')}${c.phone ? ` · <a href="tel:${esc(href)}">${esc(fmtPhone(c.phone))}</a>` : ''} <span class="badge">${esc(t('tmContactPrivate'))}</span></p>`;
+  }
   function teamCodeLine(tm) {
     const c = teamCodeOf(tm.id);
     return `<div class="tm-code">${c ? `<span class="muted small">${esc(t('tmCodeLbl'))}</span> <code class="code-pill">${esc(c.id)}</code>
@@ -3384,7 +3392,8 @@
       const tm = teamById(id), cur = rosterOf(id);
       const players = (x.players || []).filter(p => p && (p.last || p.first)).map(p => ({ num: p.num === '' || p.num == null ? '' : Number(p.num), last: String(p.last || '').trim(), first: String(p.first || '').trim(), g: p.g === 'F' ? 'F' : 'M', uid: '' }));
       const state = !tm ? 'missing' : cur.length && !imp.replace ? 'kept' : cur.length ? 'replace' : 'new';
-      return { id, tm, players, cur: cur.length, state, captainName: tm && !tm.captainUid && !tm.captainName && x.captainName ? String(x.captainName).trim() : '' };
+      const ct = x.contact && (x.contact.phone || x.contact.name) ? { name: String(x.contact.name || '').trim(), phone: String(x.contact.phone || '').replace(/[^\d+]/g, '') } : null;
+      return { id, tm, players, cur: cur.length, state, contact: ct, captainName: tm && !tm.captainUid && !tm.captainName && x.captainName ? String(x.captainName).trim() : '' };
     });
   }
   function rosterImportCard() {
@@ -3392,15 +3401,15 @@
     if (!imp) return `<details class="card sub-form" data-keep="tm-import" ${keepOpen('tm-import')}><summary><i class="ti ti-file-import" aria-hidden="true"></i> ${esc(t('rimTitle'))}</summary>
       <p class="muted small">${esc(t('rimHelp'))}</p>
       <label class="btn"><i class="ti ti-upload" aria-hidden="true"></i> ${esc(t('rimPick'))}<input type="file" accept=".json,application/json" data-roster-file hidden></label></details>`;
-    const plan = rosterImportPlan(), go = plan.filter(x => x.state === 'new' || x.state === 'replace');
+    const plan = rosterImportPlan(), go = plan.filter(x => x.state === 'new' || x.state === 'replace'), cts = plan.filter(x => x.tm && x.contact);
     return `<div class="card"><h2><i class="ti ti-file-import" aria-hidden="true"></i> ${esc(t('rimTitle'))}</h2>
-      <p class="muted small">${esc(imp.name)} · ${esc(t('rimSummary', { n: plan.length, k: go.length, p: go.reduce((a, x) => a + x.players.length, 0) }))}</p>
+      <p class="muted small">${esc(imp.name)} · ${esc(t('rimSummary', { n: plan.length, k: go.length, p: go.reduce((a, x) => a + x.players.length, 0) }))}${cts.length ? ' · ' + esc(t('rimContacts', { n: cts.length })) : ''}</p>
       <div class="table-wrap"><table class="table"><thead><tr><th>${esc(t('navTeams'))}</th><th class="num">${esc(t('rimPlayers'))}</th><th>${esc(t('rimWhat'))}</th></tr></thead>
-        <tbody>${plan.map(x => `<tr><td>${esc(x.tm ? x.tm.name : x.id)}${x.captainName ? `<br><small class="muted">${esc(t('tmCaptain'))}: ${esc(x.captainName)}</small>` : ''}</td><td class="num">${x.players.length}</td>
+        <tbody>${plan.map(x => `<tr><td>${esc(x.tm ? x.tm.name : x.id)}${x.captainName ? `<br><small class="muted">${esc(t('tmCaptain'))}: ${esc(x.captainName)}</small>` : ''}${x.contact ? `<br><small class="muted"><i class="ti ti-phone" aria-hidden="true"></i> ${esc(x.contact.name)} · ${esc(fmtPhone(x.contact.phone))}</small>` : ''}</td><td class="num">${x.players.length}</td>
           <td><span class="badge ${x.state === 'new' ? 'st-done' : x.state === 'replace' ? 'warn-b' : ''}">${esc(t('rim_' + x.state, { n: x.cur }))}</span></td></tr>`).join('')}</tbody></table></div>
       <label class="check"><input type="checkbox" data-roster-replace ${imp.replace ? 'checked' : ''}> ${esc(t('rimReplace'))}</label>
       <div class="btn-row end"><button class="btn" data-action="rim-cancel">${esc(t('cancel'))}</button>
-        <button class="btn primary" data-action="rim-go" ${go.length ? '' : 'disabled'}><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('rimGo', { k: go.length }))}</button></div></div>`;
+        <button class="btn primary" data-action="rim-go" ${go.length || cts.length ? '' : 'disabled'}><i class="ti ti-check" aria-hidden="true"></i> ${esc(go.length ? t('rimGo', { k: go.length }) : t('rimGoContacts', { n: cts.length }))}</button></div></div>`;
   }
 
   // PDF dei codici dei capitani (riservato: lo scarica solo l'admin), diviso per categoria, con il link di ogni codice
@@ -3500,7 +3509,7 @@
       <div class="ch-head"><span class="badge">${esc(tm.level)}</span> <span class="badge">${esc(t('tmKind_' + tm.kind))}</span> ${teamStatusBadge(tm)}</div>
       <h3>${esc(tm.name)}</h3>
       <p class="muted small">${esc(t('tmCaptain'))}: ${esc(tm.captainName || '—')}</p>
-      ${tourAdmin() ? teamCodeLine(tm) : ''}
+      ${tourAdmin() ? teamContactLine(tm) + teamCodeLine(tm) : ''}
       ${seeRoster ? `<details class="sub-form" data-keep="tmr-${tm.id}" ${keepOpen('tmr-' + tm.id)}>
         <summary><i class="ti ti-users" aria-hidden="true"></i> ${esc(t('tmRosterCount', { n: players.length, m: nM, f: nF }))}</summary>
         ${players.length ? `<table class="table roster-table"><thead><tr><th class="num">${esc(t('tmNumShort'))}</th><th>${esc(t('player'))}</th><th>${esc(t('gender'))}</th></tr></thead>
@@ -3899,6 +3908,8 @@
     window.Cloud.assignReferee(matchId, uid, r ? r.name : '').then(was => {
       // l'arbitro di prima (letto dal database) riceve l'avviso della convocazione cancellata
       if (was && was.referee && was.referee !== uid) window.Cloud.notify(was.referee, t('refCancelledNotice', { g: refMatchLine(was) }));
+      // il nuovo arbitro riceve l'avviso della convocazione, con i dettagli della gara
+      if (uid && (!was || was.referee !== uid)) window.Cloud.notify(uid, t('refCalledNotice', { g: refMatchLine(was || vmById(matchId) || { tid: '' }) }));
       ui.flash = { text: r ? t('refAssigned', { n: r.name }) : t('refUnassigned') }; render();
     }).catch(err => warn('scorerErr', { code: err.code || err.message }));
   }
@@ -4192,11 +4203,12 @@
     },
     'rim-cancel': () => { ui.rosterImport = null; render(); },
     'rim-go': el => {
-      const go = rosterImportPlan().filter(x => x.state === 'new' || x.state === 'replace');
-      if (!go.length) return;
+      const plan = rosterImportPlan(), go = plan.filter(x => x.state === 'new' || x.state === 'replace'), cts = plan.filter(x => x.tm && x.contact);
+      if (!go.length && !cts.length) return;
       el.disabled = true;
       window.Cloud.importRosters(go.map(x => ({ id: x.id, captainUid: x.tm.captainUid || '', players: x.players, captainName: x.captainName })))
-        .then(() => { ui.rosterImport = null; ui.flash = { text: t('rimDone', { k: go.length, p: go.reduce((a, x) => a + x.players.length, 0) }) }; render(); })
+        .then(() => window.Cloud.importContacts(cts.map(x => Object.assign({ id: x.id }, x.contact))))
+        .then(() => { ui.rosterImport = null; ui.flash = { text: t('rimDone', { k: go.length, p: go.reduce((a, x) => a + x.players.length, 0) }) + (cts.length ? ' ' + t('rimContactsDone', { n: cts.length }) : '') }; render(); })
         .catch(e => { el.disabled = false; vErr(e); });
     },
     'tm-codes-pdf': el => { el.disabled = true; teamCodesPdf().catch(vErr).finally(() => { el.disabled = false; }); },
