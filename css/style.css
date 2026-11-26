@@ -706,8 +706,20 @@ button.cal-btn:hover { border-color: var(--primary); }
 .pos-input { width: 3.6em; text-align: center; padding: 4px; }
 
 /* Manofuori Cup: logo orizzontale su fondo bianco (leggibile anche con il tema scuro) */
-.brand-logos img.brand-wordmark { width: auto; height: 40px; background: #fff; border-radius: 8px; padding: 3px 6px; box-sizing: content-box; }
-@media (max-width: 720px) { .brand-logos img.brand-wordmark { width: auto; height: 30px; } }
+/* Logo: fenicottero e scritta "manofuori" (carattere Broken Wing) senza riquadro bianco.
+   La scritta è testo vero: prende il colore del testo della testata, quindi contrasta con lo sfondo di ogni tema. */
+.brand-mark { --brand-h: 52px; position: relative; display: block; height: var(--brand-h); aspect-ratio: 392 / 150; flex-shrink: 0; }
+.brand-logos img.brand-flamingo {
+  position: absolute; left: 4.59%; top: 5.33%; width: 55.36%; height: auto;
+  background: none !important; border: 0 !important; padding: 0 !important; border-radius: 0 !important; box-shadow: none !important; filter: none !important;
+  -webkit-mask-image: linear-gradient(#000 80%, transparent); mask-image: linear-gradient(#000 80%, transparent);
+}
+.brand-word {
+  position: absolute; left: 39.8%; top: 50%; transform: translateY(-78%);
+  font: 400 calc(var(--brand-h, 52px) * .5) / 1 "Broken Wing", "Comic Sans MS", cursive; letter-spacing: 0; text-transform: none;
+  white-space: nowrap; color: var(--brand-ink, currentColor);
+}
+@media (max-width: 720px) { .brand-mark { --brand-h: 42px; } }
 
 /* =====================================================================
    MANOFUORI CUP · TEMI
