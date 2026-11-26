@@ -2535,27 +2535,32 @@
     const serve = live && cur ? lv.serving : null;
     const winner = lv.winner || (m.status === 'done' && VL.tally(vSets(m)).winner === 'h' ? 'a' : m.status === 'done' ? 'b' : null);
     const badge = live ? `<span class="live-badge live-blink"><i class="dot" aria-hidden="true"></i>${esc(t('liveBadge'))}</span>` : `<span class="lv-state">${esc(t(finished ? 'lvEnded' : 'lvWaiting'))}</span>`;
-    const side = (k, name) => `<div class="lv-team ${winner === k ? 'win' : ''} lv-${k}"><div class="lv-name">${esc(name)}</div><div class="lv-sets" aria-label="${esc(t('lvSetsWon'))}">${won[k] || 0}</div>${serve === k ? `<span class="lv-serve"><i class="ti ti-ball-volleyball" aria-hidden="true"></i> ${esc(t('lvServe'))}</span>` : ''}</div>`;
-    // successione dei punti: una colonna per punto, il numero nella riga della squadra che lo fa; T = time-out
+    // tabellone: per ogni squadra il nome, i punti del set (enormi), i set vinti; il pallone accanto a chi serve
+    const side = (k, name) => `<div class="lv-team lv-${k} ${winner === k ? 'win' : ''}"><div class="lv-name">${esc(name)}</div>
+      <div class="lv-pts">${last[k]}${serve === k ? '<i class="lv-ball" aria-label="' + esc(t('lvServe')) + '"></i>' : ''}</div>
+      <div class="lv-won">${esc(t('lvSetsWon'))} <b>${won[k] || 0}</b></div></div>`;
+    // successione dei punti in verticale: una riga per punto (dal più recente), il punteggio dopo il punto,
+    // evidenziato dalla parte di chi l'ha fatto; i time-out su una riga a sé
     const ladder = (code, i) => {
       if (!code) return '';
       let a = 0, b = 0;
-      const cols = [...code].map(ch => {
-        if (ch === 'a') { a++; return `<span class="lv-col"><b class="lv-a">${a}</b><i></i></span>`; }
-        if (ch === 'b') { b++; return `<span class="lv-col"><i></i><b class="lv-b">${b}</b></span>`; }
-        return ch === 'A' ? `<span class="lv-col to" title="${esc(t('lvTimeout'))}"><b>T</b><i></i></span>` : `<span class="lv-col to" title="${esc(t('lvTimeout'))}"><i></i><b>T</b></span>`;
-      }).join('');
+      const rows = [...code].map(ch => {
+        if (ch === 'a') { a++; return `<li class="lv-row pa"><span class="lv-c lv-a">${a}</span><span class="lv-who">${esc(A)}</span><span class="lv-c lv-b dim">${b}</span></li>`; }
+        if (ch === 'b') { b++; return `<li class="lv-row pb"><span class="lv-c lv-a dim">${a}</span><span class="lv-who">${esc(B)}</span><span class="lv-c lv-b">${b}</span></li>`; }
+        return `<li class="lv-row to"><span class="lv-tolbl"><i class="ti ti-clock-pause" aria-hidden="true"></i> ${esc(t('lvTimeout'))} ${esc(ch === 'A' ? A : B)} · ${a}–${b}</span></li>`;
+      }).reverse().join('');
       const sc = score(sets[i]), running = cur && cur.set === i + 1;
-      return `<section class="lv-set ${running ? 'now' : ''}"><h3>${esc(t('luSetN', { n: i + 1 }))} <span>${sc.a}–${sc.b}</span>${running ? ` <small>${esc(t('lvRunning'))}</small>` : ''}</h3>
-        <div class="lv-ladder"><div class="lv-heads"><span class="lv-a">${esc(A)}</span><span class="lv-b">${esc(B)}</span></div><div class="lv-cols">${cols}</div></div></section>`;
+      const head = `${esc(t('luSetN', { n: i + 1 }))} <span>${sc.a}–${sc.b}</span>${running ? ` <small>${esc(t('lvRunning'))}</small>` : ''}`;
+      const body = `<div class="lv-thead"><span class="lv-a">${esc(A)}</span><span></span><span class="lv-b">${esc(B)}</span></div><ol class="lv-list">${rows}</ol>`;
+      return running || i === sets.length - 1 ? `<section class="lv-set now"><h3>${head}</h3>${body}</section>`
+        : `<details class="lv-set"><summary><h3>${head}</h3></summary>${body}</details>`;
     };
     const order = pts.map((code, i) => i).reverse();
     return `<div class="lv"><div class="lv-in">
       <div class="lv-top"><button class="lv-x" data-action="lv-close" aria-label="${esc(t('luBackApp'))}"><i class="ti ti-arrow-left" aria-hidden="true"></i></button>
         <div class="lv-tour">${esc(tour.name)}<small>${esc(vWhen(m) || '')}${m.place ? ' · ' + esc(m.place.split(' – ')[0]) : ''}</small></div>${badge}</div>
-      <div class="lv-board">${side('a', A)}
-        <div class="lv-mid"><div class="lv-setno">${esc(t('luSetN', { n: setNo }))}</div><div class="lv-score"><span class="lv-a">${last.a}</span><em>:</em><span class="lv-b">${last.b}</span></div></div>
-        ${side('b', B)}</div>
+      <div class="lv-setno">${esc(t('luSetN', { n: setNo }))}${live ? '' : ''}</div>
+      <div class="lv-board">${side('a', A)}<div class="lv-sep" aria-hidden="true">:</div>${side('b', B)}</div>
       ${sets.length ? `<div class="lv-chips">${sets.map((x, i) => { const sc = score(x), running = cur && cur.set === i + 1; return `<span class="${running ? 'now' : ''}">${esc(t('luSetN', { n: i + 1 }))} <b>${sc.a}–${sc.b}</b></span>`; }).join('')}</div>` : ''}
       <h2 class="lv-h">${esc(t('lvSeq'))}</h2>
       ${pts.some(Boolean) ? order.map(i => ladder(pts[i], i)).join('') : `<p class="lv-empty">${esc(t(sets.length ? 'lvNoSeq' : 'lvNotStarted'))}</p>`}
