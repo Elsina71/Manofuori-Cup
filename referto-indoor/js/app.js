@@ -633,7 +633,7 @@
         <div class="toolbar">
           <button class="btn" id="undoBtn" ${m.events.length ? '' : 'disabled'}>↶ Annulla</button>
           <button class="btn" id="sanBtn">Sanzione</button>
-          <button class="btn" id="fixBtn" title="Servizio, campo e formazioni di questo set">✎ Correggi inizio set</button>
+          <button class="btn" id="fixBtn" title="Inizio del set o un numero di maglia">✎ Correzioni</button>
           <button class="btn" id="moreBtn">Altro…</button>
         </div>
         <div class="log card">
@@ -660,7 +660,7 @@
     document.getElementById('undoBtn').onclick = () => undoLast(m);
     document.getElementById('sanBtn').onclick = () => sanctionDialog(m);
     document.getElementById('moreBtn').onclick = () => moreDialog(m);
-    document.getElementById('fixBtn').onclick = () => startFix(m);
+    document.getElementById('fixBtn').onclick = () => fixDialog(m);
   }
 
   function eventsLine(m, set) {
@@ -866,6 +866,81 @@
       $overlay.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => { sel.kind = b.dataset.kind; draw(); });
       $overlay.querySelector('[data-x]').onclick = closeOverlay;
       $overlay.querySelector('[data-ok]').onclick = () => { closeOverlay(); addEvent(m, { type: 'sanction', team: sel.team, player: sel.player, kind: sel.kind }); };
+    };
+    draw();
+  }
+
+  // ---------- correzioni durante la gara ----------
+  function fixDialog(m) {
+    openOverlay(`<h2>Correzioni</h2>
+      <div class="opts col">
+        <button class="opt" data-f="start">Inizio del set: chi serve, campo, formazioni, cambio a metà set</button>
+        <button class="opt" data-f="number">Un numero di maglia sbagliato (corretto in tutta la gara)</button>
+      </div>
+      <div class="row end"><button class="btn ghost" data-x>Chiudi</button></div>`);
+    $overlay.querySelector('[data-x]').onclick = closeOverlay;
+    $overlay.querySelector('[data-f="start"]').onclick = () => { closeOverlay(); startFix(m); };
+    $overlay.querySelector('[data-f="number"]').onclick = () => numberDialog(m);
+  }
+  // numeri di maglia di una squadra usati nella gara (formazioni, cambi, libero, sanzioni) e nella lista
+  function usedNumbers(m, tm) {
+    const set = new Set();
+    m.events.forEach(e => {
+      if (e.type === 'setStart' && e.lineup) e.lineup[tm].forEach(n => set.add(n));
+      if (e.team !== tm) return;
+      if (e.type === 'sub') { set.add(e.out); set.add(e.in); }
+      if (e.type === 'liberoIn') { set.add(e.libero); set.add(e.out); }
+      if (e.type === 'sanction' && typeof e.player === 'number') set.add(e.player);
+    });
+    return set;
+  }
+  // Cambia un numero di maglia in tutta la gara: formazioni di ogni set, cambi, libero, sanzioni e lista
+  function renumber(m, tm, from, to) {
+    if (from === to) return 'Il numero nuovo è uguale a quello vecchio.';
+    if (usedNumbers(m, tm).has(to)) return `Il n. ${sh(to)} è già usato in questa gara da ${esc(teamName(m, tm))}.`;
+    const pf = player(m, tm, from), pt = player(m, tm, to);
+    if (pf && pt && pf.name && pt.name) return `Nella lista ci sono già due giocatori con i numeri ${sh(from)} e ${sh(to)}: correggi la lista nei Dati gara.`;
+    const keepEvents = JSON.stringify(m.events), keepPlayers = JSON.stringify(m.teams[tm].players), before = stateOf(m).rejected.length;
+    const swap = n => (n === from ? to : n);
+    m.events.forEach(e => {
+      if (e.type === 'setStart' && e.lineup) e.lineup[tm] = e.lineup[tm].map(swap);
+      if (e.team !== tm) return;
+      if (e.type === 'sub') { e.out = swap(e.out); e.in = swap(e.in); }
+      if (e.type === 'liberoIn') { e.libero = swap(e.libero); e.out = swap(e.out); }
+      if (e.type === 'sanction' && typeof e.player === 'number') e.player = swap(e.player);
+    });
+    // lista: se il numero giusto è già in lista (con il nome) prende il posto della riga scritta a mano
+    const T = m.teams[tm];
+    if (pf && pt) { pt.libero = pf.libero || pt.libero; pt.captain = pf.captain || pt.captain; if (!pt.gender) pt.gender = pf.gender; if (!pt.name) pt.name = pf.name; T.players.splice(T.players.indexOf(pf), 1); }
+    else if (pf) pf.no = to;
+    if (stateOf(m).rejected.length > before) {
+      m.events = JSON.parse(keepEvents); T.players = JSON.parse(keepPlayers);
+      return 'Con questo numero alcune azioni registrate non sarebbero più valide: correzione non fatta.';
+    }
+    touch(m);
+    return null;
+  }
+  function numberDialog(m) {
+    const sel = { tm: null, from: null };
+    const draw = (err) => {
+      const nums = sel.tm ? [...new Set([...usedNumbers(m, sel.tm), ...roster(m, sel.tm).map(p => +p.no)])].sort((a, b) => a - b) : [];
+      openOverlay(`<h2>Correggi un numero di maglia</h2>
+        <p class="muted small">Il numero si corregge in tutta la gara: formazioni di ogni set, cambi, libero, sanzioni e lista. Punti e azioni restano.</p>
+        <div class="q"><h3>Squadra</h3><div class="opts">${['A', 'B'].map(tm => `<button class="opt team-${tm} ${sel.tm === tm ? 'on' : ''}" data-t="${tm}">${esc(teamName(m, tm))}</button>`).join('')}</div></div>
+        ${sel.tm ? `<div class="q"><h3>Numero sbagliato</h3><div class="opts">${nums.map(n => `<button class="opt ${sel.from === n ? 'on' : ''}" data-n="${n}">${esc(pLabel(m, sel.tm, n))}</button>`).join('') || '<span class="muted small">Nessun numero.</span>'}</div></div>` : ''}
+        ${sel.from != null ? `<div class="q"><h3>Numero giusto</h3><div class="row hand-no"><input id="toNo" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="n." aria-label="Numero giusto"></div></div>` : ''}
+        ${err ? `<p class="error">${err}</p>` : ''}
+        <div class="row end"><button class="btn ghost" data-x>Annulla</button><button class="btn primary" data-ok ${sel.from != null ? '' : 'disabled'}>Correggi</button></div>`);
+      $overlay.querySelector('[data-x]').onclick = closeOverlay;
+      $overlay.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { sel.tm = b.dataset.t; sel.from = null; draw(); });
+      $overlay.querySelectorAll('[data-n]').forEach(b => b.onclick = () => { sel.from = +b.dataset.n; draw(); const i = document.getElementById('toNo'); if (i) i.focus(); });
+      $overlay.querySelector('[data-ok]').onclick = () => {
+        const to = parseShirt((document.getElementById('toNo') || {}).value);
+        if (to === '') return draw('Scrivi il numero giusto (da 0 a 99, oppure 00 o 000).');
+        const e = renumber(m, sel.tm, sel.from, to);
+        if (e) return draw(e);
+        closeOverlay(); toast(`Corretto: n. ${sh(sel.from)} → ${sh(to)} (${teamName(m, sel.tm)})`); ui.lineup = null; render();
+      };
     };
     draw();
   }

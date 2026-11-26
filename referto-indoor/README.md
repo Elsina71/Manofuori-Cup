@@ -25,7 +25,9 @@ di Data Project usato nelle gare internazionali.
    **Cambio di campo, set per set**: all'inizio di ogni set si sceglie se le squadre cambiano campo rispetto al set
    precedente e se cambiano campo **durante il set** a metà dei punti (13 nei set a 25, 8 nei set a 15). La scelta
    proposta è sempre **"No cambio campo"**.
-   **Correzioni**: durante il set il pulsante **✎ Correggi inizio set** riporta alla pagina delle formazioni con i dati
+   **Correzioni** (pulsante **✎ Correzioni** durante la gara): **un numero di maglia sbagliato** si corregge in tutta la
+   gara (formazioni di ogni set, cambi, libero, sanzioni e lista; se il numero giusto è in lista, prende il suo nome);
+   **l'inizio del set** riporta alla pagina delle formazioni con i dati
    già scritti (chi serve per prima, campo, formazioni, cambio a metà set): si corregge e si salva, e i punti già
    registrati restano. Anche *Annulla ultimo evento* sull'inizio del set lascia i dati già scritti.
 3. **Gara**: si tocca **+1 punto** sotto la squadra che vince l'azione. Il resto è automatico:
