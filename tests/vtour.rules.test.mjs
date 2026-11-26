@@ -111,6 +111,15 @@ await t('l\'arbitro corregge i numeri di maglia (a parte)', assertSucceeds(updat
 await t('l\'arbitro non tocca la lista dei giocatori', assertFails(updateDoc(doc(ref1, 'rosters', 'tm1'), { players: [{ num: 14, last: 'Bianchi', first: 'Anna', g: 'F', uid: '' }], updated: 3 })));
 await t('l\'arbitro non cambia il capitano', assertFails(updateDoc(doc(ref1, 'rosters', 'tm1'), { captainUid: 'ref1', updated: 3 })));
 await t('un account del campo non corregge i numeri', assertFails(updateDoc(doc(sc1, 'rosters', 'tm1'), { nums: { 0: 1 }, updated: 4 })));
+// non posso, revoca e avvisi all'arbitro
+await t('l\'arbitro comunica che non può', assertSucceeds(updateDoc(doc(ref1, 'vmatches', 'T3_g-A-d2-0'), { refDeclinedAt: 200, refConfirmedAt: null })));
+await t('un altro arbitro non lo fa per lui', assertFails(updateDoc(doc(ref2, 'vmatches', 'T3_g-A-d2-0'), { refDeclinedAt: 201 })));
+await t('il responsabile arbitri revoca la convocazione', assertSucceeds(updateDoc(doc(boss, 'vmatches', 'T3_g-A-d2-0'), { referee: '', refereeName: '', refConfirmedAt: null, refDeclinedAt: null, updated: 5 })));
+await t('il responsabile arbitri avvisa l\'arbitro (convocazione cancellata)', assertSucceeds(setDoc(doc(boss, 'notices', 'n3'), { to: 'ref1', text: 'Attenzione, la tua convocazione è stata cancellata', at: 2, by: 'boss' })));
+await t('l\'arbitro legge il suo avviso', assertSucceeds(getDoc(doc(ref1, 'notices', 'n3'))));
+await t('un altro arbitro non lo legge', assertFails(getDoc(doc(ref2, 'notices', 'n3'))));
+await t('l\'arbitro lo toglie dopo averlo letto', assertSucceeds(deleteDoc(doc(ref1, 'notices', 'n3'))));
+await t('un utente normale non manda avvisi agli arbitri', assertFails(setDoc(doc(user, 'notices', 'n4'), { to: 'ref1', text: 'x', at: 3, by: 'u1' })));
 console.log(`\n${ok} ok, ${ko} falliti`);
 await env.cleanup();
 process.exit(ko ? 1 : 0);

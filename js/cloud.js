@@ -165,6 +165,7 @@ onAuthStateChanged(auth, async u => {
   }
   listenRoles();
   listenAccount();
+  listenRefNotices();
   listenVerified();
   listenFreeplay();
   listenRosters();
@@ -1321,16 +1322,43 @@ async function removeReferee(email, uid) {
   if (uid) (await getDocs(query(collection(db, 'vmatches'), where('referee', '==', uid)))).docs.forEach(d => batch.update(d.ref, { referee: '', refereeName: '', refConfirmedAt: null, updated: Date.now() }));
   await batch.commit();
 }
-function assignReferee(matchId, uid, name) {
-  if (!canRefs()) return Promise.resolve();
+// Designa, cambia o revoca l'arbitro; restituisce la gara com'era (dal database), per avvisare l'arbitro di prima
+async function assignReferee(matchId, uid, name) {
+  if (!canRefs()) return null;
+  const ref = doc(db, 'vmatches', matchId);
+  const before = await getDoc(ref);
   // nuova designazione: la conferma va data di nuovo
-  return updateDoc(doc(db, 'vmatches', matchId), { referee: uid || '', refereeName: uid ? name || '' : '', refConfirmedAt: null, updated: Date.now() });
+  await updateDoc(ref, { referee: uid || '', refereeName: uid ? name || '' : '', refConfirmedAt: null, refDeclinedAt: null, updated: Date.now() });
+  return before.exists() ? Object.assign({ id: matchId }, before.data()) : null;
+}
+// L'arbitro comunica che non può arbitrare la gara: avviso agli admin e ai responsabili arbitri
+async function declineReferee(matchId, text) {
+  const now = Date.now();
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'vmatches', matchId), { refDeclinedAt: now, refConfirmedAt: null });
+  ['admins', 'refs'].forEach(to => batch.set(doc(collection(db, 'notices')), { to, text: String(text).slice(0, 400), at: now, by: user.uid }));
+  await batch.commit();
+}
+// Gara cambiata (giorno, orario, palestra) dopo la designazione: l'arbitro deve confermare di nuovo
+function resetRefereeConfirm(matchId) {
+  if (!canRefs()) return Promise.resolve();
+  return updateDoc(doc(db, 'vmatches', matchId), { refConfirmedAt: null, refDeclinedAt: null });
+}
+// Avvisi per l'arbitro (account del campo con kind 'ref'): li riceve anche senza scheda utente
+let refNoteUnsub = null;
+function listenRefNotices() {
+  if (refNoteUnsub) { refNoteUnsub(); refNoteUnsub = null; }
+  if (!user || !scorer || scorer.kind !== 'ref') return;
+  refNoteUnsub = onSnapshot(query(collection(db, 'notices'), where('to', '==', user.uid)), snap => {
+    Store.applyRemote('notices', snap.docs.map(d => Object.assign({ id: d.id }, d.data())).sort((a, b) => (b.at || 0) - (a.at || 0)));
+    refresh();
+  }, onError);
 }
 // L'arbitro conferma la designazione: avviso agli admin e ai responsabili arbitri
 async function confirmReferee(matchId, text) {
   const now = Date.now();
   const batch = writeBatch(db);
-  batch.update(doc(db, 'vmatches', matchId), { refConfirmedAt: now });
+  batch.update(doc(db, 'vmatches', matchId), { refConfirmedAt: now, refDeclinedAt: null });
   ['admins', 'refs'].forEach(to => batch.set(doc(collection(db, 'notices')), { to, text: String(text).slice(0, 400), at: now, by: user.uid }));
   await batch.commit();
 }
@@ -1361,6 +1389,8 @@ window.Cloud = {
   removeReferee,
   assignReferee,
   confirmReferee,
+  declineReferee,
+  resetRefereeConfirm,
   saveRosterNums,
   addScorer,
   setScorerTournament,

@@ -526,7 +526,7 @@
   // Avvisi per l'utente o per gli amministratori (es. richiesta di cancellazione dell'account):
   // ALERT in cima alla pagina, finché non si preme "Ho letto".
   function noticeAlerts() {
-    if (!(member() || admin() || refBoss())) return '';
+    if (!(member() || admin() || refBoss() || isRef())) return '';
     return (S().notices || []).map(n => `<div class="msg-alert" role="alert">
       <div class="msg-head"><strong><i class="ti ti-bell" aria-hidden="true"></i> ${esc(t(n.to === 'admins' ? 'noticeAdmins' : n.to === 'refs' ? 'noticeRefs' : 'noticeUser'))}</strong>
         <small>${esc(new Date(n.at).toLocaleString(I18n.locale(), { dateStyle: 'medium', timeStyle: 'short' }))}</small></div>
@@ -2984,6 +2984,11 @@
   }
   // Avviso in prima pagina a capitani e giocatori (account app) delle due squadre quando cambiano data, ora o
   // palestra di una gara che li aveva già. changes = [[gara, { date, time, place } nuovi]].
+  // una gara in una riga per gli avvisi agli arbitri: squadre · categoria · giorno e ora · palestra
+  function refMatchLine(m) {
+    const tour = vtById(m.tid) || { level: '', name: '' };
+    return `${vTeamName(tour, m.home)} – ${vTeamName(tour, m.away)} · ${tour.level} · ${vWhen(m) || t('vmNoDate')} · ${m.place || '—'}`;
+  }
   function vNotifyChanges(tour, changes) {
     const byUser = {};
     changes.forEach(([m, d]) => {
@@ -2991,6 +2996,11 @@
       const diff = ['date', 'time', 'place'].some(k => k in d && (d[k] || '') !== (m[k] || ''));
       if (!was || !diff) return;
       const nm = Object.assign({}, m, d);
+      // arbitro designato: avviso e nuova conferma (o indisponibilità)
+      if (m.referee && m.status !== 'done') {
+        window.Cloud.notify(m.referee, t('refChangedNotice', { g: refMatchLine(nm) }));
+        window.Cloud.resetRefereeConfirm(m.id).catch(() => {});
+      }
       const line = t('vmChanged', { h: vTeamName(tour, m.home), a: vTeamName(tour, m.away), w: vWhen(nm) || t('vmNoDate'), p: nm.place || '—' });
       [m.home, m.away].forEach(id => {
         const tm = teamById(id);
@@ -3856,13 +3866,13 @@
   }
   function viewRefCard() {
     const sc = scorer(), all = refMatches().slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
-    const open = all.filter(m => m.status !== 'done'), toConfirm = open.filter(m => !m.refConfirmedAt);
+    const open = all.filter(m => m.status !== 'done'), toConfirm = open.filter(m => !m.refConfirmedAt && !m.refDeclinedAt);
     const day = d => { if (!d) return t('vmNoDate'); const x = new Date(d + 'T12:00:00'); return `${x.toLocaleDateString(I18n.locale(), { weekday: 'long' })} ${fmtDate(d)}`; };
     const card = m => {
       const tour = vtById(m.tid) || { name: '', level: '' }, done = m.status === 'done';
       return `<div class="card ref-game ${m.refConfirmedAt ? 'ok' : ''}" id="rg-${m.id}">
         <div class="ref-game-head"><h3>${esc(vTeamName(tour, m.home))} – ${esc(vTeamName(tour, m.away))}</h3>
-          ${done ? `<span class="badge st-done">${esc(t('refPlayed'))} ${esc(vResult(m))}</span>` : m.refConfirmedAt ? `<span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('refConfirmedOn', { d: new Date(m.refConfirmedAt).toLocaleDateString(I18n.locale()) }))}</span>` : `<span class="badge ref-todo">${esc(t('refToConfirm'))}</span>`}</div>
+          ${done ? `<span class="badge st-done">${esc(t('refPlayed'))} ${esc(vResult(m))}</span>` : m.refConfirmedAt ? `<span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('refConfirmedOn', { d: new Date(m.refConfirmedAt).toLocaleDateString(I18n.locale()) }))}</span>` : m.refDeclinedAt ? `<span class="badge ref-no"><i class="ti ti-x" aria-hidden="true"></i> ${esc(t('refDeclinedMine'))}</span>` : `<span class="badge ref-todo">${esc(t('refToConfirm'))}</span>`}</div>
         <dl class="ref-dl">
           <dt>${esc(t('refCat'))}</dt><dd>${esc(tour.level)} · ${esc(tour.name)}</dd>
           <dt>${esc(t('refPhase'))}</dt><dd>${esc(vPhaseText(tour, m))}</dd>
@@ -3871,9 +3881,10 @@
           <dt>${esc(t('refPlace'))}</dt><dd>${esc(m.place || '—')}</dd>
         </dl>
         ${done ? '' : `<div class="btn-row">${m.refConfirmedAt ? '' : `<button class="btn primary" data-action="ref-confirm" data-id="${m.id}"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('refConfirm'))}</button>`}
+          ${m.refDeclinedAt ? '' : `<button class="btn danger" data-action="ref-decline" data-id="${m.id}"><i class="ti ti-x" aria-hidden="true"></i> ${esc(t(m.refConfirmedAt ? 'refDeclineLater' : 'refDecline'))}</button>`}
           <button class="btn" data-action="vm-escore" data-id="${m.id}"><i class="ti ti-device-tablet" aria-hidden="true"></i> E-scoresheet</button></div>`}</div>`;
     };
-    return `<div class="page-head"><h1><i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(t('refCardTitle'))}</h1></div>
+    return `${noticeAlerts()}<div class="page-head"><h1><i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(t('refCardTitle'))}</h1></div>
       <div class="card ref-me"><h2>${esc(sc.name || '')}</h2><p class="muted">${esc(sc.code ? t('refViaCode') : sc.email || '')}</p>
         <p>${esc(t('refCardCounts', { n: open.length, k: toConfirm.length }))}</p></div>
       ${toConfirm.length ? `<p class="note warn"><i class="ti ti-bell" aria-hidden="true"></i> ${esc(t(toConfirm.length === 1 ? 'refToConfirmNote1' : 'refToConfirmNote', { k: toConfirm.length }))}</p>` : ''}
@@ -3882,6 +3893,15 @@
       ${all.length > open.length ? `<details class="card sub-form"><summary>${esc(t('refPlayedList', { n: all.length - open.length }))}</summary>${all.filter(m => m.status === 'done').map(card).join('')}</details>` : ''}`;
   }
 
+  // designa, cambia o revoca (uid '') l'arbitro di una gara: chi perde la convocazione riceve l'avviso
+  function refAssign(matchId, uid) {
+    const r = refList().find(x => x.uid === uid);
+    window.Cloud.assignReferee(matchId, uid, r ? r.name : '').then(was => {
+      // l'arbitro di prima (letto dal database) riceve l'avviso della convocazione cancellata
+      if (was && was.referee && was.referee !== uid) window.Cloud.notify(was.referee, t('refCancelledNotice', { g: refMatchLine(was) }));
+      ui.flash = { text: r ? t('refAssigned', { n: r.name }) : t('refUnassigned') }; render();
+    }).catch(err => warn('scorerErr', { code: err.code || err.message }));
+  }
   // ---------- ARBITRI (admin tornei): account degli arbitri e assegnazione alle gare ----------
   function refList() {
     if (!ui.scorers && !ui.scorersLoading && window.Cloud && window.Cloud.listScorers) {
@@ -3906,7 +3926,8 @@
           <div><strong>${esc(vTeamName(tour, m.home))} – ${esc(vTeamName(tour, m.away))}</strong>
             <div class="muted small">${m.date || m.time ? esc(vWhen(m)) : esc(t('vmNoDate'))}${m.place ? ' · ' + esc(m.place) : ''}</div></div>
           <div class="ref-pick"><select data-change="ref-assign" data-id="${m.id}" aria-label="${esc(t('refOf'))}" ${refs.length ? '' : 'disabled'}>${opts(m)}</select>
-            ${m.referee ? (m.refConfirmedAt ? `<span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('refConfirmed'))}</span>` : `<span class="badge ref-todo">${esc(t('refToConfirm'))}</span>`) : ''}</div></li>`).join('')}</ul></details>`;
+            ${m.referee ? (m.refConfirmedAt ? `<span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('refConfirmed'))}</span>` : m.refDeclinedAt ? `<span class="badge ref-no"><i class="ti ti-x" aria-hidden="true"></i> ${esc(t('refDeclined'))}</span>` : `<span class="badge ref-todo">${esc(t('refToConfirm'))}</span>`)
+              + ` <button class="btn small danger" data-action="ref-revoke" data-id="${m.id}"><i class="ti ti-user-x" aria-hidden="true"></i> ${esc(t('refRevoke'))}</button>` : ''}</div></li>`).join('')}</ul></details>`;
     };
     return `<div class="page-head"><h1><i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(t('navRefs'))}</h1><p class="muted">${esc(t('refIntro'))}</p></div>
       <details class="card sub-form" data-keep="ref-new" ${keepOpen('ref-new', !refs.length)}><summary><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('refNew'))}</summary>
@@ -4234,6 +4255,18 @@
       if (!confirm(t('userResetPwConfirm', { n: el.dataset.email, e: el.dataset.email }))) return;
       window.Cloud.resetPassword(el.dataset.email).then(() => { ui.flash = { text: t('userResetPwSent', { n: el.dataset.email, e: el.dataset.email }) }; render(); }).catch(() => warn('resetFailed'));
     },
+    'ref-decline': el => {
+      const m = vmById(el.dataset.id), sc = scorer();
+      if (!m || !sc || !isRef() || m.referee !== myUid() || !confirm(t('refDeclineConfirm'))) return;
+      el.disabled = true;
+      window.Cloud.declineReferee(m.id, t('refDeclineNotice', { n: sc.name || '', g: refMatchLine(m) }))
+        .then(() => { ui.flash = { text: t('refDeclineDone') }; render(); }).catch(e => { el.disabled = false; vErr(e); });
+    },
+    'ref-revoke': el => {
+      const m = vmById(el.dataset.id);
+      if (!m || !refBoss() || !confirm(t('refRevokeConfirm', { n: m.refereeName || '' }))) return;
+      refAssign(m.id, '');
+    },
     'ref-code-copy': el => copyText(t('refCodeMsg', { n: el.dataset.name, c: el.dataset.code, l: codeLink(el.dataset.code) })),
     'ref-code-renew': el => {
       if (!confirm(t('refCodeRenewConfirm', { n: el.dataset.name }))) return;
@@ -4376,8 +4409,8 @@
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
-  const REFS_ACTIONS = new Set(['ref-code-copy', 'ref-code-renew', 'ref-remove', 'ref-resetpw', 'notice-dismiss']);   // responsabile arbitri
-  const REF_ACTIONS = new Set(['ref-confirm', 'tm-nums-edit']);   // arbitro
+  const REFS_ACTIONS = new Set(['ref-revoke', 'ref-code-copy', 'ref-code-renew', 'ref-remove', 'ref-resetpw', 'notice-dismiss']);   // responsabile arbitri
+  const REF_ACTIONS = new Set(['ref-confirm', 'ref-decline', 'tm-nums-edit', 'notice-dismiss']);   // arbitro
   const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'pdf-view', 'pdf-zip']);
   const PUBLIC_FORMS = new Set(['tm-codelogin', 'login', 'register', 'complete-profile']);
   const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
@@ -4524,10 +4557,7 @@
       }
       case 'ref-assign': {
         if (!refBoss()) return;
-        const r = refList().find(x => x.uid === el.value);
-        window.Cloud.assignReferee(el.dataset.id, el.value, r ? r.name : '')
-          .then(() => { ui.flash = { text: r ? t('refAssigned', { n: r.name }) : t('refUnassigned') }; render(); })
-          .catch(err => warn('scorerErr', { code: err.code || err.message }));
+        refAssign(el.dataset.id, el.value);
         break;
       }
       case 'ref-free': ui.refFree = el.checked; render(); break;

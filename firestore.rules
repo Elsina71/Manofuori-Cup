@@ -171,10 +171,12 @@ service cloud.firestore {
       allow write: if isTourAdmin();
       // designazione dell'arbitro (responsabile arbitri) e conferma della designazione (l'arbitro assegnato)
       allow update: if isRefBoss()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['referee', 'refereeName', 'refConfirmedAt', 'updated']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['referee', 'refereeName', 'refConfirmedAt', 'refDeclinedAt', 'updated']);
+      // l'arbitro conferma (refConfirmedAt) o comunica che non può (refDeclinedAt)
       allow update: if refFor(id)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['refConfirmedAt'])
-        && request.resource.data.refConfirmedAt is int;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['refConfirmedAt', 'refDeclinedAt'])
+        && (request.resource.data.get('refConfirmedAt', null) == null || request.resource.data.refConfirmedAt is int)
+        && (request.resource.data.get('refDeclinedAt', null) == null || request.resource.data.refDeclinedAt is int);
       allow update: if staffFor(resource.data.tid, id)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sets', 'status', 'golden', 'by', 'updated'])
         && request.resource.data.status in ['sched', 'done']
@@ -501,7 +503,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['to', 'text', 'at', 'by'])
         && request.resource.data.by == request.auth.uid
         && request.resource.data.text is string && request.resource.data.text.size() <= 400
-        && request.resource.data.to is string && (isTourAdmin() || request.resource.data.to in ['admins', 'refs']);
+        && request.resource.data.to is string && (isRefBoss() || request.resource.data.to in ['admins', 'refs']);
       allow delete: if request.auth != null && (resource.data.to == request.auth.uid || (resource.data.to == 'admins' && isAdmin()) || (resource.data.to == 'refs' && isRefBoss()));
     }
 
