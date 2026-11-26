@@ -24,7 +24,8 @@ di Data Project usato nelle gare internazionali.
    miste si tocca **D** per le donne. Anche nel **cambio** si può far entrare un numero scritto a mano.
    Nelle gare del torneo i nomi delle squadre arrivano dal calendario e le liste dalle squadre, se ci sono.
    **Cambio di campo, set per set**: all'inizio di ogni set si sceglie se le squadre cambiano campo rispetto al set
-   precedente (Sì/No) e se cambiano campo **durante il set** a metà dei punti (di regola solo nel set decisivo, a 8).
+   precedente e se cambiano campo **durante il set** a metà dei punti (13 nei set a 25, 8 nei set a 15). La scelta
+   proposta è sempre **"No cambio campo"**.
 3. **Gara**: si tocca **+1 punto** sotto la squadra che vince l'azione. Il resto è automatico:
    - **rotazioni**: quando la squadra che riceve vince l'azione conquista il servizio e ruota in senso
      orario (il giocatore del posto 2 va al servizio al posto 1); ogni giocatore resta col suo numero di maglia e

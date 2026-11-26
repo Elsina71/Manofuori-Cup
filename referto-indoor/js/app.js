@@ -387,14 +387,15 @@
     if (!ui.lineup || ui.lineup.index !== d.index) {
       ui.lineup = {
         index: d.index, needsToss: d.needsToss, winner: null, choice: null, otherChoice: null,
-        serving: d.serving, left: d.left,
+        // di regola nessun cambio di campo: stesso lato del set precedente (d.left è il lato con il cambio)
+        serving: d.serving, left: d.left ? other(d.left) : d.left,
         lineup: { A: d.lineup.A.length === 6 ? d.lineup.A.slice() : ['', '', '', '', '', ''], B: d.lineup.B.length === 6 ? d.lineup.B.slice() : ['', '', '', '', '', ''] },
         // liberi della gara (al massimo 2): presi dalla lista, oppure scritti a mano prima del 1° set; fem: D/U scritti qui
         liberi: { A: [0, 1].map(i => liberi(m, 'A')[i] ?? ''), B: [0, 1].map(i => liberi(m, 'B')[i] ?? '') },
         libLocked: { A: [0, 1].map(i => m.events.length > 0 && liberi(m, 'A')[i] != null), B: [0, 1].map(i => m.events.length > 0 && liberi(m, 'B')[i] != null) },
         fem: { A: {}, B: {} },
         // cambio di campo durante il set: punti a cui si cambia ('0' = nessuno); di regola solo nel set decisivo
-        mid: String(R.midSwitchOf(R.settingsOf(m), d.index))
+        mid: '0'
       };
     }
     const L = ui.lineup;
@@ -462,11 +463,11 @@
         ` : `
           <p class="muted">Serve per prima la squadra che ha ricevuto per prima nel set precedente. Puoi correggere se serve.</p>
           ${d.left ? `<div class="q"><h3>Cambio di campo rispetto al set precedente</h3><div class="opts">
-            ${opt('swap', '1', 'Sì, si cambia campo', L.left === d.left)}${opt('swap', '0', 'No, stesso campo', L.left === other(d.left))}</div></div>` : ''}
+            ${opt('swap', '0', 'No cambio campo', L.left === other(d.left))}${opt('swap', '1', 'Cambio campo', L.left === d.left)}</div></div>` : ''}
           <div class="q"><h3>Al servizio</h3><div class="opts">${teamOpts('serving')}</div></div>
           <div class="q"><h3>A sinistra del segnapunti</h3><div class="opts">${teamOpts('left')}</div></div>`}
         <div class="q"><h3>Cambio di campo durante il set</h3><div class="opts">
-          ${opt('mid', '0', 'No', L.mid === '0')}${opt('mid', String(Math.ceil(R.targetOf(R.settingsOf(m), d.index) / 2)), `Sì, a ${Math.ceil(R.targetOf(R.settingsOf(m), d.index) / 2)} punti`, L.mid !== '0')}</div></div>
+          ${opt('mid', '0', 'No cambio campo', L.mid === '0')}${opt('mid', String(Math.ceil(R.targetOf(R.settingsOf(m), d.index) / 2)), `Cambio campo a ${Math.ceil(R.targetOf(R.settingsOf(m), d.index) / 2)} punti`, L.mid !== '0')}</div></div>
       </section>
       <section class="card"><h2>Formazioni (posto 1 → 6)</h2>
         ${['A', 'B'].some(tm => m.teams[tm].players.some(p => p.name && (p.no === '' || p.no == null))) ? `<p class="note">Nella lista ci sono giocatori senza numero di maglia: scrivi qui i numeri di chi è in campo e dei liberi (finiscono a referto senza nome, oppure aggiungi il numero nei Dati gara).</p>` : ''}
