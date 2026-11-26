@@ -87,7 +87,8 @@
       index: idx,
       target: targetOf(S, idx),
       deciding: isDeciding(S, idx),
-      midSwitch: midSwitchOf(S, idx),
+      // cambio di campo a metà set: scelto a ogni inizio set (e.midSwitch = punti, 0 = nessuno); senza scelta la regola del set decisivo
+      midSwitch: e.midSwitch != null ? Math.max(0, e.midSwitch | 0) : midSwitchOf(S, idx),
       switched: false,
       toss: e.toss || null,
       firstServing: e.serving,
@@ -438,7 +439,7 @@
 
   const api = {
     DEFAULT_SETTINGS, SANCTIONS, ROMAN, replay, nextSetDefaults, servingFromChoice, subOptions,
-    other, settingsOf, minWomenOf, setsToWin, targetOf, isDeciding, needsToss, courtOf, visibleCourt, positionOf, onCourt, BACK_ROW
+    other, settingsOf, minWomenOf, midSwitchOf, setsToWin, targetOf, isDeciding, needsToss, courtOf, visibleCourt, positionOf, onCourt, BACK_ROW
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Rules = api;
