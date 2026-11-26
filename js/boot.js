@@ -35,7 +35,7 @@ if (!Consent.prefs()) Consent.clearPrefs();
 // Stile grafico scelto su questo dispositivo (applicato subito, prima del caricamento dell'app).
 (function () {
   var LOOKS = { moderna: 'a', petrolio: 'b', biancoblu: 'c', tabellone: 'd', laterale: 'e', pastello: 'f' };
-  var th = Consent.read('pcm-theme');
+  var th = Consent.read('pcm-theme') || 'lavagna';   // tema di partenza: Lavagna del coach
   if (th && LOOKS[th]) document.documentElement.setAttribute('data-look', LOOKS[th]);
   else if (th && th !== 'logo') document.documentElement.setAttribute('data-theme', th);
   var ds = Consent.read('pcm-design') || 'classico'; if (ds !== 'classico') document.documentElement.setAttribute('data-design', ds);

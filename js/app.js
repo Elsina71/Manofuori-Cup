@@ -3662,10 +3662,11 @@
     ['pallapazza', '#7b2ff7', '#e6f4ff', '#ff7a00']
   ];
   const THEME_KEY = 'pcm-theme';
+  const DEFAULT_THEME = 'lavagna';   // tema di chi non ne ha scelto uno: Lavagna del coach
   const LOOKS = { moderna: 'a', petrolio: 'b', biancoblu: 'c', tabellone: 'd', laterale: 'e', pastello: 'f' };
 
   function currentTheme() {
-    return ui.theme || Consent.read(THEME_KEY) || 'logo';   // senza consenso: solo per questa visita
+    return ui.theme || Consent.read(THEME_KEY) || DEFAULT_THEME;   // senza consenso: solo per questa visita
   }
 
   function applyTheme(id) {
