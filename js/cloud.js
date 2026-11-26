@@ -939,12 +939,18 @@ async function importRosters(entries) {
 const CODE_DOMAIN = 'squadre.manofuori.it';
 const codeEmail = c => `${c.replace('-', '').toLowerCase()}@${CODE_DOMAIN}`;
 const codePass = c => `Mf!${c}#squadra`;
+// Codice dell'arbitro: stesso sistema, con un dominio interno diverso (nessuna posta)
+const REF_DOMAIN = 'arbitri.manofuori.it';
+const refEmail = c => `${c.replace('-', '').toLowerCase()}@${REF_DOMAIN}`;
+// Un solo campo per entrare con un codice: prima come squadra, poi come arbitro
 async function codeLogin(code) {
   const c = normCode(code);
   if (!c) throw Object.assign(new Error('bad-code'), { code: 'bad-code' });
-  try { await signInWithEmailAndPassword(auth, codeEmail(c), codePass(c)); }
-  catch (e) { throw Object.assign(new Error('bad-code'), { code: e.code === 'auth/too-many-requests' ? 'too-many' : 'bad-code' }); }
-  return c;
+  for (const [email, kind] of [[codeEmail(c), 'team'], [refEmail(c), 'ref']]) {
+    try { await signInWithEmailAndPassword(auth, email, codePass(c)); return { code: c, kind }; }
+    catch (e) { if (e.code === 'auth/too-many-requests') throw Object.assign(new Error('too-many'), { code: 'too-many' }); }
+  }
+  throw Object.assign(new Error('bad-code'), { code: 'bad-code' });
 }
 
 const TRASH_DAYS = 7;
@@ -1277,6 +1283,9 @@ async function addScorer(email, password, court, tid) {
 // a cui è assegnato (vmatches.referee = suo uid). Account creato con l'app separata, così l'admin resta collegato.
 async function addReferee(name, email, password) {
   if (!canRefs()) throw Object.assign(new Error('permission-denied'), { code: 'permission-denied' });
+  // senza email: accesso con il codice (account interno creato qui, l'arbitro non si registra)
+  let code = '';
+  if (!String(email || '').trim()) { code = newCode(); email = refEmail(code); password = codePass(code); }
   email = email.trim().toLowerCase();
   secondAuth();
   let uid;
@@ -1291,8 +1300,18 @@ async function addReferee(name, email, password) {
     if (m && m.exists()) { await signOut(second); throw Object.assign(new Error('ref-member'), { code: 'ref-member' }); }
   }
   await signOut(second);
-  await setDoc(doc(db, 'scorers', email), { kind: 'ref', name: name.trim(), uid, court: '', tid: '', created: Date.now() });
-  return { uid };
+  await setDoc(doc(db, 'scorers', email), Object.assign({ kind: 'ref', name: name.trim(), uid, court: '', tid: '', created: Date.now() }, code ? { code } : {}));
+  return { uid, code, email };
+}
+// Nuovo codice per un arbitro: nuovo accesso, le gare designate passano al nuovo, il codice vecchio non entra più
+async function renewRefereeCode(oldEmail, oldUid, name) {
+  if (!canRefs()) return null;
+  const r = await addReferee(name, '', '');
+  const batch = writeBatch(db);
+  if (oldUid) (await getDocs(query(collection(db, 'vmatches'), where('referee', '==', oldUid)))).docs.forEach(d => batch.update(d.ref, { referee: r.uid, updated: Date.now() }));
+  batch.delete(doc(db, 'scorers', oldEmail));
+  await batch.commit();
+  return r;
 }
 // Toglie l'arbitro (l'account resta ma non può più fare nulla) e lo toglie dalle gare assegnate
 async function removeReferee(email, uid) {
@@ -1338,6 +1357,7 @@ window.Cloud = {
   openReferto,
   listScorers,
   addReferee,
+  renewRefereeCode,
   removeReferee,
   assignReferee,
   confirmReferee,

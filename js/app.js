@@ -3456,10 +3456,17 @@
       let n = 0;
       const wait = () => {
         const tc = teamCap();
-        if (!tc && n++ < 40) return setTimeout(wait, 100);
+        if (!tc && !isRef() && n++ < 40) return setTimeout(wait, 100);
+        if (isRef()) { ui.flash = { text: t('refWelcome', { n: scorer().name || '' }) }; if (location.hash !== '#/mine') location.hash = '#/mine'; render(); return; }
         const tm = tc && teamById(tc.teamId);
         if (tm) { ui.tmEdit = tm.id; ui.flash = { text: t('tmClaimDone', { n: tm.name }) }; }
-        else ui.flash = { type: 'warn', text: t('tmClaimBad') };
+        else {
+          // codice di un accesso non più valido (codice rifatto): si esce subito, così si può riprovare
+          ui.flash = { type: 'warn', text: t('tmClaimBad') };
+          if (window.Cloud && window.Cloud.logout) window.Cloud.logout();
+          if (location.hash !== '#/settings') location.hash = '#/settings';
+          render(); return;
+        }
         if (location.hash !== '#/teams') location.hash = '#/teams';
         render();
         setTimeout(() => { const el = tm && document.getElementById('tm-' + tm.id); if (el) el.scrollIntoView({ block: 'start' }); }, 300);
@@ -3867,7 +3874,7 @@
           <button class="btn" data-action="vm-escore" data-id="${m.id}"><i class="ti ti-device-tablet" aria-hidden="true"></i> E-scoresheet</button></div>`}</div>`;
     };
     return `<div class="page-head"><h1><i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(t('refCardTitle'))}</h1></div>
-      <div class="card ref-me"><h2>${esc(sc.name || '')}</h2><p class="muted">${esc(sc.email || '')}</p>
+      <div class="card ref-me"><h2>${esc(sc.name || '')}</h2><p class="muted">${esc(sc.code ? t('refViaCode') : sc.email || '')}</p>
         <p>${esc(t('refCardCounts', { n: open.length, k: toConfirm.length }))}</p></div>
       ${toConfirm.length ? `<p class="note warn"><i class="ti ti-bell" aria-hidden="true"></i> ${esc(t(toConfirm.length === 1 ? 'refToConfirmNote1' : 'refToConfirmNote', { k: toConfirm.length }))}</p>` : ''}
       <h2 class="section-title">${esc(t('refMyGames'))}</h2>
@@ -3905,13 +3912,15 @@
       <details class="card sub-form" data-keep="ref-new" ${keepOpen('ref-new', !refs.length)}><summary><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('refNew'))}</summary>
         <form class="grid-form" data-form="ref-add" autocomplete="off">
           <label>${esc(t('refName'))}<input name="name" required maxlength="80"></label>
-          <label>Email<input name="email" type="email" required autocapitalize="off" spellcheck="false"></label>
-          <label>${esc(t('scorerPassword'))}<input name="password" type="text" required minlength="6" autocapitalize="off" spellcheck="false"></label>
+          <label>Email <small class="muted">${esc(t('refOptional'))}</small><input name="email" type="email" autocapitalize="off" spellcheck="false"></label>
+          <label>${esc(t('scorerPassword'))} <small class="muted">${esc(t('refOptional'))}</small><input name="password" type="text" minlength="6" autocapitalize="off" spellcheck="false"></label>
           <div class="form-actions"><button class="btn primary"><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('refAdd'))}</button></div>
         </form><p class="muted small">${esc(t('refNewHelp'))}</p></details>
       <div class="card"><h2>${esc(t('refListTitle'))} (${refs.length})</h2>
-        ${!ui.scorers ? `<p class="muted">${esc(t('loading'))}</p>` : refs.length ? `<ul class="reg-list">${refs.map(r => `<li><span><strong>${esc(r.name)}</strong> <span class="badge">${esc(t(count(r.uid) === 1 ? 'refGames1' : 'refGames', { n: count(r.uid) }))}</span><br><small class="muted">${esc(r.email)}</small></span>
-          <span class="btn-row"><button class="btn small" data-action="ref-resetpw" data-email="${esc(r.email)}"><i class="ti ti-mail-forward" aria-hidden="true"></i> ${esc(t('userResetPw'))}</button>
+        ${!ui.scorers ? `<p class="muted">${esc(t('loading'))}</p>` : refs.length ? `<ul class="reg-list">${refs.map(r => `<li><span><strong>${esc(r.name)}</strong> <span class="badge">${esc(t(count(r.uid) === 1 ? 'refGames1' : 'refGames', { n: count(r.uid) }))}</span><br>${r.code ? `<small class="muted">${esc(t('refCodeLbl'))}</small> <code class="code-pill">${esc(r.code)}</code>` : `<small class="muted">${esc(r.email)}</small>`}</span>
+          <span class="btn-row">${r.code ? `<button class="btn small" data-action="ref-code-copy" data-code="${esc(r.code)}" data-name="${esc(r.name)}"><i class="ti ti-link" aria-hidden="true"></i> ${esc(t('tmCodeCopy'))}</button>
+          <button class="btn small" data-action="ref-code-renew" data-email="${esc(r.email)}" data-uid="${esc(r.uid || '')}" data-name="${esc(r.name)}"><i class="ti ti-refresh" aria-hidden="true"></i> ${esc(t('tmCodeNew'))}</button>`
+          : `<button class="btn small" data-action="ref-resetpw" data-email="${esc(r.email)}"><i class="ti ti-mail-forward" aria-hidden="true"></i> ${esc(t('userResetPw'))}</button>`}
           <button class="btn small danger" data-action="ref-remove" data-email="${esc(r.email)}" data-uid="${esc(r.uid || '')}"><i class="ti ti-user-off" aria-hidden="true"></i> ${esc(t('refRemove'))}</button></span></li>`).join('')}</ul>`
           : `<p class="muted">${esc(t('refNoneYet'))}</p>`}</div>
       <h2 class="section-title">${esc(t('refAssignTitle'))}</h2>
@@ -4005,7 +4014,7 @@
         <button class="btn" data-action="logout">${esc(t('logout'))}</button>
         ${window.Cloud.adminMember ? '' : `<p class="note warn">${esc(t('adminNoProfile'))}</p>${selfProfileCard()}`}`;
     } else if (user && scorer()) {
-      account = `<p><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(isRef() ? t('refBadge', { n: scorer().name || '' }) : t('scorerBadge', { c: scorer().court }))} · ${esc(user.email)}</p>
+      account = `<p><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(isRef() ? t('refBadge', { n: scorer().name || '' }) : t('scorerBadge', { c: scorer().court }))}${scorer().code ? '' : ` · ${esc(user.email)}`}</p>
         <div class="btn-row"><a class="btn primary" href="#/mine"><i class="ti ti-device-mobile" aria-hidden="true"></i> ${esc(t('navMine'))}</a>
         <button class="btn" data-action="logout">${esc(t('logout'))}</button></div>`;
     } else if (user && teamCap()) {
@@ -4044,6 +4053,10 @@
             <button class="btn primary">${esc(t('login'))}</button>
           </div>
         </form>
+        <form class="card claim-card" data-form="tm-codelogin" autocomplete="off"><h3><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('codeLoginTitle'))}</h3>
+          <p class="muted small">${esc(t('codeLoginHelp'))}</p>
+          <div class="claim-row"><label>${esc(t('codeLbl'))}<input name="code" required maxlength="12" placeholder="ABCD-EFGH" autocapitalize="characters" spellcheck="false"></label>
+            <button class="btn primary">${esc(t('tmClaimGo'))}</button></div></form>
         <details class="sub-form" data-keep="register" ${ui.showRegister || keepOpen('register') ? 'open' : ''}><summary><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('registerTitle'))}</summary>
           <p class="muted small">${esc(t('registerHelp'))}</p>
           <form class="grid-form" data-form="register">
@@ -4221,6 +4234,15 @@
       if (!confirm(t('userResetPwConfirm', { n: el.dataset.email, e: el.dataset.email }))) return;
       window.Cloud.resetPassword(el.dataset.email).then(() => { ui.flash = { text: t('userResetPwSent', { n: el.dataset.email, e: el.dataset.email }) }; render(); }).catch(() => warn('resetFailed'));
     },
+    'ref-code-copy': el => copyText(t('refCodeMsg', { n: el.dataset.name, c: el.dataset.code, l: codeLink(el.dataset.code) })),
+    'ref-code-renew': el => {
+      if (!confirm(t('refCodeRenewConfirm', { n: el.dataset.name }))) return;
+      el.disabled = true;
+      window.Cloud.renewRefereeCode(el.dataset.email, el.dataset.uid, el.dataset.name).then(r => {
+        ui.scorers = (ui.scorers || []).filter(x => x.email !== el.dataset.email).concat([{ email: r.email, kind: 'ref', name: el.dataset.name, uid: r.uid, code: r.code }]);
+        ui.flash = { text: t('refAddedCode', { n: el.dataset.name, c: r.code }) }; render();
+      }).catch(e => { el.disabled = false; vErr(e); });
+    },
     'ref-confirm': el => {
       const m = vmById(el.dataset.id), tour = m && vtById(m.tid), sc = scorer();
       if (!m || !tour || !sc || !isRef() || m.referee !== myUid()) return;
@@ -4289,8 +4311,9 @@
     'ref-add': f => {
       const btn = f.querySelector('button.primary'); btn.disabled = true;
       const name = f.name.value.trim(), email = f.email.value.trim();
+      if (email && f.password.value.length < 6) { btn.disabled = false; return warn('refNeedPw'); }
       window.Cloud.addReferee(name, email, f.password.value)
-        .then(res => { ui.scorers = (ui.scorers || []).filter(x => x.email !== email.toLowerCase()).concat([{ email: email.toLowerCase(), kind: 'ref', name, uid: res.uid }]); (ui.keep || {})['ref-new'] = false; ui.flash = { text: t('refAdded', { n: name, e: email }) }; render(); })
+        .then(res => { ui.scorers = (ui.scorers || []).filter(x => x.email !== res.email).concat([Object.assign({ email: res.email, kind: 'ref', name, uid: res.uid }, res.code ? { code: res.code } : {})]); (ui.keep || {})['ref-new'] = false; ui.flash = { text: res.code ? t('refAddedCode', { n: name, c: res.code }) : t('refAdded', { n: name, e: email }) }; render(); })
         .catch(err => { btn.disabled = false; warn(err.code === 'ref-exists' ? 'refExists' : err.code === 'ref-member' ? 'refMember' : 'scorerErr', { code: err.code || err.message }); });
     },
     'scorer-add': f => {
@@ -4353,7 +4376,7 @@
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
-  const REFS_ACTIONS = new Set(['ref-remove', 'ref-resetpw', 'notice-dismiss']);   // responsabile arbitri
+  const REFS_ACTIONS = new Set(['ref-code-copy', 'ref-code-renew', 'ref-remove', 'ref-resetpw', 'notice-dismiss']);   // responsabile arbitri
   const REF_ACTIONS = new Set(['ref-confirm', 'tm-nums-edit']);   // arbitro
   const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'pdf-view', 'pdf-zip']);
   const PUBLIC_FORMS = new Set(['tm-codelogin', 'login', 'register', 'complete-profile']);
