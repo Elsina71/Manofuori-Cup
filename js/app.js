@@ -20,6 +20,7 @@
   const canNotice = scope => (scope === 'home' ? admin() : tourAdmin());
   // Account di un campo (refertista): vede "Le mie gare" e apre i referti elettronici.
   const scorer = () => (window.Cloud && !window.Cloud.isAdmin && window.Cloud.scorer) || null;
+  const teamCap = () => (window.Cloud && !window.Cloud.isAdmin && window.Cloud.teamCap) || null;   // entrato con il codice capitano di una squadra
   let pendingRender = false;
 
   // ---------- helper ----------
@@ -103,7 +104,7 @@
     else if (r[0] === 'me') { nav = 'me'; html = viewProfile(); }
     else if (r[0] === 'teams') { nav = 'teams'; html = viewTeams(); }
     // link del codice del capitano: apre Squadre con il codice già scritto
-    else if (r[0] === 'codice') { ui.claimCode = r[1] || ''; try { sessionStorage.setItem('pcm-claim', ui.claimCode); } catch (e) { /* niente */ } location.replace('#/teams'); return; }
+    else if (r[0] === 'codice') { ui.claimCode = r[1] || ''; location.replace('#/teams'); if (!myUid() && ui.claimCode) codeEnter(ui.claimCode); return; }
     else if (r[0] === 'tema') { nav = 'settings'; html = viewTheme(); }
     else if (r[0] === 'livelli' && tourAdmin()) { nav = 'settings'; html = viewLevels(); }
     else if (r[0] === 'gare') { nav = 'gare'; html = viewMyMatches(); }
@@ -134,7 +135,7 @@
     document.querySelectorAll('[data-tour-only]').forEach(el => { el.hidden = !tourAdmin(); });
     document.querySelectorAll('[data-cash-only]').forEach(el => { el.hidden = !cashier(); });
     document.querySelectorAll('[data-staff-badge]').forEach(el => { el.hidden = !(admin() || tourAdmin() || cashier()); const l = el.querySelector('.lbl'); if (l) l.textContent = ' ' + (admin() ? 'Admin' : [tourAdmin() ? t('roleTourShort') : '', cashier() ? t('roleCashShort') : ''].filter(Boolean).join(' · ')); });
-    document.querySelectorAll('[data-guest-only]').forEach(el => { el.hidden = admin() || !!scorer() || !!member(); });
+    document.querySelectorAll('[data-guest-only]').forEach(el => { el.hidden = admin() || !!scorer() || !!member() || !!teamCap(); });
     document.querySelectorAll('[data-member-only]').forEach(el => { el.hidden = !member(); });
     document.querySelectorAll('[data-team-only]').forEach(el => { el.hidden = !(member() && myTeams().length); });
     document.querySelectorAll('[data-scorer-only]').forEach(el => { el.hidden = !scorer(); });
@@ -3275,7 +3276,7 @@
   const ROSTER_TIP = 12;   // numero di giocatori consigliato (non c'è un massimo)
   const teamById = id => (S().teams || []).find(x => x.id === id);
   const rosterOf = id => ((S().rosters || []).find(x => x.id === id) || {}).players || [];
-  const isCaptain = tm => !!member() && tm.captainUid === myUid();
+  const isCaptain = tm => (!!member() && tm.captainUid === myUid()) || (!!tm.codeUid && tm.codeUid === myUid());
   const canEditTeam = tm => tourAdmin() || isCaptain(tm);
   const byLevel = (a, b) => (teamLevels().indexOf(a.level) + 1 || 99) - (teamLevels().indexOf(b.level) + 1 || 99) || a.name.localeCompare(b.name);
   const byShirt = (a, b) => (a.num === '' ? 999 : Number(a.num)) - (b.num === '' ? 999 : Number(b.num)) || `${a.last} ${a.first}`.localeCompare(`${b.last} ${b.first}`);
@@ -3304,7 +3305,7 @@
   function teamForm(tm) {
     const v = tm || { name: '', level: '', kind: 'X', captainUid: '' };
     const players = tm ? rosterOf(tm.id).slice().sort(byShirt) : [];
-    const lvLocked = !!tm && tm.status === 'ok' && !tourAdmin();
+    const lvLocked = !!tm && (tm.status === 'ok' || !!teamCap()) && !tourAdmin();
     const levels = teamLevels().concat(v.level && !teamLevels().includes(v.level) ? [v.level] : []);
     const members = tourAdmin() ? (S().members || []).slice().sort((a, b) => personName(a).localeCompare(personName(b))) : [];
     return `<form class="grid-form team-form" data-form="team-save" data-id="${tm ? tm.id : ''}" autocomplete="off">
@@ -3327,7 +3328,7 @@
   }
 
   // ---------- codice del capitano ----------
-  const teamCodeOf = id => (S().teamCodes || []).find(x => x.teamId === id);
+  const teamCodeOf = id => (S().teamCodes || []).find(x => x.teamId === id && x.uid);
   const codeLink = c => `${location.origin}${location.pathname}#/codice/${c}`;
   function copyText(txt) {
     const done = () => { ui.flash = { text: t('copied') }; render(); };
@@ -3343,25 +3344,40 @@
   }
   // admin: tutti i codici in un riquadro (crea quelli mancanti, copia l'elenco da mandare ai capitani)
   function teamCodesCard(all) {
-    const missing = all.filter(x => !teamCodeOf(x.id)).length;
+    const missing = all.filter(x => !teamCodeOf(x.id)).length;   // anche i codici senza account (prima versione)
     return `<details class="card sub-form" data-keep="tm-codes" ${keepOpen('tm-codes')}><summary><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmCodesTitle'))}</summary>
       <p class="muted small">${esc(t('tmCodesHelp'))}</p>
       <div class="btn-row">${missing ? `<button class="btn primary" data-action="tm-codes-all"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmCodesMake', { n: missing }))}</button>` : ''}
         ${all.length > missing ? `<button class="btn" data-action="tm-codes-copy"><i class="ti ti-copy" aria-hidden="true"></i> ${esc(t('tmCodesCopy'))}</button>` : ''}</div>
       <div class="table-wrap"><table class="table"><thead><tr><th>${esc(t('navTeams'))}</th><th>${esc(t('tmLevel'))}</th><th>${esc(t('tmCaptain'))}</th><th>${esc(t('tmCodeLbl'))}</th></tr></thead>
-        <tbody>${all.map(x => { const c = teamCodeOf(x.id); return `<tr><td>${esc(x.name)}</td><td>${esc(x.level)}</td><td>${esc(x.captainName || '—')}</td><td>${c ? `<code class="code-pill">${esc(c.id)}</code>` : `<span class="muted small">${esc(t(x.claimCode ? 'tmCodeUsed' : 'tmCodeNone'))}</span>`}</td></tr>`; }).join('')}</tbody></table></div>
+        <tbody>${all.map(x => { const c = teamCodeOf(x.id); return `<tr><td>${esc(x.name)}</td><td>${esc(x.level)}</td><td>${esc(x.captainName || '—')}</td><td>${c ? `<code class="code-pill">${esc(c.id)}</code>` : `<span class="muted small">${esc(t('tmCodeNone'))}</span>`}</td></tr>`; }).join('')}</tbody></table></div>
     </details>`;
   }
-  // capitano: inserisce il codice ricevuto (serve un account: accesso o registrazione)
-  function claimCard() {
-    let pre = ui.claimCode || '';
-    if (!pre) { try { pre = sessionStorage.getItem('pcm-claim') || ''; } catch (e) { /* niente */ } }
-    if (!member()) return `<div class="card claim-card"><h2><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmClaimTitle'))}</h2>
-      <p class="muted">${esc(t('tmClaimLogin'))}</p>${pre ? `<p>${esc(t('tmClaimYour'))} <code class="code-pill">${esc(pre)}</code></p>` : ''}<a class="btn primary" href="#/settings">${esc(t('login'))}</a></div>`;
-    return `<form class="card claim-card" data-form="tm-claim" autocomplete="off"><h2><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmClaimTitle'))}</h2>
-      <p class="muted small">${esc(t('tmClaimHelp'))}</p>
+  // capitano: entra con il codice della squadra, quando vuole e da qualsiasi dispositivo (nessun account personale)
+  function codeCard() {
+    const pre = ui.claimCode || '';
+    return `<form class="card claim-card" data-form="tm-codelogin" autocomplete="off"><h2><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('tmClaimTitle'))}</h2>
+      <p class="muted small">${esc(t('tmClaimHelp'))}${myUid() ? ' ' + esc(t('tmClaimSwitch')) : ''}</p>
       <div class="claim-row"><label>${esc(t('tmCodeLbl'))}<input name="code" required maxlength="12" value="${esc(pre)}" placeholder="ABCD-EFGH" autocapitalize="characters" spellcheck="false"></label>
         <button class="btn primary">${esc(t('tmClaimGo'))}</button></div></form>`;
+  }
+  function codeEnter(code, btn) {
+    window.Cloud.codeLogin(code).then(() => {
+      ui.claimCode = '';
+      // l'app riconosce l'account della squadra appena ha letto il codice: poi apre la scheda con la lista
+      let n = 0;
+      const wait = () => {
+        const tc = teamCap();
+        if (!tc && n++ < 40) return setTimeout(wait, 100);
+        const tm = tc && teamById(tc.teamId);
+        if (tm) { ui.tmEdit = tm.id; ui.flash = { text: t('tmClaimDone', { n: tm.name }) }; }
+        else ui.flash = { type: 'warn', text: t('tmClaimBad') };
+        if (location.hash !== '#/teams') location.hash = '#/teams';
+        render();
+        setTimeout(() => { const el = tm && document.getElementById('tm-' + tm.id); if (el) el.scrollIntoView({ block: 'start' }); }, 300);
+      };
+      wait();
+    }).catch(err => { if (btn) btn.disabled = false; warn(err && err.code === 'too-many' ? 'tmClaimMany' : 'tmClaimBad'); });
   }
 
   function teamStatusBadge(tm) {
@@ -3399,25 +3415,27 @@
 
   function viewTeams() {
     const m = member(), all = (S().teams || []).slice().sort(byLevel);
-    const mine = m ? all.filter(isCaptain) : [];
+    const mine = m || teamCap() ? all.filter(isCaptain) : [];
     let create = '';
     // l'admin (generale o tornei) iscrive le squadre anche senza essere capitano: entrano già ammesse
     if (tourAdmin()) create = `<details class="card sub-form" data-keep="tm-new" ${keepOpen('tm-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('tmNewAdmin'))}</summary>${teamForm(null)}</details>`;
+    else if (teamCap()) create = '';
     else if (m) {
       if (!captainRole()) create = mine.length ? '' : `<div class="card"><p class="muted"><i class="ti ti-lock" aria-hidden="true"></i> ${esc(t('tmNotCaptain'))}</p></div>`;
       else if (needsVerify()) create = `<p class="note warn">${esc(t('verifyFirst'))}</p>`;
       else if (banOf(m.uid).tour) create = banNotice('tour');
       else create = `<details class="card sub-form" data-keep="tm-new" ${keepOpen('tm-new')}><summary><i class="ti ti-plus" aria-hidden="true"></i> ${esc(t('tmNew'))}</summary>${teamForm(null)}</details>`;
-    } else if (!scorer()) create = `<div class="card"><p class="muted">${esc(t('tmLoginFirst'))}</p><a class="btn" href="#/settings">${esc(t('login'))}</a></div>`;
+    } else if (!scorer() && !teamCap()) create = `<div class="card"><p class="muted">${esc(t('tmLoginFirst'))}</p><a class="btn" href="#/settings">${esc(t('login'))}</a></div>`;
     // elenco per livello: tutti vedono le squadre ammesse; l'admin anche quelle in attesa
-    const shown = all.filter(x => tourAdmin() || x.status === 'ok');
+    // le proprie squadre stanno già in cima ("Le mie squadre"): non si ripetono nell'elenco per livello
+    const shown = all.filter(x => (tourAdmin() || x.status === 'ok') && !mine.includes(x));
     const pending = tourAdmin() ? all.filter(x => x.status !== 'ok').length : 0;
     const groups = teamLevels().concat([...new Set(shown.map(x => x.level))].filter(l => !teamLevels().includes(l)))
       .map(l => ({ l, list: shown.filter(x => x.level === l) })).filter(g => g.list.length);
     return `${verifyNotice()}
       <div class="page-head"><h1><i class="ti ti-shirt-sport" aria-hidden="true"></i> ${esc(t('navTeams'))}</h1><p class="muted">${esc(t('tmIntro'))}</p></div>
       ${mine.length ? `<section class="feat-block"><h2>${esc(t('tmMine'))}</h2><div class="ch-grid">${mine.map(teamCard).join('')}</div></section>` : ''}
-      ${tourAdmin() ? teamCodesCard(all) : !scorer() && (!mine.length || ui.claimCode) ? claimCard() : ''}
+      ${tourAdmin() ? teamCodesCard(all) : !scorer() && !teamCap() && (!mine.length || ui.claimCode) ? codeCard() : ''}
       ${create}
       ${pending ? `<p class="note warn"><i class="ti ti-clock" aria-hidden="true"></i> ${esc(t('tmPendingAdmin', { n: pending }))}</p>` : ''}
       ${groups.length ? groups.map(g => `<section class="feat-block"><h2>${esc(g.l)} <small class="muted">(${g.list.length})</small></h2>
@@ -3528,17 +3546,9 @@
   };
   const teamForms = {
     'team-save': f => teamSave(f),
-    'tm-claim': f => {
-      const me = member();
-      if (!me || !window.Cloud) return warn('tmClaimLogin');
+    'tm-codelogin': f => {
       const btn = f.querySelector('button'); if (btn) btn.disabled = true;
-      window.Cloud.claimTeam(f.code.value, personName(me)).then(tid => {
-        ui.claimCode = ''; try { sessionStorage.removeItem('pcm-claim'); } catch (e) { /* niente */ }
-        const tm = teamById(tid);
-        ui.tmEdit = tid; ui.flash = { text: t('tmClaimDone', { n: tm ? tm.name : '' }) };
-        if (location.hash !== '#/teams') location.hash = '#/teams'; render();
-        setTimeout(() => { const el = document.getElementById('tm-' + tid); if (el) el.scrollIntoView({ block: 'start' }); }, 300);
-      }).catch(err => { if (btn) btn.disabled = false; warn(err && err.code === 'bad-code' ? 'tmClaimBad' : 'regError', { code: (err && (err.code || err.message)) || '' }); });
+      codeEnter(f.code.value, btn);
     },
     'levels-save': f => {
       const list = [...new Set(f.levels.value.split('\n').map(x => x.trim()).filter(Boolean))];
@@ -3815,6 +3825,11 @@
     } else if (user && scorer()) {
       account = `<p><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(t('scorerBadge', { c: scorer().court }))} · ${esc(user.email)}</p>
         <div class="btn-row"><a class="btn primary" href="#/mine"><i class="ti ti-device-mobile" aria-hidden="true"></i> ${esc(t('navMine'))}</a>
+        <button class="btn" data-action="logout">${esc(t('logout'))}</button></div>`;
+    } else if (user && teamCap()) {
+      const tm = teamById(teamCap().teamId);
+      account = `<p><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(t('teamCapBadge', { n: tm ? tm.name : '—' }))}</p>
+        <div class="btn-row"><a class="btn primary" href="#/teams"><i class="ti ti-shirt-sport" aria-hidden="true"></i> ${esc(t('navTeams'))}</a>
         <button class="btn" data-action="logout">${esc(t('logout'))}</button></div>`;
     } else if (user && member()) {
       account = `<p><i class="ti ti-circle-check" aria-hidden="true"></i> ${esc(t('loggedInAs', { email: `${personName(member())} · ${user.email}` }))}</p>
@@ -4114,10 +4129,11 @@
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
   const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'pdf-view', 'pdf-zip']);
-  const PUBLIC_FORMS = new Set(['login', 'register', 'complete-profile']);
+  const PUBLIC_FORMS = new Set(['tm-codelogin', 'login', 'register', 'complete-profile']);
   const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
   const MEMBER_ACTIONS = new Set(['profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
-  const MEMBER_FORMS = new Set(['tm-claim', 'profile-save', 'fp-join', 'fp-blocks', 'team-save']);
+  const CODE_ACTIONS = new Set(['tm-edit', 'tm-addrow', 'tm-delrow', 'logout']);   // account del codice capitano: solo la sua squadra
+  const MEMBER_FORMS = new Set(['profile-save', 'fp-join', 'fp-blocks', 'team-save']);
   let submitMode = 'save';
 
   // reminder delle prenotazioni: la prima pagina si aggiorna ogni minuto (compaiono e spariscono da soli)
@@ -4134,7 +4150,7 @@
     const fn = actions[el.dataset.action];
     if (!fn) return;
     e.preventDefault();
-    if (!admin() && !PUBLIC_ACTIONS.has(el.dataset.action) && !(tourAdmin() && TOUR_ACTIONS.has(el.dataset.action)) && !(cashier() && CASH_ACTIONS.has(el.dataset.action)) && !(scorer() && SCORER_ACTIONS.has(el.dataset.action)) && !(member() && MEMBER_ACTIONS.has(el.dataset.action))) return;
+    if (!admin() && !PUBLIC_ACTIONS.has(el.dataset.action) && !(tourAdmin() && TOUR_ACTIONS.has(el.dataset.action)) && !(cashier() && CASH_ACTIONS.has(el.dataset.action)) && !(scorer() && SCORER_ACTIONS.has(el.dataset.action)) && !(member() && MEMBER_ACTIONS.has(el.dataset.action)) && !(teamCap() && CODE_ACTIONS.has(el.dataset.action))) return;
     fn(el);
   });
 
@@ -4143,7 +4159,7 @@
     if (!f) return;
     e.preventDefault();
     const fn = forms[f.dataset.form];
-    if (fn && (admin() || (tourAdmin() && TOUR_FORMS.has(f.dataset.form)) || (cashier() && CASH_FORMS.has(f.dataset.form)) || PUBLIC_FORMS.has(f.dataset.form) || (scorer() && SCORER_FORMS.has(f.dataset.form)) || (member() && MEMBER_FORMS.has(f.dataset.form)))) fn(f);
+    if (fn && (admin() || (tourAdmin() && TOUR_FORMS.has(f.dataset.form)) || (cashier() && CASH_FORMS.has(f.dataset.form)) || PUBLIC_FORMS.has(f.dataset.form) || (scorer() && SCORER_FORMS.has(f.dataset.form)) || (member() && MEMBER_FORMS.has(f.dataset.form)) || (teamCap() && f.dataset.form === 'team-save'))) fn(f);
     submitMode = 'save';
   });
 

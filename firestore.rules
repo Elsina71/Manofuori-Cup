@@ -185,30 +185,21 @@ service cloud.firestore {
         && (resource.data.status == 'pending' || request.resource.data.level == resource.data.level)
         && teamFields(request.resource.data);
       allow delete: if isMember() && resource.data.captainUid == request.auth.uid && resource.data.status == 'pending';
-      // Codice del capitano: chi ha il codice (account registrato) diventa capitano della squadra. Il codice si usa una
-      // volta sola: va cancellato nella stessa scrittura, quindi quello che resta in claimCode non vale più.
-      allow update: if isMember()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['captainUid', 'captainName', 'claimCode', 'updated'])
-        && request.resource.data.captainUid == request.auth.uid
-        && request.resource.data.captainName is string && request.resource.data.captainName.size() <= 130
-        && request.resource.data.claimCode is string && request.resource.data.claimCode.size() == 9
-        && exists(/databases/$(database)/documents/teamCodes/$(request.resource.data.claimCode))
-        && get(/databases/$(database)/documents/teamCodes/$(request.resource.data.claimCode)).data.teamId == id
-        && !existsAfter(/databases/$(database)/documents/teamCodes/$(request.resource.data.claimCode));
+      // Account del codice capitano (codeUid, impostato dall'admin): cambia nome, tipo e giocatori collegati, non il livello né il capitano
+      allow update: if request.auth != null && resource.data.get('codeUid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'kind', 'memberUids', 'updated'])
+        && teamFields(request.resource.data);
     }
-    // teamCodes/{codice}: un codice per squadra, creato dagli admin dei tornei. Solo chi conosce il codice lo legge
-    // (nessun elenco); lo cancella l'admin o chi lo usa diventando capitano (vedi teams).
+    // teamCodes/{codice} = { teamId, uid }: il codice del capitano di una squadra, con l'account per entrare (vedi codeUid).
+    // Li crea e li vede tutti solo l'admin dei tornei; un account legge un codice solo se lo conosce (nessun elenco).
     match /teamCodes/{code} {
       allow get: if request.auth != null;
-      allow list, create, update: if isTourAdmin();
-      allow delete: if isTourAdmin()
-        || (isMember() && getAfter(teamDoc(resource.data.teamId)).data.captainUid == request.auth.uid
-          && getAfter(teamDoc(resource.data.teamId)).data.claimCode == code);
+      allow list, create, update, delete: if isTourAdmin();
     }
     match /rosters/{id} {
       allow read: if isTourAdmin() || isScorer() || (request.auth != null && resource.data.captainUid == request.auth.uid);
-      // il capitano appena entrato con il codice legge la lista già inserita dall'organizzatore
-      allow get: if request.auth != null && exists(teamDoc(id)) && get(teamDoc(id)).data.get('captainUid', '') == request.auth.uid;
+      // l'account del codice capitano legge la lista della sua squadra
+      allow get: if request.auth != null && exists(teamDoc(id)) && get(teamDoc(id)).data.get('codeUid', '') == request.auth.uid;
       allow write: if isTourAdmin();
       allow create, update: if isMember()
         && request.resource.data.keys().hasOnly(['captainUid', 'players', 'updated'])
@@ -216,6 +207,12 @@ service cloud.firestore {
         && getAfter(teamDoc(id)).data.captainUid == request.auth.uid
         && request.resource.data.players is list && request.resource.data.players.size() <= 40;
       allow delete: if isMember() && resource.data.captainUid == request.auth.uid && !existsAfter(teamDoc(id));
+      // account del codice capitano: scrive la lista della sua squadra (il capitano registrato, se c'è, resta lo stesso)
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasOnly(['captainUid', 'players', 'updated'])
+        && getAfter(teamDoc(id)).data.get('codeUid', '') == request.auth.uid
+        && request.resource.data.captainUid == getAfter(teamDoc(id)).data.get('captainUid', '')
+        && request.resource.data.players is list && request.resource.data.players.size() <= 40;
     }
 
     // Messaggi dell'admin: li legge solo chi è tra i destinatari (o tutti gli utenti registrati se "all").

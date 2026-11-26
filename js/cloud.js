@@ -32,7 +32,7 @@ try {
 // Ultimo contenuto noto di ogni documento, per scrivere solo ciò che cambia.
 const last = { settings: null, tour: null };
 const loaded = { settings: false, tour: false };
-let user = null, isAdmin = false, scorer = null, member = null, coach = null, adminMember = null;
+let user = null, isAdmin = false, scorer = null, teamCap = null, member = null, coach = null, adminMember = null;
 let roles = {};   // ruoli dati dagli admin generali: { tour: admin tornei, cash: cassa }
 const canTour = () => isAdmin || !!roles.tour;
 
@@ -120,6 +120,7 @@ onAuthStateChanged(auth, async u => {
   isAdmin = false;
   roles = {};
   scorer = null;
+  teamCap = null;
   coach = null;
   adminMember = null;
   if (u) {
@@ -140,8 +141,16 @@ onAuthStateChanged(auth, async u => {
         if (sc.exists()) scorer = Object.assign({ email: u.email.toLowerCase() }, sc.data());
       } catch (e) { scorer = null; }
     }
+    // Account del codice capitano di una squadra: entra solo nella scheda della sua squadra
+    teamCap = null;
+    if (!isAdmin && u.email && u.email.toLowerCase().endsWith('@' + CODE_DOMAIN)) {
+      const c = normCode(u.email.split('@')[0]);
+      try { const d = await getDoc(doc(db, 'teamCodes', c)); teamCap = { code: c, teamId: d.exists() && d.data().uid === u.uid ? d.data().teamId : '' }; }
+      catch (e) { teamCap = { code: c, teamId: '' }; }
+      member = null;
+    }
     // Utente registrato (giocatore): profilo in members/{uid}.
-    if (!isAdmin && !scorer) {
+    if (!isAdmin && !scorer && !teamCap) {
       try {
         const m = await getDoc(doc(db, 'members', u.uid));
         member = m.exists() ? Object.assign({ uid: u.uid, email: u.email || '' }, m.data()) : null;
@@ -892,28 +901,33 @@ const normCode = c => { const s = String(c || '').toUpperCase().replace(/[^A-Z0-
 // Nuovo codice per una o più squadre: quelli vecchi delle stesse squadre smettono di valere
 async function makeTeamCodes(teamIds) {
   const old = await getDocs(collection(db, 'teamCodes'));
-  const batch = writeBatch(db), now = Date.now(), out = {};
-  old.docs.filter(d => teamIds.includes(d.data().teamId)).forEach(d => batch.delete(d.ref));
-  teamIds.forEach(id => { const c = newCode(); out[id] = c; batch.set(doc(db, 'teamCodes', c), { teamId: id, created: now, by: user.email || '' }); });
-  await batch.commit();
+  const out = {}, now = Date.now();
+  secondAuth();
+  for (const id of teamIds) {
+    const c = newCode();
+    const cred = await createUserWithEmailAndPassword(second, codeEmail(c), codePass(c));
+    await signOut(second);
+    // il codice vecchio della squadra smette di valere: la squadra riconosce solo l'account del codice nuovo
+    const batch = writeBatch(db);
+    old.docs.filter(d => d.data().teamId === id).forEach(d => batch.delete(d.ref));
+    batch.set(doc(db, 'teamCodes', c), { teamId: id, uid: cred.user.uid, created: now, by: user.email || '' });
+    batch.update(doc(db, 'teams', id), { codeUid: cred.user.uid, updated: now });
+    await batch.commit();
+    out[id] = c;
+  }
   return out;
 }
-// Il capitano inserisce il codice: diventa capitano della squadra e la lista passa a lui
-async function claimTeam(code, captainName) {
+// Accesso con il codice: ogni squadra ha un account suo (email interna, nessuna posta), creato dall'admin con un'app
+// Firebase separata. Il capitano entra quando vuole, da qualsiasi dispositivo, scrivendo solo il codice.
+const CODE_DOMAIN = 'squadre.manofuori.it';
+const codeEmail = c => `${c.replace('-', '').toLowerCase()}@${CODE_DOMAIN}`;
+const codePass = c => `Mf!${c}#squadra`;
+async function codeLogin(code) {
   const c = normCode(code);
   if (!c) throw Object.assign(new Error('bad-code'), { code: 'bad-code' });
-  let snap;
-  try { snap = await getDoc(doc(db, 'teamCodes', c)); } catch (e) { throw Object.assign(new Error('bad-code'), { code: 'bad-code' }); }
-  if (!snap.exists()) throw Object.assign(new Error('bad-code'), { code: 'bad-code' });
-  const tid = snap.data().teamId, now = Date.now();
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'teams', tid), { captainUid: user.uid, captainName: captainName || '', claimCode: c, updated: now });
-  batch.delete(doc(db, 'teamCodes', c));
-  await batch.commit();
-  const rref = doc(db, 'rosters', tid);
-  const r = await getDoc(rref).catch(() => null);
-  if (r && r.exists()) await updateDoc(rref, { captainUid: user.uid, updated: now });
-  return tid;
+  try { await signInWithEmailAndPassword(auth, codeEmail(c), codePass(c)); }
+  catch (e) { throw Object.assign(new Error('bad-code'), { code: e.code === 'auth/too-many-requests' ? 'too-many' : 'bad-code' }); }
+  return c;
 }
 
 const TRASH_DAYS = 7;
@@ -980,6 +994,14 @@ function listenRosters() {
   listenTeamCodes();
   if (rosterUnsub) { rosterUnsub(); rosterUnsub = null; }
   Store.applyRemote('rosters', []);
+  if (user && teamCap && teamCap.teamId) {
+    // account del codice: la lista della sua squadra (letta per id)
+    rosterUnsub = onSnapshot(doc(db, 'rosters', teamCap.teamId), d => {
+      Store.applyRemote('rosters', d.exists() ? [Object.assign({ id: d.id }, d.data())] : []);
+      refresh();
+    }, onError);
+    return;
+  }
   if (!user || !(canTour() || member || scorer)) return;
   // admin tornei e scorer (per il referto) leggono tutte le rose; il capitano solo le sue
   const src = canTour() || scorer ? collection(db, 'rosters') : query(collection(db, 'rosters'), where('captainUid', '==', user.uid));
@@ -1270,7 +1292,7 @@ window.Cloud = {
   deleteVTour,
   trashVTour,
   makeTeamCodes,
-  claimTeam,
+  codeLogin,
   restoreVTour,
   purgeTrash,
   saveTeam,
@@ -1290,6 +1312,7 @@ window.Cloud = {
   adminCreateUser,
   get member() { return member; },
   get scorer() { return scorer; },
+  get teamCap() { return teamCap; },
   get coach() { return coach; },
   acceptPrivacy,
   requestDeletion,
