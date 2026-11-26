@@ -35,6 +35,7 @@ const loaded = { settings: false, tour: false };
 let user = null, isAdmin = false, scorer = null, teamCap = null, member = null, coach = null, adminMember = null;
 let roles = {};   // ruoli dati dagli admin generali: { tour: admin tornei, cash: cassa }
 const canTour = () => isAdmin || !!roles.tour;
+const canRefs = () => canTour() || !!roles.refs;   // responsabile arbitri (o admin tornei)
 
 const refresh = () => window.App && window.App.refresh();
 
@@ -240,6 +241,8 @@ function listenAccount() {
   // Avvisi delle prenotazioni (modificate o cancellate): all'utente i suoi, all'admin quelli per "admins".
   const noteParts = {};
   const notes = isAdmin ? { a: query(collection(db, 'notices'), where('to', '==', 'admins')) } : { u: query(collection(db, 'notices'), where('to', '==', user.uid)) };
+  // responsabile arbitri: anche gli avvisi delle conferme degli arbitri
+  if (!isAdmin && roles.refs) notes.r = query(collection(db, 'notices'), where('to', '==', 'refs'));
   Object.entries(notes).forEach(([k, src]) => noteUnsubs.push(onSnapshot(src, snap => {
     noteParts[k] = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
     Store.applyRemote('notices', Object.values(noteParts).flat().sort((a, b) => (b.at || 0) - (a.at || 0)));
@@ -1016,9 +1019,9 @@ function listenRosters() {
     }, onError);
     return;
   }
-  if (!user || !(canTour() || member || scorer)) return;
-  // admin tornei e scorer (per il referto) leggono tutte le rose; il capitano solo le sue
-  const src = canTour() || scorer ? collection(db, 'rosters') : query(collection(db, 'rosters'), where('captainUid', '==', user.uid));
+  if (!user || !(canTour() || member || scorer || roles.refs)) return;
+  // admin tornei, responsabile arbitri e scorer (per il referto) leggono tutte le rose; il capitano solo le sue
+  const src = canRefs() || scorer ? collection(db, 'rosters') : query(collection(db, 'rosters'), where('captainUid', '==', user.uid));
   rosterUnsub = onSnapshot(src, snap => {
     Store.applyRemote('rosters', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
     refresh();
@@ -1273,7 +1276,7 @@ async function addScorer(email, password, court, tid) {
 // L'arbitro è un account come quelli dei campi (scorers/{email}, kind 'ref') ma compila il referto solo delle gare
 // a cui è assegnato (vmatches.referee = suo uid). Account creato con l'app separata, così l'admin resta collegato.
 async function addReferee(name, email, password) {
-  if (!canTour()) throw Object.assign(new Error('permission-denied'), { code: 'permission-denied' });
+  if (!canRefs()) throw Object.assign(new Error('permission-denied'), { code: 'permission-denied' });
   email = email.trim().toLowerCase();
   secondAuth();
   let uid;
@@ -1293,15 +1296,28 @@ async function addReferee(name, email, password) {
 }
 // Toglie l'arbitro (l'account resta ma non può più fare nulla) e lo toglie dalle gare assegnate
 async function removeReferee(email, uid) {
-  if (!canTour()) return;
+  if (!canRefs()) return;
   const batch = writeBatch(db);
   batch.delete(doc(db, 'scorers', email));
-  if (uid) (await getDocs(query(collection(db, 'vmatches'), where('referee', '==', uid)))).docs.forEach(d => batch.update(d.ref, { referee: '', refereeName: '', updated: Date.now() }));
+  if (uid) (await getDocs(query(collection(db, 'vmatches'), where('referee', '==', uid)))).docs.forEach(d => batch.update(d.ref, { referee: '', refereeName: '', refConfirmedAt: null, updated: Date.now() }));
   await batch.commit();
 }
 function assignReferee(matchId, uid, name) {
-  if (!canTour()) return Promise.resolve();
-  return updateDoc(doc(db, 'vmatches', matchId), { referee: uid || '', refereeName: uid ? name || '' : '', updated: Date.now() });
+  if (!canRefs()) return Promise.resolve();
+  // nuova designazione: la conferma va data di nuovo
+  return updateDoc(doc(db, 'vmatches', matchId), { referee: uid || '', refereeName: uid ? name || '' : '', refConfirmedAt: null, updated: Date.now() });
+}
+// L'arbitro conferma la designazione: avviso agli admin e ai responsabili arbitri
+async function confirmReferee(matchId, text) {
+  const now = Date.now();
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'vmatches', matchId), { refConfirmedAt: now });
+  ['admins', 'refs'].forEach(to => batch.set(doc(collection(db, 'notices')), { to, text: String(text).slice(0, 400), at: now, by: user.uid }));
+  await batch.commit();
+}
+// L'arbitro corregge i numeri di maglia di una lista: a parte (nums), la lista dei giocatori non cambia
+function saveRosterNums(teamId, nums) {
+  return updateDoc(doc(db, 'rosters', teamId), { nums, updated: Date.now() });
 }
 
 // Cambia il torneo a cui è legato l'account ('' = tutti i tornei in corso).
@@ -1324,6 +1340,8 @@ window.Cloud = {
   addReferee,
   removeReferee,
   assignReferee,
+  confirmReferee,
+  saveRosterNums,
   addScorer,
   setScorerTournament,
   removeScorer,
@@ -1400,6 +1418,7 @@ window.Cloud = {
   get isAdmin() { return isAdmin; },
   get roles() { return roles; },
   get tourAdmin() { return canTour(); },
+  get refBoss() { return canRefs(); },
   get cashier() { return isAdmin || !!roles.cash; },
   setRole,
   setAdmin,

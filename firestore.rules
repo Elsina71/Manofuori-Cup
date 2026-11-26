@@ -26,6 +26,8 @@ service cloud.firestore {
     }
     // ADMIN TORNEI: tornei a squadre, squadre e livelli, referti e scorer. Nient'altro.
     function isTourAdmin() { return isAdmin() || hasRole('tour'); }
+    // RESPONSABILE ARBITRI: vede calendari ed elenchi delle squadre, crea gli arbitri e li designa alle gare.
+    function isRefBoss() { return isTourAdmin() || hasRole('refs'); }
     // CASSA: registra incassi ed emette ricevute.
     function isCash() { return isAdmin() || hasRole('cash'); }
 
@@ -60,6 +62,9 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/vmatches/$(mid))
         && get(/databases/$(database)/documents/vmatches/$(mid)).data.get('referee', '') == request.auth.uid;
     }
+    function isReferee() {
+      return isScorer() && get(/databases/$(database)/documents/scorers/$(request.auth.token.email.lower())).data.get('kind', '') == 'ref';
+    }
     // chi compila il referto di una gara: account del campo del torneo, oppure l'arbitro assegnato alla gara
     function staffFor(tid, mid) { return scorerFor(tid) || refFor(mid); }
 
@@ -76,8 +81,12 @@ service cloud.firestore {
     function rightId(id) { return id == request.resource.data.tid + '_' + request.resource.data.key; }
 
     match /scorers/{email} {
-      allow get: if isTourAdmin() || (request.auth != null && request.auth.token.email is string && request.auth.token.email.lower() == email);
+      allow get: if isRefBoss() || (request.auth != null && request.auth.token.email is string && request.auth.token.email.lower() == email);
       allow list, write: if isTourAdmin();
+      // il responsabile arbitri gestisce solo gli account degli arbitri (non quelli dei campi)
+      allow list: if isRefBoss();
+      allow create, update: if isRefBoss() && request.resource.data.get('kind', '') == 'ref';
+      allow delete: if isRefBoss() && resource.data.get('kind', '') == 'ref';
     }
 
     // referti/{torneo}_{gara}: un documento per gara con tutti i dati del referto (firme comprese).
@@ -160,6 +169,12 @@ service cloud.firestore {
     match /vmatches/{id} {
       allow read: if true;
       allow write: if isTourAdmin();
+      // designazione dell'arbitro (responsabile arbitri) e conferma della designazione (l'arbitro assegnato)
+      allow update: if isRefBoss()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['referee', 'refereeName', 'refConfirmedAt', 'updated']);
+      allow update: if refFor(id)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['refConfirmedAt'])
+        && request.resource.data.refConfirmedAt is int;
       allow update: if staffFor(resource.data.tid, id)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sets', 'status', 'golden', 'by', 'updated'])
         && request.resource.data.status in ['sched', 'done']
@@ -207,7 +222,12 @@ service cloud.firestore {
       allow list, create, update, delete: if isTourAdmin();
     }
     match /rosters/{id} {
-      allow read: if isTourAdmin() || isScorer() || (request.auth != null && resource.data.captainUid == request.auth.uid);
+      allow read: if isRefBoss() || isScorer() || (request.auth != null && resource.data.captainUid == request.auth.uid);
+      // gli arbitri correggono solo i numeri di maglia: li scrivono a parte (nums = { posizione: numero }), la lista
+      // dei giocatori non si tocca; chi salva di nuovo la lista (capitano, admin) li riporta nella lista stessa
+      allow update: if isReferee()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nums', 'updated'])
+        && request.resource.data.nums is map && request.resource.data.nums.size() <= 40;
       // l'account del codice capitano legge la lista della sua squadra
       allow get: if request.auth != null && exists(teamDoc(id)) && get(teamDoc(id)).data.get('codeUid', '') == request.auth.uid;
       allow write: if isTourAdmin();
@@ -476,13 +496,13 @@ service cloud.firestore {
 
     // Avvisi per un utente (li scrive l'admin o l'admin tornei, es. gara spostata) o per gli amministratori ("admins").
     match /notices/{id} {
-      allow read: if request.auth != null && (resource.data.to == request.auth.uid || (resource.data.to == 'admins' && isAdmin()));
+      allow read: if request.auth != null && (resource.data.to == request.auth.uid || (resource.data.to == 'admins' && isAdmin()) || (resource.data.to == 'refs' && isRefBoss()));
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly(['to', 'text', 'at', 'by'])
         && request.resource.data.by == request.auth.uid
         && request.resource.data.text is string && request.resource.data.text.size() <= 400
-        && request.resource.data.to is string && (isTourAdmin() || request.resource.data.to == 'admins');
-      allow delete: if request.auth != null && (resource.data.to == request.auth.uid || (resource.data.to == 'admins' && isAdmin()));
+        && request.resource.data.to is string && (isTourAdmin() || request.resource.data.to in ['admins', 'refs']);
+      allow delete: if request.auth != null && (resource.data.to == request.auth.uid || (resource.data.to == 'admins' && isAdmin()) || (resource.data.to == 'refs' && isRefBoss()));
     }
 
     // Chi è admin lo decide solo il database: l'app chiede il documento "probe" (o il proprio) e,

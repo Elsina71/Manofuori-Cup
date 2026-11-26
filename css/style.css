@@ -744,6 +744,20 @@ button.cal-btn:hover { border-color: var(--primary); }
 .reg-list { list-style: none; margin: 0; padding: 0; }
 .reg-list li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
 .reg-list li:first-child { border-top: 0; }
+/* arbitri: scheda dell'arbitro, conferme, numeri di maglia */
+.badge.ref-todo { background: #f59f00; color: #1c1300; border-color: transparent; }
+.ref-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ref-pick select { flex: 1 1 160px; }
+.ref-game.ok { border-left: 4px solid var(--ok); }
+.ref-game-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.ref-game-head h3 { margin: 0; }
+.ref-dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 12px 0; }
+.ref-dl dt { color: var(--muted); font-size: .85rem; }
+.ref-dl dd { margin: 0; font-weight: 600; }
+.ref-dl dd:first-letter { text-transform: uppercase; }
+.nums-list { display: grid; gap: 6px; margin: 10px 0; }
+.nums-row { flex-direction: row; align-items: center; gap: 10px; font-weight: 500; }
+.nums-row input { width: 4.2rem; text-align: center; font-weight: 700; }
 /* arbitri: gare da assegnare */
 .ref-games { list-style: none; margin: 8px 0 0; padding: 0; }
 .ref-games li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 260px); gap: 6px 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }

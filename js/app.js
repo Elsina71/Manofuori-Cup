@@ -20,6 +20,7 @@
   const canNotice = scope => (scope === 'home' ? admin() : tourAdmin());
   // Account di un campo (refertista): vede "Le mie gare" e apre i referti elettronici.
   const scorer = () => (window.Cloud && !window.Cloud.isAdmin && window.Cloud.scorer) || null;
+  const refBoss = () => !!(window.Cloud && window.Cloud.refBoss);   // responsabile arbitri (o admin tornei)
   const isRef = () => { const sc = window.Cloud && !window.Cloud.isAdmin && window.Cloud.scorer; return !!sc && sc.kind === 'ref'; };   // arbitro
   const teamCap = () => (window.Cloud && !window.Cloud.isAdmin && window.Cloud.teamCap) || null;   // entrato con il codice capitano di una squadra
   let pendingRender = false;
@@ -104,7 +105,7 @@
     else if (r[0] === 'mine') { nav = 'mine'; html = viewMineVolley(); }
     else if (r[0] === 'me') { nav = 'me'; html = viewProfile(); }
     else if (r[0] === 'teams') { nav = 'teams'; html = viewTeams(); }
-    else if (r[0] === 'arbitri' && tourAdmin()) { nav = 'refs'; html = viewRefs(); }
+    else if (r[0] === 'arbitri' && refBoss()) { nav = 'refs'; html = viewRefs(); }
     // link del codice del capitano: apre Squadre con il codice già scritto
     else if (r[0] === 'codice') { ui.claimCode = r[1] || ''; location.replace('#/teams'); if (!myUid() && ui.claimCode) codeEnter(ui.claimCode); return; }
     else if (r[0] === 'tema') { nav = 'settings'; html = viewTheme(); }
@@ -135,9 +136,10 @@
     document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === nav));
     document.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !admin(); });
     document.querySelectorAll('[data-tour-only]').forEach(el => { el.hidden = !tourAdmin(); });
+    document.querySelectorAll('[data-refs-only]').forEach(el => { el.hidden = !refBoss(); });
     document.querySelectorAll('[data-cash-only]').forEach(el => { el.hidden = !cashier(); });
     document.querySelectorAll('[data-staff-badge]').forEach(el => { el.hidden = !(admin() || tourAdmin() || cashier()); const l = el.querySelector('.lbl'); if (l) l.textContent = ' ' + (admin() ? 'Admin' : [tourAdmin() ? t('roleTourShort') : '', cashier() ? t('roleCashShort') : ''].filter(Boolean).join(' · ')); });
-    document.querySelectorAll('[data-guest-only]').forEach(el => { el.hidden = admin() || tourAdmin() || cashier() || !!scorer() || !!member() || !!teamCap(); });
+    document.querySelectorAll('[data-guest-only]').forEach(el => { el.hidden = admin() || tourAdmin() || refBoss() || cashier() || !!scorer() || !!member() || !!teamCap(); });
     document.querySelectorAll('[data-member-only]').forEach(el => { el.hidden = !member(); });
     document.querySelectorAll('[data-team-only]').forEach(el => { el.hidden = !(member() && myTeams().length); });
     document.querySelectorAll('[data-scorer-only]').forEach(el => { el.hidden = !scorer(); });
@@ -461,7 +463,7 @@
             <span class="ban-row">${verifyBadge(m.uid)} ${m.privacyAt ? `<span class="badge st-done" title="${esc(t('privacyAcceptedOn', { d: fmtDate(new Date(m.privacyAt).toLocaleDateString('sv')) }))}"><i class="ti ti-shield-check" aria-hidden="true"></i> ${esc(t('privacyOkBadge'))}</span>` : `<span class="badge tess-no">${esc(t('privacyNoBadge'))}</span>`}${m.deleteReq ? ` <span class="badge st-full">${esc(t('deleteRequested', { d: fmtDate(new Date(m.deleteReq).toLocaleDateString('sv')) }))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-key" aria-hidden="true"></i> ${esc(t('rolesTitle'))}:
               ${generalAdminBox(m)}
-              ${['captain', 'tour', 'cash'].map(r => `<label class="check"><input type="checkbox" data-change="role" data-uid="${m.uid}" data-role="${r}" ${((S().roles || {})[m.uid] || {})[r] ? 'checked' : ''}> ${esc(t('role_' + r))}</label>`).join('')}
+              ${['captain', 'tour', 'refs', 'cash'].map(r => `<label class="check"><input type="checkbox" data-change="role" data-uid="${m.uid}" data-role="${r}" ${((S().roles || {})[m.uid] || {})[r] ? 'checked' : ''}> ${esc(t('role_' + r))}</label>`).join('')}
               ${coachOf(m.uid) ? `<span class="badge">${esc(t('role_coach'))}</span>` : ''}</span>
             <span class="ban-row"><i class="ti ti-ban" aria-hidden="true"></i> ${esc(t('banTitle'))}:
               <label class="check"><input type="checkbox" data-change="ban" data-uid="${m.uid}" data-what="tour" ${banOf(m.uid).tour ? 'checked' : ''}> ${esc(t('banTour'))}</label></span></span>
@@ -524,9 +526,9 @@
   // Avvisi per l'utente o per gli amministratori (es. richiesta di cancellazione dell'account):
   // ALERT in cima alla pagina, finché non si preme "Ho letto".
   function noticeAlerts() {
-    if (!(member() || admin())) return '';
+    if (!(member() || admin() || refBoss())) return '';
     return (S().notices || []).map(n => `<div class="msg-alert" role="alert">
-      <div class="msg-head"><strong><i class="ti ti-bell" aria-hidden="true"></i> ${esc(t(n.to === 'admins' ? 'noticeAdmins' : 'noticeUser'))}</strong>
+      <div class="msg-head"><strong><i class="ti ti-bell" aria-hidden="true"></i> ${esc(t(n.to === 'admins' ? 'noticeAdmins' : n.to === 'refs' ? 'noticeRefs' : 'noticeUser'))}</strong>
         <small>${esc(new Date(n.at).toLocaleString(I18n.locale(), { dateStyle: 'medium', timeStyle: 'short' }))}</small></div>
       <div class="msg-text">${esc(n.text)}</div>
       <button class="btn small" data-action="notice-dismiss" data-id="${n.id}"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('msgRead'))}</button>
@@ -3258,6 +3260,7 @@
   // ---------- account del campo (scorer): le gare dei tornei a squadre ----------
   function viewMineVolley() {
     const sc = scorer();
+    if (sc && isRef()) return viewRefCard();
     if (!sc) return `<div class="card"><p class="muted">${esc(t('loginHelp'))}</p><a class="btn primary" href="#/settings">${esc(t('login'))}</a></div>`;
     const tours = isRef() ? (S().vtours || []).filter(x => x.status !== 'done' && refMatches().some(m => m.tid === x.id))
       : (S().vtours || []).filter(x => x.status === 'live' && (!sc.tid || sc.tid === x.id));
@@ -3281,7 +3284,8 @@
   const TEAM_KINDS = ['X', 'M', 'F'];
   const ROSTER_TIP = 12;   // numero di giocatori consigliato (non c'è un massimo)
   const teamById = id => (S().teams || []).find(x => x.id === id);
-  const rosterOf = id => ((S().rosters || []).find(x => x.id === id) || {}).players || [];
+  // lista dei giocatori con i numeri di maglia corretti dall'arbitro (nums = { posizione: numero }), se ci sono
+  const rosterOf = id => { const r = (S().rosters || []).find(x => x.id === id) || {}, nums = r.nums || {}; return (r.players || []).map((p, i) => (nums[i] !== undefined ? Object.assign({}, p, { num: nums[i] }) : p)); };
   const isCaptain = tm => (!!member() && tm.captainUid === myUid()) || (!!tm.codeUid && tm.codeUid === myUid());
   const canEditTeam = tm => tourAdmin() || isCaptain(tm);
   const byLevel = (a, b) => (teamLevels().indexOf(a.level) + 1 || 99) - (teamLevels().indexOf(b.level) + 1 || 99) || a.name.localeCompare(b.name);
@@ -3470,7 +3474,8 @@
 
   function teamCard(tm) {
     if (ui.tmEdit === tm.id && canEditTeam(tm)) return `<div class="card team-card editing" id="tm-${tm.id}"><h3>${esc(tm.name)}</h3>${teamForm(tm)}</div>`;
-    const seeRoster = canEditTeam(tm);
+    if (ui.tmNums === tm.id && isRef()) return numsForm(tm);
+    const seeRoster = canEditTeam(tm) || refBoss() || isRef();
     const players = seeRoster ? rosterOf(tm.id).slice().sort(byShirt) : [];
     const nM = players.filter(x => x.g === 'M').length, nF = players.length - nM;
     const dupNums = [...new Set(players.map(x => x.num).filter((n, i, a) => n !== '' && a.indexOf(n) !== i))];
@@ -3487,6 +3492,7 @@
         ${dupNums.length ? `<p class="note warn">${esc(t('tmDupNums', { n: dupNums.join(', ') }))}</p>` : ''}
         ${players.length && players.length < ROSTER_TIP ? `<p class="muted small">${esc(t('tmTip', { n: ROSTER_TIP }))}</p>` : ''}
       </details>` : ''}
+      ${isRef() && rosterOf(tm.id).length ? `<div class="btn-row"><button class="btn small" data-action="tm-nums-edit" data-id="${tm.id}"><i class="ti ti-hash" aria-hidden="true"></i> ${esc(t('tmNumsEdit'))}</button></div>` : ''}
       ${canEditTeam(tm) ? `<div class="btn-row">
         <button class="btn small" data-action="tm-edit" data-id="${tm.id}"><i class="ti ti-pencil" aria-hidden="true"></i> ${esc(t('tmEdit'))}</button>
         ${tourAdmin() ? (tm.status === 'ok'
@@ -3632,6 +3638,14 @@
   };
   const teamForms = {
     'team-save': f => teamSave(f),
+    'tm-nums': f => {
+      const id = f.dataset.id, players = rosterOf(id);
+      const nums = players.map((p, i) => String(f['n' + i].value || '').trim());
+      if (nums.some(n => n !== '' && !/^(\d{1,2}|000)$/.test(n))) return warn('tmNumErr');
+      const map = {};
+      players.forEach((p, i) => { map[i] = nums[i] === '' ? '' : /^0{2,3}$/.test(nums[i]) ? nums[i] : Number(nums[i]); });
+      window.Cloud.saveRosterNums(id, map).then(() => { ui.tmNums = null; ui.flash = { text: t('tmNumsSaved') }; render(); }).catch(vErr);
+    },
     'tm-codelogin': f => {
       const btn = f.querySelector('button'); if (btn) btn.disabled = true;
       codeEnter(f.code.value, btn);
@@ -3824,6 +3838,43 @@
     </div>`;
   }
 
+  // ---------- ARBITRO: scheda con le gare designate (conferma) e correzione dei numeri di maglia ----------
+  function numsForm(tm) {
+    const players = rosterOf(tm.id);
+    return `<form class="card team-card editing" id="tm-${tm.id}" data-form="tm-nums" data-id="${tm.id}" autocomplete="off"><h3>${esc(tm.name)}</h3>
+      <p class="muted small">${esc(t('tmNumsHelp'))}</p>
+      <div class="nums-list">${players.map((p, i) => `<label class="nums-row"><input name="n${i}" type="text" inputmode="numeric" maxlength="3" pattern="[0-9]{1,2}|000" value="${esc(p.num)}" aria-label="${esc(t('tmNum'))} ${esc(p.last)} ${esc(p.first)}">
+        <span>${esc(p.last)} ${esc(p.first)} <small class="muted">${esc(p.g)}</small></span></label>`).join('')}</div>
+      <div class="form-actions"><button type="button" class="btn" data-action="tm-nums-edit" data-id="">${esc(t('cancel'))}</button><button class="btn primary">${esc(t('save'))}</button></div></form>`;
+  }
+  function viewRefCard() {
+    const sc = scorer(), all = refMatches().slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
+    const open = all.filter(m => m.status !== 'done'), toConfirm = open.filter(m => !m.refConfirmedAt);
+    const day = d => { if (!d) return t('vmNoDate'); const x = new Date(d + 'T12:00:00'); return `${x.toLocaleDateString(I18n.locale(), { weekday: 'long' })} ${fmtDate(d)}`; };
+    const card = m => {
+      const tour = vtById(m.tid) || { name: '', level: '' }, done = m.status === 'done';
+      return `<div class="card ref-game ${m.refConfirmedAt ? 'ok' : ''}" id="rg-${m.id}">
+        <div class="ref-game-head"><h3>${esc(vTeamName(tour, m.home))} – ${esc(vTeamName(tour, m.away))}</h3>
+          ${done ? `<span class="badge st-done">${esc(t('refPlayed'))} ${esc(vResult(m))}</span>` : m.refConfirmedAt ? `<span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('refConfirmedOn', { d: new Date(m.refConfirmedAt).toLocaleDateString(I18n.locale()) }))}</span>` : `<span class="badge ref-todo">${esc(t('refToConfirm'))}</span>`}</div>
+        <dl class="ref-dl">
+          <dt>${esc(t('refCat'))}</dt><dd>${esc(tour.level)} · ${esc(tour.name)}</dd>
+          <dt>${esc(t('refPhase'))}</dt><dd>${esc(vPhaseText(tour, m))}</dd>
+          <dt>${esc(t('refDay'))}</dt><dd>${esc(day(m.date))}</dd>
+          <dt>${esc(t('refTime'))}</dt><dd>${esc(m.time || '—')}</dd>
+          <dt>${esc(t('refPlace'))}</dt><dd>${esc(m.place || '—')}</dd>
+        </dl>
+        ${done ? '' : `<div class="btn-row">${m.refConfirmedAt ? '' : `<button class="btn primary" data-action="ref-confirm" data-id="${m.id}"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('refConfirm'))}</button>`}
+          <button class="btn" data-action="vm-escore" data-id="${m.id}"><i class="ti ti-device-tablet" aria-hidden="true"></i> E-scoresheet</button></div>`}</div>`;
+    };
+    return `<div class="page-head"><h1><i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(t('refCardTitle'))}</h1></div>
+      <div class="card ref-me"><h2>${esc(sc.name || '')}</h2><p class="muted">${esc(sc.email || '')}</p>
+        <p>${esc(t('refCardCounts', { n: open.length, k: toConfirm.length }))}</p></div>
+      ${toConfirm.length ? `<p class="note warn"><i class="ti ti-bell" aria-hidden="true"></i> ${esc(t(toConfirm.length === 1 ? 'refToConfirmNote1' : 'refToConfirmNote', { k: toConfirm.length }))}</p>` : ''}
+      <h2 class="section-title">${esc(t('refMyGames'))}</h2>
+      ${open.map(card).join('') || `<div class="card"><p class="muted">${esc(t('refNoAssigned'))}</p></div>`}
+      ${all.length > open.length ? `<details class="card sub-form"><summary>${esc(t('refPlayedList', { n: all.length - open.length }))}</summary>${all.filter(m => m.status === 'done').map(card).join('')}</details>` : ''}`;
+  }
+
   // ---------- ARBITRI (admin tornei): account degli arbitri e assegnazione alle gare ----------
   function refList() {
     if (!ui.scorers && !ui.scorersLoading && window.Cloud && window.Cloud.listScorers) {
@@ -3847,7 +3898,8 @@
         <ul class="ref-games">${ms.map(m => `<li>
           <div><strong>${esc(vTeamName(tour, m.home))} – ${esc(vTeamName(tour, m.away))}</strong>
             <div class="muted small">${m.date || m.time ? esc(vWhen(m)) : esc(t('vmNoDate'))}${m.place ? ' · ' + esc(m.place) : ''}</div></div>
-          <select data-change="ref-assign" data-id="${m.id}" aria-label="${esc(t('refOf'))}" ${refs.length ? '' : 'disabled'}>${opts(m)}</select></li>`).join('')}</ul></details>`;
+          <div class="ref-pick"><select data-change="ref-assign" data-id="${m.id}" aria-label="${esc(t('refOf'))}" ${refs.length ? '' : 'disabled'}>${opts(m)}</select>
+            ${m.referee ? (m.refConfirmedAt ? `<span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('refConfirmed'))}</span>` : `<span class="badge ref-todo">${esc(t('refToConfirm'))}</span>`) : ''}</div></li>`).join('')}</ul></details>`;
     };
     return `<div class="page-head"><h1><i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(t('navRefs'))}</h1><p class="muted">${esc(t('refIntro'))}</p></div>
       <details class="card sub-form" data-keep="ref-new" ${keepOpen('ref-new', !refs.length)}><summary><i class="ti ti-user-plus" aria-hidden="true"></i> ${esc(t('refNew'))}</summary>
@@ -4169,6 +4221,14 @@
       if (!confirm(t('userResetPwConfirm', { n: el.dataset.email, e: el.dataset.email }))) return;
       window.Cloud.resetPassword(el.dataset.email).then(() => { ui.flash = { text: t('userResetPwSent', { n: el.dataset.email, e: el.dataset.email }) }; render(); }).catch(() => warn('resetFailed'));
     },
+    'ref-confirm': el => {
+      const m = vmById(el.dataset.id), tour = m && vtById(m.tid), sc = scorer();
+      if (!m || !tour || !sc || !isRef() || m.referee !== myUid()) return;
+      el.disabled = true;
+      const text = t('refConfirmNotice', { n: sc.name || sc.email, g: `${vTeamName(tour, m.home)} – ${vTeamName(tour, m.away)}`, c: tour.level, d: m.date ? fmtDate(m.date) : '', o: m.time || '', p: m.place || '' });
+      window.Cloud.confirmReferee(m.id, text).then(() => { ui.flash = { text: t('refConfirmDone') }; render(); }).catch(e => { el.disabled = false; vErr(e); });
+    },
+    'tm-nums-edit': el => { ui.tmNums = el.dataset.id || null; render(); },
     'scorer-remove': el => {
       if (!confirmed('scorerRemoveConfirm', { e: el.dataset.email })) return;
       window.Cloud.removeScorer(el.dataset.email).then(() => { ui.scorers = null; ui.flash = { text: t('scorerRemoved') }; render(); })
@@ -4293,6 +4353,8 @@
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
   const CASH_FORMS = new Set(['ca-save']);
+  const REFS_ACTIONS = new Set(['ref-remove', 'ref-resetpw', 'notice-dismiss']);   // responsabile arbitri
+  const REF_ACTIONS = new Set(['ref-confirm', 'tm-nums-edit']);   // arbitro
   const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'pdf-view', 'pdf-zip']);
   const PUBLIC_FORMS = new Set(['tm-codelogin', 'login', 'register', 'complete-profile']);
   const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
@@ -4315,7 +4377,7 @@
     const fn = actions[el.dataset.action];
     if (!fn) return;
     e.preventDefault();
-    if (!admin() && !PUBLIC_ACTIONS.has(el.dataset.action) && !(tourAdmin() && TOUR_ACTIONS.has(el.dataset.action)) && !(cashier() && CASH_ACTIONS.has(el.dataset.action)) && !(scorer() && SCORER_ACTIONS.has(el.dataset.action)) && !(member() && MEMBER_ACTIONS.has(el.dataset.action)) && !(teamCap() && CODE_ACTIONS.has(el.dataset.action))) return;
+    if (!admin() && !PUBLIC_ACTIONS.has(el.dataset.action) && !(tourAdmin() && TOUR_ACTIONS.has(el.dataset.action)) && !(cashier() && CASH_ACTIONS.has(el.dataset.action)) && !(scorer() && SCORER_ACTIONS.has(el.dataset.action)) && !(member() && MEMBER_ACTIONS.has(el.dataset.action)) && !(teamCap() && CODE_ACTIONS.has(el.dataset.action)) && !(refBoss() && REFS_ACTIONS.has(el.dataset.action)) && !(isRef() && REF_ACTIONS.has(el.dataset.action))) return;
     fn(el);
   });
 
@@ -4324,7 +4386,7 @@
     if (!f) return;
     e.preventDefault();
     const fn = forms[f.dataset.form];
-    if (fn && (admin() || (tourAdmin() && TOUR_FORMS.has(f.dataset.form)) || (cashier() && CASH_FORMS.has(f.dataset.form)) || PUBLIC_FORMS.has(f.dataset.form) || (scorer() && SCORER_FORMS.has(f.dataset.form)) || (member() && MEMBER_FORMS.has(f.dataset.form)) || (teamCap() && f.dataset.form === 'team-save'))) fn(f);
+    if (fn && (admin() || (tourAdmin() && TOUR_FORMS.has(f.dataset.form)) || (cashier() && CASH_FORMS.has(f.dataset.form)) || PUBLIC_FORMS.has(f.dataset.form) || (scorer() && SCORER_FORMS.has(f.dataset.form)) || (member() && MEMBER_FORMS.has(f.dataset.form)) || (teamCap() && f.dataset.form === 'team-save') || (refBoss() && f.dataset.form === 'ref-add') || (isRef() && f.dataset.form === 'tm-nums'))) fn(f);
     submitMode = 'save';
   });
 
@@ -4438,7 +4500,7 @@
         break;
       }
       case 'ref-assign': {
-        if (!tourAdmin()) return;
+        if (!refBoss()) return;
         const r = refList().find(x => x.uid === el.value);
         window.Cloud.assignReferee(el.dataset.id, el.value, r ? r.name : '')
           .then(() => { ui.flash = { text: r ? t('refAssigned', { n: r.name }) : t('refUnassigned') }; render(); })

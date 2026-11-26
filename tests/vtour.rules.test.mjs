@@ -85,6 +85,32 @@ await t('tolto dalla gara: non scrive più', assertSucceeds(updateDoc(doc(org, '
 await t('un account del campo resta come prima (tutti i tornei)', assertSucceeds(updateDoc(doc(scAll, 'vmatches', 'T3_g-A-d1-1'), { sets, status: 'done', by: 'tutti@x.it', updated: 10 })));
 await t('admin tornei crea e vede gli arbitri', assertSucceeds(setDoc(doc(org, 'scorers', 'nuovo@x.it'), { kind: 'ref', name: 'N', uid: 'n1', court: '', tid: '' }).then(() => getDoc(doc(org, 'scorers', 'nuovo@x.it')))));
 await t('l\'arbitro non si cambia il ruolo', assertFails(updateDoc(doc(ref1, 'scorers', 'arbitro@x.it'), { kind: '' })));
+// responsabile arbitri (roles.refs), numeri di maglia corretti dall'arbitro, conferma della designazione
+await env.withSecurityRulesDisabled(async c => {
+  const db = c.firestore();
+  await setDoc(doc(db, 'members', 'boss'), { first: 'R', last: 'B', gender: 'M' });
+  await setDoc(doc(db, 'roles', 'boss'), { refs: true });
+  await setDoc(doc(db, 'rosters', 'tm1'), { captainUid: 'cap', players: [{ num: 4, last: 'Rossi', first: 'Anna', g: 'F', uid: '' }, { num: 7, last: 'Neri', first: 'Ugo', g: 'M', uid: '' }], updated: 1 });
+  await setDoc(doc(db, 'vmatches', 'T3_g-A-d2-0'), { tid: 'T3', key: 'g-A-d2-0', home: 'a', away: 'b', sets: [], status: 'sched' });
+});
+const boss = env.authenticatedContext('boss', { email: 'boss@x.it', email_verified: true }).firestore();
+await t('responsabile arbitri crea un arbitro', assertSucceeds(setDoc(doc(boss, 'scorers', 'nuovo2@x.it'), { kind: 'ref', name: 'Nuovo', uid: 'ref3', court: '', tid: '' })));
+await t('responsabile arbitri non crea account dei campi', assertFails(setDoc(doc(boss, 'scorers', 'campo9@x.it'), { court: '9', tid: '' })));
+await t('responsabile arbitri non toglie un account del campo', assertFails(deleteDoc(doc(boss, 'scorers', 'campo1@x.it'))));
+await t('responsabile arbitri vede gli elenchi delle squadre', assertSucceeds(getDoc(doc(boss, 'rosters', 'tm1'))));
+await t('responsabile arbitri designa l\'arbitro', assertSucceeds(updateDoc(doc(boss, 'vmatches', 'T3_g-A-d2-0'), { referee: 'ref1', refereeName: 'Mario Arbitro', refConfirmedAt: null, updated: 2 })));
+await t('responsabile arbitri non cambia data o risultato', assertFails(updateDoc(doc(boss, 'vmatches', 'T3_g-A-d2-0'), { date: '2026-12-01', updated: 3 })));
+await t('utente normale non designa arbitri', assertFails(updateDoc(doc(user, 'vmatches', 'T3_g-A-d2-0'), { referee: 'u1', updated: 3 })));
+await t('l\'arbitro conferma la sua designazione', assertSucceeds(updateDoc(doc(ref1, 'vmatches', 'T3_g-A-d2-0'), { refConfirmedAt: 123 })));
+await t('un altro arbitro non conferma una gara non sua', assertFails(updateDoc(doc(ref2, 'vmatches', 'T3_g-A-d2-0'), { refConfirmedAt: 124 })));
+await t('l\'arbitro manda l\'avviso agli admin e ai responsabili arbitri', assertSucceeds((() => { const b = writeBatch(ref1); b.set(doc(ref1, 'notices', 'n1'), { to: 'admins', text: 'ok', at: 1, by: 'ref1' }); b.set(doc(ref1, 'notices', 'n2'), { to: 'refs', text: 'ok', at: 1, by: 'ref1' }); return b.commit(); })()));
+await t('il responsabile arbitri legge l\'avviso', assertSucceeds(getDoc(doc(boss, 'notices', 'n2'))));
+await t('un utente normale non lo legge', assertFails(getDoc(doc(user, 'notices', 'n2'))));
+await t('l\'arbitro legge gli elenchi delle squadre', assertSucceeds(getDoc(doc(ref1, 'rosters', 'tm1'))));
+await t('l\'arbitro corregge i numeri di maglia (a parte)', assertSucceeds(updateDoc(doc(ref1, 'rosters', 'tm1'), { nums: { 0: 14, 1: '00' }, updated: 2 })));
+await t('l\'arbitro non tocca la lista dei giocatori', assertFails(updateDoc(doc(ref1, 'rosters', 'tm1'), { players: [{ num: 14, last: 'Bianchi', first: 'Anna', g: 'F', uid: '' }], updated: 3 })));
+await t('l\'arbitro non cambia il capitano', assertFails(updateDoc(doc(ref1, 'rosters', 'tm1'), { captainUid: 'ref1', updated: 3 })));
+await t('un account del campo non corregge i numeri', assertFails(updateDoc(doc(sc1, 'rosters', 'tm1'), { nums: { 0: 1 }, updated: 4 })));
 console.log(`\n${ok} ok, ${ko} falliti`);
 await env.cleanup();
 process.exit(ko ? 1 : 0);
