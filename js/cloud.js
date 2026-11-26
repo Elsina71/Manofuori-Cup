@@ -917,6 +917,20 @@ async function makeTeamCodes(teamIds) {
   }
   return out;
 }
+// Liste dei giocatori importate da un file (admin dei tornei): una lista per squadra; il capitano scritto nel file
+// va nella squadra solo se non ha già un capitano nell'app
+async function importRosters(entries) {
+  const now = Date.now();
+  for (let i = 0; i < entries.length; i += 200) {
+    const batch = writeBatch(db);
+    entries.slice(i, i + 200).forEach(x => {
+      batch.set(doc(db, 'rosters', x.id), { captainUid: x.captainUid || '', players: x.players, updated: now });
+      if (x.captainName) batch.update(doc(db, 'teams', x.id), { captainName: x.captainName, updated: now });
+    });
+    await batch.commit();
+  }
+}
+
 // Accesso con il codice: ogni squadra ha un account suo (email interna, nessuna posta), creato dall'admin con un'app
 // Firebase separata. Il capitano entra quando vuole, da qualsiasi dispositivo, scrivendo solo il codice.
 const CODE_DOMAIN = 'squadre.manofuori.it';
@@ -1293,6 +1307,7 @@ window.Cloud = {
   trashVTour,
   makeTeamCodes,
   codeLogin,
+  importRosters,
   restoreVTour,
   purgeTrash,
   saveTeam,

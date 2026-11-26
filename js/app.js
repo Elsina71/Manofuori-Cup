@@ -3353,6 +3353,35 @@
         <tbody>${all.map(x => { const c = teamCodeOf(x.id); return `<tr><td>${esc(x.name)}</td><td>${esc(x.level)}</td><td>${esc(x.captainName || '—')}</td><td>${c ? `<code class="code-pill">${esc(c.id)}</code>` : `<span class="muted small">${esc(t('tmCodeNone'))}</span>`}</td></tr>`; }).join('')}</tbody></table></div>
     </details>`;
   }
+  // ---------- liste dei giocatori da un file (admin) ----------
+  // File JSON { kind: 'manofuori-rosters', teams: { idSquadra: { captainName, players: [{ num, last, first, g }] } } }.
+  // Le liste restano private: il file non va nel sito, lo carica l'admin dal suo dispositivo.
+  function rosterImportPlan() {
+    const imp = ui.rosterImport;
+    if (!imp) return [];
+    return Object.entries(imp.data.teams || {}).map(([id, x]) => {
+      const tm = teamById(id), cur = rosterOf(id);
+      const players = (x.players || []).filter(p => p && (p.last || p.first)).map(p => ({ num: p.num === '' || p.num == null ? '' : Number(p.num), last: String(p.last || '').trim(), first: String(p.first || '').trim(), g: p.g === 'F' ? 'F' : 'M', uid: '' }));
+      const state = !tm ? 'missing' : cur.length && !imp.replace ? 'kept' : cur.length ? 'replace' : 'new';
+      return { id, tm, players, cur: cur.length, state, captainName: tm && !tm.captainUid && !tm.captainName && x.captainName ? String(x.captainName).trim() : '' };
+    });
+  }
+  function rosterImportCard() {
+    const imp = ui.rosterImport;
+    if (!imp) return `<details class="card sub-form" data-keep="tm-import" ${keepOpen('tm-import')}><summary><i class="ti ti-file-import" aria-hidden="true"></i> ${esc(t('rimTitle'))}</summary>
+      <p class="muted small">${esc(t('rimHelp'))}</p>
+      <label class="btn"><i class="ti ti-upload" aria-hidden="true"></i> ${esc(t('rimPick'))}<input type="file" accept=".json,application/json" data-roster-file hidden></label></details>`;
+    const plan = rosterImportPlan(), go = plan.filter(x => x.state === 'new' || x.state === 'replace');
+    return `<div class="card"><h2><i class="ti ti-file-import" aria-hidden="true"></i> ${esc(t('rimTitle'))}</h2>
+      <p class="muted small">${esc(imp.name)} · ${esc(t('rimSummary', { n: plan.length, k: go.length, p: go.reduce((a, x) => a + x.players.length, 0) }))}</p>
+      <div class="table-wrap"><table class="table"><thead><tr><th>${esc(t('navTeams'))}</th><th class="num">${esc(t('rimPlayers'))}</th><th>${esc(t('rimWhat'))}</th></tr></thead>
+        <tbody>${plan.map(x => `<tr><td>${esc(x.tm ? x.tm.name : x.id)}${x.captainName ? `<br><small class="muted">${esc(t('tmCaptain'))}: ${esc(x.captainName)}</small>` : ''}</td><td class="num">${x.players.length}</td>
+          <td><span class="badge ${x.state === 'new' ? 'st-done' : x.state === 'replace' ? 'warn-b' : ''}">${esc(t('rim_' + x.state, { n: x.cur }))}</span></td></tr>`).join('')}</tbody></table></div>
+      <label class="check"><input type="checkbox" data-roster-replace ${imp.replace ? 'checked' : ''}> ${esc(t('rimReplace'))}</label>
+      <div class="btn-row end"><button class="btn" data-action="rim-cancel">${esc(t('cancel'))}</button>
+        <button class="btn primary" data-action="rim-go" ${go.length ? '' : 'disabled'}><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('rimGo', { k: go.length }))}</button></div></div>`;
+  }
+
   // capitano: entra con il codice della squadra, quando vuole e da qualsiasi dispositivo (nessun account personale)
   function codeCard() {
     const pre = ui.claimCode || '';
@@ -3435,6 +3464,7 @@
     return `${verifyNotice()}
       <div class="page-head"><h1><i class="ti ti-shirt-sport" aria-hidden="true"></i> ${esc(t('navTeams'))}</h1><p class="muted">${esc(t('tmIntro'))}</p></div>
       ${mine.length ? `<section class="feat-block"><h2>${esc(t('tmMine'))}</h2><div class="ch-grid">${mine.map(teamCard).join('')}</div></section>` : ''}
+      ${tourAdmin() ? rosterImportCard() : ''}
       ${tourAdmin() ? teamCodesCard(all) : !scorer() && !teamCap() && (!mine.length || ui.claimCode) ? codeCard() : ''}
       ${create}
       ${pending ? `<p class="note warn"><i class="ti ti-clock" aria-hidden="true"></i> ${esc(t('tmPendingAdmin', { n: pending }))}</p>` : ''}
@@ -3974,6 +4004,15 @@
       if (!ids.length) return;
       window.Cloud.makeTeamCodes(ids).then(() => { ui.flash = { text: t('tmCodesMade', { n: ids.length }) }; render(); }).catch(vErr);
     },
+    'rim-cancel': () => { ui.rosterImport = null; render(); },
+    'rim-go': el => {
+      const go = rosterImportPlan().filter(x => x.state === 'new' || x.state === 'replace');
+      if (!go.length) return;
+      el.disabled = true;
+      window.Cloud.importRosters(go.map(x => ({ id: x.id, captainUid: x.tm.captainUid || '', players: x.players, captainName: x.captainName })))
+        .then(() => { ui.rosterImport = null; ui.flash = { text: t('rimDone', { k: go.length, p: go.reduce((a, x) => a + x.players.length, 0) }) }; render(); })
+        .catch(e => { el.disabled = false; vErr(e); });
+    },
     'tm-code-copy': el => copyText(t('tmCodeMsg', { c: el.dataset.code, l: codeLink(el.dataset.code) })),
     'tm-codes-copy': () => copyText((S().teams || []).slice().sort(byLevel).filter(x => teamCodeOf(x.id))
       .map(x => `${x.name} (${x.level}): ${teamCodeOf(x.id).id} · ${codeLink(teamCodeOf(x.id).id)}`).join('\n')),
@@ -4123,7 +4162,7 @@
   // Azioni consentite a tutti; le altre solo agli amministratori.
   const PUBLIC_ACTIONS = new Set(['set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
+  const TOUR_ACTIONS = new Set(['rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
   const TOUR_FORMS = new Set(['vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
@@ -4163,6 +4202,18 @@
     submitMode = 'save';
   });
 
+  // file delle liste dei giocatori (admin): letto sul dispositivo, poi anteprima prima di salvare
+  document.addEventListener('change', e => {
+    const el = e.target;
+    if (el.matches && el.matches('[data-roster-replace]') && ui.rosterImport) { ui.rosterImport.replace = el.checked; render(); return; }
+    if (!(el.matches && el.matches('[data-roster-file]')) || !tourAdmin() || !el.files || !el.files[0]) return;
+    const file = el.files[0];
+    file.text().then(txt => {
+      const data = JSON.parse(txt);
+      if (!data || data.kind !== 'manofuori-rosters' || typeof data.teams !== 'object') throw new Error('format');
+      ui.rosterImport = { name: file.name, data, replace: false }; render();
+    }).catch(() => warn('rimBadFile'));
+  });
   document.addEventListener('change', e => {
     const el = e.target;
     switch (el.dataset.change) {
