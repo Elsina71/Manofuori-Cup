@@ -169,3 +169,17 @@ test('playoff: la finale 3°/4° può avere una formula diversa dalla finale', (
   assert.equal(finals.find(m => m.slot === 0).mode, 'bo5');
   assert.equal(finals.find(m => m.slot === 1).mode, '3');
 });
+
+test('playoff con 2 gironi: le seconde incrociano le prime dell\'altro girone', () => {
+  const grp = { a1: 'A', a2: 'A', b1: 'B', b2: 'B' };
+  // classifica che metterebbe di fronte 1ª A e 2ª A: si scambiano le seconde
+  const s = V.avoidSameGroup(['a1', 'b1', 'b2', 'a2'], id => grp[id]);
+  assert.deepEqual(s, ['a1', 'b1', 'a2', 'b2']);
+  const order = V.seedOrder(4);   // 1-4, 2-3
+  assert.equal(grp[s[order[0] - 1]] !== grp[s[order[1] - 1]], true);
+  assert.equal(grp[s[order[2] - 1]] !== grp[s[order[3] - 1]], true);
+  // già a posto: non cambia
+  assert.deepEqual(V.avoidSameGroup(['a1', 'b1', 'a2', 'b2'], id => grp[id]), ['a1', 'b1', 'a2', 'b2']);
+  // girone unico (Master): 1-4 e 2-3, nessuno scambio possibile
+  assert.deepEqual(V.avoidSameGroup(['x1', 'x2', 'x3', 'x4'], () => 'A'), ['x1', 'x2', 'x3', 'x4']);
+});

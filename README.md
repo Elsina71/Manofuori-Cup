@@ -101,6 +101,11 @@ con le schede *Squadre e gironi*, *Calendario*, *Classifica* e *Playoff*. Motore
   (`live/{id}`, pubblico); alla **chiusura del referto** il risultato entra da solo nella gara e quindi in classifica (se
   l'invio non riesce resta il pulsante **Riporta il risultato del referto**); il PDF si archivia in `refertiPdf`. Il referto è facoltativo: i set si possono sempre
   inserire a mano. Gli scorer leggono le rose (servono al referto); per tutti gli altri restano private.
+- **Torneo Panettone 2026** (importazione una tantum, pulsante nella pagina Tornei per l'admin tornei finché i tornei non
+  esistono): 20 squadre, 4 tornei (Start con gironi Rosso e Blu; Master Girone A, B, C) e le 30 gare della prima fase con
+  data, ora e palestra dal calendario dell'organizzazione. Dati in `PANETTONE_2026` (`js/app.js`).
+- **Playoff con più gironi**: al primo turno due squadre dello stesso girone non si incontrano, se si può (es. 1ª A – 2ª B
+  e 1ª B – 2ª A); `Volley.avoidSameGroup`.
 - **Referto di prova / amichevole** (in fondo alla pagina Tornei, per tutti, anche senza accesso): apre il referto
   elettronico scollegato dai tornei (`referto-indoor/` senza gara). Squadre e giocatori si scrivono a mano, arbitri e
   segnapunti sono facoltativi; le gare restano solo su quel dispositivo (con backup in JSON) e non vanno in calendario.

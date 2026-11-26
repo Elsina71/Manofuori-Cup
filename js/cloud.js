@@ -847,6 +847,14 @@ function saveVTour(id, data) {
   const ref = id ? doc(db, 'vtours', id) : doc(collection(db, 'vtours'));
   return (id ? updateDoc(ref, Object.assign({}, data, { updated: Date.now() })) : setDoc(ref, Object.assign({ created: Date.now(), updated: Date.now() }, data))).then(() => ref.id);
 }
+// Importazione di tornei completi (squadre, tornei, gare): liste di [id, dati], scritte in un unico invio.
+function importTournaments(teams, tours, matches) {
+  const b = writeBatch(db);
+  teams.forEach(([id, d]) => b.set(doc(db, 'teams', id), d));
+  tours.forEach(([id, d]) => b.set(doc(db, 'vtours', id), d));
+  matches.forEach(([id, d]) => b.set(doc(db, 'vmatches', id), d));
+  return b.commit();
+}
 // Scritture a blocchi (al massimo 450 per invio): set = { id: dati } da scrivere, del = id da cancellare.
 async function writeVMatches(set, del) {
   const ops = Object.entries(set || {}).map(([id, d]) => b => b.set(doc(db, 'vmatches', id), d))
@@ -1164,6 +1172,7 @@ window.Cloud = {
   updateVMatch,
   deleteVTour,
   saveTeam,
+  importTournaments,
   setTeamStatus,
   deleteTeam,
   saveFreeplay,

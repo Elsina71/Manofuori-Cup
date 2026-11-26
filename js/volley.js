@@ -231,6 +231,27 @@ const Volley = (() => {
   const playoffKey = m => `p-${m.bracket}-r${m.round}-s${m.slot}-l${m.leg}`;
   const groupKey = (g, m, i) => `g-${g}-d${m.day}-${i}`;
 
-  return { setOk, checkSets, tally, played, roundRobin, standings, seedOrder, bracketSize, crossSeed, tieState, tieWinner, bracket, roundMatches, playoffKey, groupKey, ratio };
+  // Teste di serie dei playoff: al primo turno due squadre dello stesso girone non si incontrano, se si può
+  // (es. 2 gironi e 2 qualificate per girone: 1ª A – 2ª B e 1ª B – 2ª A). Si scambia la testa di serie più bassa
+  // di una sfida con quella di un'altra sfida, finché ogni sfida è tra gironi diversi.
+  function avoidSameGroup(seeds, groupOf) {
+    const out = seeds.slice(), order = seedOrder(bracketSize(out.length));
+    const pairs = [];
+    for (let i = 0; i < order.length; i += 2) pairs.push([order[i] - 1, order[i + 1] - 1]);
+    const g = i => (out[i] == null ? null : groupOf(out[i]));
+    const bad = ([a, b]) => out[a] != null && out[b] != null && g(a) != null && g(a) === g(b);
+    for (const p of pairs) {
+      if (!bad(p)) continue;
+      const low = Math.max(p[0], p[1]);
+      const q = pairs.find(o => o !== p && [o[0], o[1]].some(x => out[x] != null) && (() => {
+        const ol = Math.max(o[0], o[1]), oh = Math.min(o[0], o[1]);
+        return out[ol] != null && g(ol) !== g(Math.min(p[0], p[1])) && g(low) !== g(oh);
+      })());
+      if (q) { const ol = Math.max(q[0], q[1]); [out[low], out[ol]] = [out[ol], out[low]]; }
+    }
+    return out;
+  }
+
+  return { setOk, checkSets, tally, played, roundRobin, standings, seedOrder, bracketSize, crossSeed, tieState, tieWinner, bracket, roundMatches, playoffKey, groupKey, ratio, avoidSameGroup };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = Volley;
