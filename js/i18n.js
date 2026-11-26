@@ -30,7 +30,7 @@ const I18n = (() => {
       edPhoto: 'Foto',
       edPhotoChange: 'Cambia foto',
       edRemovePhoto: 'Togli la foto',
-      edPhotoHelp: 'JPG o PNG dal telefono o dal computer: viene ridimensionata automaticamente.',
+      edPhotoHelp: 'JPG o PNG dal telefono o dal computer: viene ridotta automaticamente (al massimo 1000 px, circa 200 kB) perché la prima pagina si apra in fretta.',
       edPhotoWorking: 'Preparo la foto…',
       edTitle: 'Titolo',
       edText: 'Testo',

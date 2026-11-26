@@ -98,6 +98,7 @@
         : !r[0] || r[0] === 'tornei' || r[0] === 'tournaments' ? [...new Set((S().vtours || []).filter(x => x.status === 'live').map(x => x.id).concat(myTourIds()))] : null);
       // formazioni dei capitani: quelle che si possono dare adesso (per sapere se sono già state inviate)
       if (window.Cloud.watchMyLineups) window.Cloud.watchMyLineups(luWatchIds());
+      if (window.Cloud.watchEditorial) window.Cloud.watchEditorial(!r[0] || r[0] === 'a');
       window.Cloud.watchReferti(r[0] === 'vt' && vtById(r[1]) && r[2] === 'referti' ? r[1] : null);
     }
     const adminOnly = r[0] === 'messages' || r[0] === 'users' || r[0] === 'athletes' || r[0] === 'payments';
@@ -127,7 +128,7 @@
     else if (r[0] === 'messages' && admin()) { nav = 'settings'; html = viewMessages(); }
     else if (r[0] === 'users' && admin()) { nav = 'settings'; html = viewUsers(); }
     else if (r[0] === 'a' && (r[1] === '1' || r[1] === '2')) { nav = 'home'; html = viewArticle(+r[1] - 1); }
-    else { nav = 'home'; html = viewFeatured(); }
+    else { nav = 'home'; html = viewFeatured(); setTimeout(optimizeEditorialPhotos, 1500); }
     $app.innerHTML = flashHtml() + html;
     updateChrome(nav);
     // scheda della formazione: a tutto schermo (senza intestazione e menu), con la firma
@@ -348,22 +349,41 @@
       ${freeplayHome()}`;
   }
 
-  // Foto ridimensionata nel browser (max 1200 px, JPEG) perché stia comodamente nel database.
-  async function shrinkPhoto(file) {
-    const url = URL.createObjectURL(file);
+  // Foto ridimensionata nel browser (JPEG, al massimo 1000 px e circa 200 kB): si scarica in fretta anche dal telefono.
+  // Accetta un file oppure una foto già salvata (data:…), per alleggerire quelle caricate prima.
+  const PHOTO_MAX_W = 1000, PHOTO_TARGET = 270000;   // lunghezza del testo base64 (≈ 200 kB)
+  async function shrinkPhoto(src) {
+    const url = typeof src === 'string' ? src : URL.createObjectURL(src);
     try {
       const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; });
-      let w = Math.min(1200, img.naturalWidth), q = .82, out = '';
-      for (let k = 0; k < 8; k++) {
+      let w = Math.min(PHOTO_MAX_W, img.naturalWidth), q = .78, out = '';
+      for (let k = 0; k < 10; k++) {
         const c = document.createElement('canvas');
         c.width = w; c.height = Math.round(img.naturalHeight * w / img.naturalWidth);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
         out = c.toDataURL('image/jpeg', q);
-        if (out.length < 600000) return out;
-        if (q > .55) q -= .1; else w = Math.round(w * .8);
+        if (out.length < PHOTO_TARGET) return out;
+        if (q > .6) q -= .06; else w = Math.round(w * .85);
       }
+      if (out.length < 600000) return out;
       throw new Error('too-big');
-    } finally { URL.revokeObjectURL(url); }
+    } finally { if (typeof src !== 'string') URL.revokeObjectURL(url); }
+  }
+  // Foto della prima pagina caricate prima (fino a ~450 kB): l'admin che apre la prima pagina le alleggerisce una volta
+  const edOptDone = {};
+  function optimizeEditorialPhotos() {
+    if (!admin() || !window.Cloud || !window.Cloud.saveEditorial) return;
+    (S().editorial || []).forEach((a, i) => {
+      const photo = a && safePhoto(a.photo);
+      if (!photo || photo.length <= PHOTO_TARGET * 1.3 || edOptDone[i] || !(S().editorialLoaded || [])[i]) return;
+      edOptDone[i] = true;
+      shrinkPhoto(photo).then(small => {
+        if (small.length >= photo.length * .85) return;   // non ne vale la pena
+        const data = Object.assign({}, a, { photo: small });
+        delete data.updated;
+        return window.Cloud.saveEditorial(i, data).then(() => console.info(`foto ${i + 1} della prima pagina: ${Math.round(photo.length * 3 / 4096)} → ${Math.round(small.length * 3 / 4096)} kB`));
+      }).catch(e => console.warn('ottimizzazione foto', e));
+    });
   }
 
   async function saveEditorialForm(f) {

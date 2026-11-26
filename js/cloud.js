@@ -72,10 +72,17 @@ onSnapshot(doc(db, 'data', 'tour'), snap => {
 }, onError);
 
 // Spazi editoriali della prima pagina: data/editorial1 e data/editorial2 (foto, titolo, testo).
-['editorial1', 'editorial2'].forEach((id, i) => onSnapshot(doc(db, 'data', id), snap => {
-  Store.applyRemote('editorial', { i, data: snap.exists() ? snap.data() : null });
-  refresh();
-}, onError));
+// Si scaricano solo quando servono (prima pagina e pagina dell'articolo): hanno le foto, sono i documenti più pesanti.
+let edUnsubs = null;
+function watchEditorial(on) {
+  if (on && !edUnsubs) {
+    edUnsubs = ['editorial1', 'editorial2'].map((id, i) => onSnapshot(doc(db, 'data', id), snap => {
+      Store.applyRemote('editorial', { i, data: snap.exists() ? snap.data() : null });
+      Store.applyRemote('editorial-loaded', i);
+      refresh();
+    }, onError));
+  }
+}
 
 function saveEditorial(i, data) {
   const ref = doc(db, 'data', 'editorial' + (i + 1));
@@ -1448,6 +1455,7 @@ function watchMyLineups(ids) {
 
 window.Cloud = {
   watchLive,
+  watchEditorial,
   saveLineup,
   loadMatchLineups,
   watchMyLineups,

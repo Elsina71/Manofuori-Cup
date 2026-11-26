@@ -51,6 +51,9 @@ const Store = (() => {
       state.pdfLoaded = true;
     } else if (kind === 'ref-reset') {
       state.referti = {}; state.refPdf = {}; state.refLoaded = false; state.pdfLoaded = false;
+    } else if (kind === 'editorial-loaded') {
+      state.editorialLoaded = (state.editorialLoaded || [false, false]).slice();
+      state.editorialLoaded[value] = true;
     } else if (kind === 'editorial') {
       state.editorial = (state.editorial || [null, null]).slice();
       state.editorial[value.i] = value.data;
