@@ -1744,3 +1744,17 @@ html[data-look="f"]:not([data-theme]) .vm-row { padding: 16px 0; }
 .ref-games li.ref-urgent { box-shadow: inset 4px 0 0 #c92a2a; padding-left: 12px; }
 .ref-games .ref-tour { opacity: .85; margin-top: 2px; }
 .ref-games .badge.ref-no { margin-top: 6px; display: inline-flex; gap: 4px; align-items: center; }
+
+/* Formazione del set data dal capitano */
+.lu-box { margin-top: 8px; grid-column: 1 / -1; min-width: 0; }
+.lu-box.sent { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.lu-form, .lu-confirm { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--surface, transparent); }
+.lu-form h4, .lu-confirm h4 { margin: 0 0 4px; }
+.lu-net { text-align: center; font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; border-bottom: 3px solid currentColor; opacity: .7; margin: 8px 0; padding-bottom: 2px; }
+.lu-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.lu-lib { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.lu-pos { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; }
+.lu-pos select { width: 100%; min-height: 44px; }
+.lu-sum { margin: 6px 0; padding-left: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 4px 12px; }
+.lu-confirm { border-color: #e8a33d; }
+@media (max-width: 520px) { .lu-grid { gap: 6px; } .lu-pos { font-size: .78rem; } }

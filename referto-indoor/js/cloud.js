@@ -127,5 +127,14 @@ function result(id, sets, extra) {
   return updateDoc(doc(db, 'vmatches', id), Object.assign({ sets, status: 'done', by: (who && who.email) || '', updated: Date.now() }, extra || {}));
 }
 
-window.RefCloud = { whoami, login, logout, load, push, watch, list, savePdf, loadPdf, listPdf, result };
+// Formazioni date dai capitani (lineups/{gara}_{A|B}_{set}): { A: { set: {lineup, liberi, at} }, B: {...} }
+function watchLineups(id, cb) {
+  return onSnapshot(query(collection(db, 'lineups'), where('mid', '==', id)), snap => {
+    const out = { A: {}, B: {} };
+    snap.docs.forEach(d => { const x = d.data(); if (out[x.side]) out[x.side][x.set] = x; });
+    cb(out);
+  }, err => console.warn('lineups', err));
+}
+
+window.RefCloud = { whoami, login, logout, load, push, watch, list, savePdf, loadPdf, listPdf, result, watchLineups };
 window.dispatchEvent(new Event('refcloud-ready'));

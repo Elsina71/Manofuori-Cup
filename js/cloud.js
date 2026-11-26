@@ -1414,8 +1414,35 @@ function removeScorer(email) {
   return deleteDoc(doc(db, 'scorers', email));
 }
 
+// ---------- formazioni dei capitani (lineups) ----------
+// lineups/{torneo}_{gara}_{A|B}_{set}: la formazione di un set data dal capitano; il referto la propone al refertista.
+async function saveLineup(d) {
+  const id = `${d.mid}_${d.side}_${d.set}`;
+  const data = { tid: d.tid, mid: d.mid, team: d.team, side: d.side, set: d.set, lineup: d.lineup, liberi: d.liberi || [], by: user.uid, at: Date.now() };
+  await setDoc(doc(db, 'lineups', id), data);
+  Store.applyRemote('myLineups', Object.assign({}, Store.state.myLineups || {}, { [id]: data }));
+  if (lineupUnsubs.has(id)) { lineupUnsubs.get(id)(); lineupUnsubs.delete(id); }
+}
+// il capitano segue le formazioni che può dare adesso (una per gara: il prossimo set)
+const lineupUnsubs = new Map();
+function watchMyLineups(ids) {
+  const want = new Set(ids || []);
+  [...lineupUnsubs.keys()].forEach(id => { if (!want.has(id)) { lineupUnsubs.get(id)(); lineupUnsubs.delete(id); } });
+  want.forEach(id => {
+    if (lineupUnsubs.has(id) || !user) return;
+    lineupUnsubs.set(id, onSnapshot(doc(db, 'lineups', id), snap => {
+      const cur = Object.assign({}, Store.state.myLineups || {});
+      if (snap.exists()) cur[id] = snap.data(); else delete cur[id];
+      Store.applyRemote('myLineups', cur);
+      refresh();
+    }, () => { lineupUnsubs.delete(id); }));   // formazione non ancora data (non leggibile): si riprova al prossimo giro
+  });
+}
+
 window.Cloud = {
   watchLive,
+  saveLineup,
+  watchMyLineups,
   watchReferti,
   loadPdf,
   openReferto,

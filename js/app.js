@@ -93,9 +93,11 @@
     }
     const r = route();
     if (window.Cloud && window.Cloud.watchLive) {
-      window.Cloud.watchLive(r[0] === 'vt' && vtById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? liveTourIds() : r[0] === 'gare' || r[0] === 'me' ? myTourIds()
-        // prima pagina e pagina Tornei: risultati in diretta delle gare dei tornei in corso
-        : !r[0] || r[0] === 'tornei' || r[0] === 'tournaments' ? (S().vtours || []).filter(x => x.status === 'live').map(x => x.id) : null);
+      window.Cloud.watchLive(r[0] === 'vt' && vtById(r[1]) ? r[1] : r[0] === 'mine' && scorer() ? liveTourIds() : r[0] === 'gare' || r[0] === 'me' || (r[0] === 'teams' && teamCap()) ? myTourIds()
+        // prima pagina e pagina Tornei: risultati in diretta delle gare dei tornei in corso (e di quelli delle mie squadre)
+        : !r[0] || r[0] === 'tornei' || r[0] === 'tournaments' ? [...new Set((S().vtours || []).filter(x => x.status === 'live').map(x => x.id).concat(myTourIds()))] : null);
+      // formazioni dei capitani: quelle che si possono dare adesso (per sapere se sono già state inviate)
+      if (window.Cloud.watchMyLineups) window.Cloud.watchMyLineups(luWatchIds());
       window.Cloud.watchReferti(r[0] === 'vt' && vtById(r[1]) && r[2] === 'referti' ? r[1] : null);
     }
     const adminOnly = r[0] === 'messages' || r[0] === 'users' || r[0] === 'athletes' || r[0] === 'payments';
@@ -2818,6 +2820,7 @@
         : refDone ? `<span class="badge warn-b">${esc(t('vmRefDone'))}</span> <strong>${esc(vLiveText(lv))}</strong>`
         : `<span class="muted small">${esc(t('vmToPlay'))}</span>`}</div>
       <div class="vm-when muted small">${m.date || m.time ? `<i class="ti ti-calendar" aria-hidden="true"></i> ${esc(vWhen(m))}` : esc(t('vmNoDate'))}${m.place ? ` · <i class="ti ti-map-pin" aria-hidden="true"></i> ${esc(m.place)}` : ''}${m.mode === 'bo5' ? ` · ${esc(t('vmBo5'))}` : ''}${m.refereeName && (tourAdmin() || scorer()) ? ` · <i class="ti ti-user-shield" aria-hidden="true"></i> ${esc(m.refereeName)}` : ''}</div>
+      ${luBox(tour, m)}
       ${vCanScore(tour, m) && !editing ? `<div class="btn-row vm-actions">
         ${tourAdmin() && done && !m.approvedAt ? `<button class="btn small primary" data-action="vm-approve" data-id="${m.id}"><i class="ti ti-rosette-discount-check" aria-hidden="true"></i> ${esc(t('vmApprove'))}</button>` : ''}
         ${tourAdmin() && done && m.approvedAt ? `<button class="btn small" data-action="vm-reopen" data-id="${m.id}"><i class="ti ti-lock-open" aria-hidden="true"></i> ${esc(t('vmReopen'))}</button>` : ''}
@@ -3259,7 +3262,7 @@
   }
 
   // ---------- le mie gare (capitano e giocatori della squadra registrati nell'app) ----------
-  const myTeams = () => { const uid = myUid(); return uid ? (S().teams || []).filter(x => x.captainUid === uid || (x.memberUids || []).includes(uid)) : []; };
+  const myTeams = () => { const uid = myUid(); return uid ? (S().teams || []).filter(x => x.captainUid === uid || (x.codeUid && x.codeUid === uid) || (x.memberUids || []).includes(uid)) : []; };
   const teamTours = id => (S().vtours || []).filter(x => (x.groups || []).some(g => g.teams.includes(id)) || (x.brackets || []).some(b => b.seeds.includes(id)));
   const myTourIds = () => [...new Set(myTeams().flatMap(tm => teamTours(tm.id).map(x => x.id)))];
   const refMatches = () => (S().vmatches || []).filter(m => isRef() && m.referee && m.referee === myUid());
@@ -3269,6 +3272,54 @@
   function teamMatches(id) {
     const ms = (S().vmatches || []).filter(m => (m.home === id || m.away === id) && vtById(m.tid));
     return ms.filter(m => m.status !== 'done').sort(byWhen).concat(ms.filter(m => m.status === 'done').sort(byWhen).reverse());
+  }
+  // ---------- formazione del set data dal capitano (lineups) ----------
+  // Quando il referto della gara è aperto e nessun set è in corso, il capitano dà la formazione del prossimo set
+  // (al 1° set anche i liberi): Invia → controllo finale → Conferma. Poi non si cambia più (la corregge il referto).
+  const luNext = lv => (!lv || !['ready', 'live'].includes(lv.status) || lv.cur || lv.winner || lv.outcome ? 0 : (lv.sets || []).length + 1);
+  const luShirt = x => (x === '00' ? 100 : x === '000' ? 1000 : Number(x));
+  const luShow = n => (n === 100 ? '00' : n === 1000 ? '000' : String(n));
+  // squadra di cui sono capitano in questa gara (A = casa, B = ospiti)
+  function luMine(m) {
+    for (const [side, id] of [['A', m.home], ['B', m.away]]) { const tm = teamById(id); if (tm && isCaptain(tm)) return { side, tm }; }
+    return null;
+  }
+  const luId = (m, side, n) => `${m.id}_${side}_${n}`;
+  // formazioni che il capitano può dare adesso: le segue il database (per sapere se sono già state inviate)
+  function luWatchIds() {
+    return myTeams().flatMap(tm => teamMatches(tm.id)).map(m => { const c = luMine(m), n = luNext(vLive(m)); return c && n && m.status !== 'done' ? luId(m, c.side, n) : null; }).filter(Boolean);
+  }
+  function luBox(tour, m) {
+    const c = luMine(m), n = c && m.status !== 'done' ? luNext(vLive(m)) : 0;
+    if (!n) return '';
+    const sent = (S().myLineups || {})[luId(m, c.side, n)];
+    const players = rosterOf(c.tm.id).filter(p => String(p.num || '') !== '');
+    const who = no => { const p = players.find(x => luShirt(x.num) === no); return p ? `${luShow(no)} ${p.last} ${p.first}` : luShow(no); };
+    const POSN = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+    if (sent) return `<div class="lu-box sent"><span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('luSent', { n }))}</span>
+      <span class="muted small">${sent.lineup.map((no, i) => `${POSN[i]} ${esc(luShow(no))}`).join(' · ')}${(sent.liberi || []).length ? ` · L ${sent.liberi.map(x => esc(luShow(x))).join(', ')}` : ''}</span></div>`;
+    const F = ui.luForm && ui.luForm.id === luId(m, c.side, n) ? ui.luForm : null;
+    if (!F) return `<div class="lu-box"><button class="btn small primary" data-action="lu-open" data-id="${m.id}"><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('luGive', { n }))}</button></div>`;
+    if (!players.length) return `<div class="lu-box"><p class="note warn">${esc(t('luNoNums'))}</p><button class="btn small" data-action="lu-cancel">${esc(t('cancel'))}</button></div>`;
+    const opts = (v, skip) => `<option value="">—</option>${players.slice().sort(byShirt).map(p => { const no = luShirt(p.num); return `<option value="${no}" ${v === no ? 'selected' : ''} ${skip.includes(no) && v !== no ? 'disabled' : ''}>${esc(luShow(no))} · ${esc(p.last)} ${esc(p.first)}</option>`; }).join('')}`;
+    const used = F.lineup.concat(F.liberi).filter(x => x !== '');
+    if (F.step === 'confirm') return `<div class="lu-box lu-confirm" role="dialog" aria-label="${esc(t('luCheck'))}">
+      <h4><i class="ti ti-alert-triangle" aria-hidden="true"></i> ${esc(t('luCheck'))}</h4>
+      <p class="muted small">${esc(c.tm.name)} · ${esc(t('luSetN', { n }))}</p>
+      <ol class="lu-sum">${F.lineup.map((no, i) => `<li><b>${POSN[i]}</b>${i === 0 ? ` <small class="muted">(${esc(t('luServe'))})</small>` : ''} ${esc(who(no))}</li>`).join('')}</ol>
+      ${n === 1 ? `<p class="small"><b>${esc(t('luLiberi'))}:</b> ${F.liberi.filter(x => x !== '').map(x => esc(who(x))).join(', ') || esc(t('luNoLib'))}</p>` : ''}
+      <p class="muted small">${esc(t('luFinal'))}</p>
+      <div class="btn-row"><button class="btn small" data-action="lu-back">${esc(t('luEdit'))}</button>
+        <button class="btn small primary" data-action="lu-confirm" data-id="${m.id}"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('luConfirm'))}</button></div></div>`;
+    const cell = i => `<label class="lu-pos"><span>${POSN[i]}${i === 0 ? ' · ' + esc(t('luServe')) : ''}</span><select data-change="lu-pos" data-i="${i}" aria-label="${esc(t('luPos', { p: POSN[i] }))}">${opts(F.lineup[i], used)}</select></label>`;
+    const ok = F.lineup.every(x => x !== '');
+    return `<div class="lu-box lu-form"><h4><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('luTitle', { n }))} · ${esc(c.tm.name)}</h4>
+      <p class="muted small">${esc(t('luHelp'))}</p>
+      <div class="lu-net">${esc(t('luNet'))}</div>
+      <div class="lu-grid">${[3, 2, 1, 4, 5, 0].map(cell).join('')}</div>
+      ${n === 1 ? `<div class="lu-lib">${[0, 1].map(i => `<label class="lu-pos"><span>${esc(t('luLib', { i: i + 1 }))}</span><select data-change="lu-lib" data-i="${i}">${opts(F.liberi[i], used)}</select></label>`).join('')}</div>` : ''}
+      <div class="btn-row"><button class="btn small" data-action="lu-cancel">${esc(t('cancel'))}</button>
+        <button class="btn small primary" data-action="lu-send" ${ok ? '' : 'disabled'}><i class="ti ti-send" aria-hidden="true"></i> ${esc(t('luSend'))}</button></div></div>`;
   }
   function myMatchesBlocks(limit) {
     return myTeams().map(tm => {
@@ -3571,6 +3622,7 @@
     return `${verifyNotice()}
       <div class="page-head"><h1><i class="ti ti-shirt-sport" aria-hidden="true"></i> ${esc(t('navTeams'))}</h1><p class="muted">${esc(t('tmIntro'))}</p></div>
       ${mine.length ? `<section class="feat-block"><h2>${esc(t('tmMine'))}</h2><div class="ch-grid">${mine.map(teamCard).join('')}</div></section>` : ''}
+      ${teamCap() && myTeams().length ? `<section class="feat-block"><h2>${esc(t('navMyMatches'))}</h2>${myMatchesBlocks(0)}</section>` : ''}
       ${tourAdmin() ? rosterImportCard() : ''}
       ${tourAdmin() ? teamCodesCard(all) : !scorer() && !teamCap() && (!mine.length || ui.claimCode) ? codeCard() : ''}
       ${create}
@@ -4341,6 +4393,22 @@
       window.Cloud.confirmReferee(m.id, text).then(() => { ui.flash = { text: t('refConfirmDone') }; render(); }).catch(e => { el.disabled = false; vErr(e); });
     },
     'tm-nums-edit': el => { ui.tmNums = el.dataset.id || null; render(); },
+    'lu-open': el => {
+      const m = vmById(el.dataset.id), c = m && luMine(m), n = m && luNext(vLive(m));
+      if (!c || !n) return;
+      ui.luForm = { id: luId(m, c.side, n), lineup: ['', '', '', '', '', ''], liberi: ['', ''], step: 'edit' }; render();
+    },
+    'lu-cancel': () => { ui.luForm = null; render(); },
+    'lu-send': () => { const F = ui.luForm; if (F && F.lineup.every(x => x !== '')) { F.step = 'confirm'; render(); } },
+    'lu-back': () => { if (ui.luForm) { ui.luForm.step = 'edit'; render(); } },
+    'lu-confirm': el => {
+      const m = vmById(el.dataset.id), c = m && luMine(m), n = m && luNext(vLive(m)), F = ui.luForm;
+      if (!c || !n || !F || F.id !== luId(m, c.side, n)) { ui.luForm = null; return warn('luLate'); }
+      el.disabled = true;
+      window.Cloud.saveLineup({ tid: m.tid, mid: m.id, team: c.tm.id, side: c.side, set: n, lineup: F.lineup.slice(), liberi: n === 1 ? F.liberi.filter(x => x !== '') : [] })
+        .then(() => { ui.luForm = null; ui.flash = { text: t('luDone', { n }) }; render(); })
+        .catch(err => { el.disabled = false; ui.luForm = null; warn(err.code === 'permission-denied' ? 'luLate' : 'regError', { code: err.code || err.message }); });
+    },
     'scorer-remove': el => {
       if (!confirmed('scorerRemoveConfirm', { e: el.dataset.email })) return;
       window.Cloud.removeScorer(el.dataset.email).then(() => { ui.scorers = null; ui.flash = { text: t('scorerRemoved') }; render(); })
@@ -4471,8 +4539,8 @@
   const SCORER_ACTIONS = new Set(['vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'pdf-view', 'pdf-zip']);
   const PUBLIC_FORMS = new Set(['tm-codelogin', 'login', 'register', 'complete-profile']);
   const SCORER_FORMS = new Set(['vm-save', 'vt-golden']);
-  const MEMBER_ACTIONS = new Set(['profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
-  const CODE_ACTIONS = new Set(['tm-edit', 'tm-addrow', 'tm-delrow', 'logout']);   // account del codice capitano: solo la sua squadra
+  const MEMBER_ACTIONS = new Set(['lu-open', 'lu-cancel', 'lu-send', 'lu-back', 'lu-confirm', 'profile-edit', 'profile-cancel', 'msg-read', 'verify-resend', 'verify-check', 'notice-dismiss', 'fp-leave', 'tr-month', 'tr-day', 'tr-tab', 'att-set', 'spot-apply', 'spot-withdraw', 'spot-seen', 'rc-pdf', 'privacy-accept', 'my-data', 'delete-request', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete']);
+  const CODE_ACTIONS = new Set(['lu-open', 'lu-cancel', 'lu-send', 'lu-back', 'lu-confirm', 'tm-edit', 'tm-addrow', 'tm-delrow', 'logout']);   // account del codice capitano: solo la sua squadra
   const MEMBER_FORMS = new Set(['profile-save', 'fp-join', 'fp-blocks', 'team-save']);
   let submitMode = 'save';
 
@@ -4618,6 +4686,11 @@
         break;
       }
       case 'ref-free': ui.refFree = el.checked; render(); break;
+      case 'lu-pos': case 'lu-lib': {
+        const F = ui.luForm; if (!F) break;
+        (el.dataset.change === 'lu-pos' ? F.lineup : F.liberi)[+el.dataset.i] = el.value === '' ? '' : Number(el.value);
+        render(); break;
+      }
       case 'ref-filter': ui.refF = Object.assign({}, ui.refF, { [el.dataset.key]: el.value }); render(); break;
       case 'scorer-tour':
         if (!tourAdmin()) return;

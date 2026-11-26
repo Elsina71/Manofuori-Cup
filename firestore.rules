@@ -137,6 +137,37 @@ service cloud.firestore {
       allow delete: if isTourAdmin();
     }
 
+    // lineups/{torneo}_{gara}_{A|B}_{set}: formazione di un set data dal capitano (A = casa, B = ospiti).
+    // La crea solo il capitano della squadra (registrato o con il codice), una volta sola (non si cambia più),
+    // e solo mentre il referto è aperto e quel set è il prossimo da giocare (live: nessun set in corso).
+    // La leggono il referto (admin tornei, account del campo, arbitri) e i capitani di quella squadra: l'altra squadra no.
+    function capOf(team) {
+      return request.auth != null && exists(teamDoc(team))
+        && (get(teamDoc(team)).data.get('captainUid', '') == request.auth.uid || get(teamDoc(team)).data.get('codeUid', '') == request.auth.uid);
+    }
+    function shirts(l, n) { return l is list && l.size() <= n && (l.size() < 1 || l[0] is int) && (l.size() < 2 || l[1] is int) && (l.size() < 3 || l[2] is int) && (l.size() < 4 || l[3] is int) && (l.size() < 5 || l[4] is int) && (l.size() < 6 || l[5] is int); }
+    function liveDoc(mid) { return /databases/$(database)/documents/live/$(mid); }
+    function vmDoc(mid) { return /databases/$(database)/documents/vmatches/$(mid); }
+    match /lineups/{id} {
+      allow read: if isStaff() || capOf(resource.data.team);
+      allow create: if request.resource.data.keys().hasOnly(['tid', 'mid', 'team', 'side', 'set', 'lineup', 'liberi', 'by', 'at'])
+        && request.resource.data.side in ['A', 'B'] && request.resource.data.set is int
+        && id == request.resource.data.mid + '_' + request.resource.data.side + '_' + string(request.resource.data.set)
+        && request.resource.data.by == request.auth.uid
+        && capOf(request.resource.data.team)
+        && exists(vmDoc(request.resource.data.mid))
+        && get(vmDoc(request.resource.data.mid)).data.tid == request.resource.data.tid
+        && get(vmDoc(request.resource.data.mid)).data.get(request.resource.data.side == 'A' ? 'home' : 'away', '') == request.resource.data.team
+        && exists(liveDoc(request.resource.data.mid))
+        && get(liveDoc(request.resource.data.mid)).data.status in ['ready', 'live']
+        && get(liveDoc(request.resource.data.mid)).data.get('cur', null) == null
+        && get(liveDoc(request.resource.data.mid)).data.get('winner', null) == null
+        && get(liveDoc(request.resource.data.mid)).data.get('sets', []).size() + 1 == request.resource.data.set
+        && shirts(request.resource.data.lineup, 6) && request.resource.data.lineup.size() == 6
+        && shirts(request.resource.data.liberi, 2) && (request.resource.data.set == 1 || request.resource.data.liberi.size() == 0);
+      allow delete: if isTourAdmin();
+    }
+
     // ---------- utenti registrati, iscrizioni, messaggi ----------
     function isMember() {
       return request.auth != null && exists(/databases/$(database)/documents/members/$(request.auth.uid));

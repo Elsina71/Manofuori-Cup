@@ -138,6 +138,40 @@ await t('omologata: lo scorer non cambia più il risultato', assertFails(updateD
 await t('omologata: l\'admin tornei la corregge', assertSucceeds(updateDoc(doc(org, 'vmatches', 'T1_g-A-d9-0'), { sets, status: 'done', updated: 5 })));
 await t('l\'admin tornei la riapre', assertSucceeds(updateDoc(doc(org, 'vmatches', 'T1_g-A-d9-0'), { approvedAt: null, approvedBy: '', updated: 6 })));
 await t('riaperta: lo scorer può di nuovo correggere', assertSucceeds(updateDoc(doc(sc1, 'vmatches', 'T1_g-A-d9-0'), { sets, status: 'done', by: 'campo1@x.it', updated: 7 })));
+// formazioni del set date dai capitani (lineups): solo il capitano (registrato o col codice), una volta,
+// mentre il referto è aperto e il set non è ancora iniziato; le legge il referto e la propria squadra, non l'altra
+await env.withSecurityRulesDisabled(async c => {
+  const db = c.firestore();
+  await setDoc(doc(db, 'teams', 'ha'), { name: 'Casa', level: 'MASTER', kind: 'X', captainUid: 'capA', codeUid: 'codeA', status: 'ok' });
+  await setDoc(doc(db, 'teams', 'hb'), { name: 'Ospiti', level: 'MASTER', kind: 'X', captainUid: 'capB', status: 'ok' });
+  await setDoc(doc(db, 'vmatches', 'T1_g-L-1'), { tid: 'T1', key: 'g-L-1', home: 'ha', away: 'hb', sets: [], status: 'sched' });
+  await setDoc(doc(db, 'vmatches', 'T1_g-L-2'), { tid: 'T1', key: 'g-L-2', home: 'ha', away: 'hb', sets: [], status: 'sched' });
+  await setDoc(doc(db, 'live', 'T1_g-L-1'), { tid: 'T1', key: 'g-L-1', a: 'ha', b: 'hb', status: 'ready', sets: [], cur: null, winner: null });
+});
+const capA = env.authenticatedContext('capA', { email: 'capa@x.it', email_verified: true }).firestore();
+const codeA = env.authenticatedContext('codeA', { email: 'x@squadre.manofuori.it' }).firestore();
+const capB = env.authenticatedContext('capB', { email: 'capb@x.it', email_verified: true }).firestore();
+const LU = (by, extra) => Object.assign({ tid: 'T1', mid: 'T1_g-L-1', team: 'ha', side: 'A', set: 1, lineup: [7, 3, 4, 8, 9, 11], liberi: [15], by, at: 1 }, extra || {});
+await t('referto non aperto: niente formazione', assertFails(setDoc(doc(capA, 'lineups', 'T1_g-L-2_A_1'), LU('capA', { mid: 'T1_g-L-2' }))));
+await t('il capitano dell\'altra squadra non la dà per noi', assertFails(setDoc(doc(capB, 'lineups', 'T1_g-L-1_A_1'), LU('capB'))));
+await t('un utente qualunque no', assertFails(setDoc(doc(user, 'lineups', 'T1_g-L-1_A_1'), LU('u1'))));
+await t('squadra sbagliata per il lato no', assertFails(setDoc(doc(capA, 'lineups', 'T1_g-L-1_B_1'), LU('capA', { side: 'B' }))));
+await t('set sbagliato (non è il prossimo) no', assertFails(setDoc(doc(capA, 'lineups', 'T1_g-L-1_A_2'), LU('capA', { set: 2, liberi: [] }))));
+await t('formazione incompleta no', assertFails(setDoc(doc(capA, 'lineups', 'T1_g-L-1_A_1'), LU('capA', { lineup: [7, 3, 4] }))));
+await t('l\'account del codice dà la formazione del 1° set', assertSucceeds(setDoc(doc(codeA, 'lineups', 'T1_g-L-1_A_1'), LU('codeA'))));
+await t('confermata: non si cambia più', assertFails(setDoc(doc(capA, 'lineups', 'T1_g-L-1_A_1'), LU('capA', { lineup: [1, 2, 3, 4, 5, 6] }))));
+await t('il capitano registrato la legge', assertSucceeds(getDoc(doc(capA, 'lineups', 'T1_g-L-1_A_1'))));
+await t('l\'altra squadra non la legge', assertFails(getDoc(doc(capB, 'lineups', 'T1_g-L-1_A_1'))));
+await t('il referto (account del campo) la legge', assertSucceeds(getDoc(doc(sc1, 'lineups', 'T1_g-L-1_A_1'))));
+await t('chi non ha fatto l\'accesso no', assertFails(getDoc(doc(anon, 'lineups', 'T1_g-L-1_A_1'))));
+await t('capitano ospiti: formazione del 1° set', assertSucceeds(setDoc(doc(capB, 'lineups', 'T1_g-L-1_B_1'), LU('capB', { team: 'hb', side: 'B', liberi: [] }))));
+await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'live', 'T1_g-L-1'), { status: 'live', sets: [{ a: 3, b: 2 }], cur: { set: 1, a: 3, b: 2 } }));
+await t('set in corso: niente formazione del 2°', assertFails(setDoc(doc(capA, 'lineups', 'T1_g-L-1_A_2'), LU('capA', { set: 2, liberi: [] }))));
+await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'live', 'T1_g-L-1'), { sets: [{ a: 25, b: 20 }], cur: null }));
+await t('finito il 1° set: formazione del 2°', assertSucceeds(setDoc(doc(capA, 'lineups', 'T1_g-L-1_A_2'), LU('capA', { set: 2, liberi: [] }))));
+await t('liberi solo al 1° set', assertFails(setDoc(doc(capB, 'lineups', 'T1_g-L-1_B_2'), LU('capB', { team: 'hb', side: 'B', set: 2, liberi: [5] }))));
+await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'live', 'T1_g-L-1'), { sets: [{ a: 25, b: 20 }, { a: 25, b: 18 }], winner: 'a' }));
+await t('gara finita: niente formazione', assertFails(setDoc(doc(capB, 'lineups', 'T1_g-L-1_B_3'), LU('capB', { team: 'hb', side: 'B', set: 3, liberi: [] }))));
 console.log(`\n${ok} ok, ${ko} falliti`);
 await env.cleanup();
 process.exit(ko ? 1 : 0);

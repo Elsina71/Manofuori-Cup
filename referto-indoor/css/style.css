@@ -248,3 +248,7 @@ textarea { resize: vertical; }
 
 /* avviso nella pagina delle formazioni */
 .note { background: color-mix(in srgb, var(--woman) 8%, var(--card)); border: 1px solid var(--line); border-radius: 10px; padding: .55rem .75rem; font-size: .9rem; margin: .4rem 0 .6rem; }
+
+/* formazione data dal capitano */
+.cap-note { background: color-mix(in srgb, #e8a33d 14%, var(--card)); border: 1px solid #e8a33d; border-radius: 10px; padding: .45rem .7rem; font-size: .88rem; margin: .3rem 0 .5rem; display: flex; flex-wrap: wrap; gap: .4rem .6rem; align-items: center; }
+.cap-note.ok { background: color-mix(in srgb, #2f9e44 12%, var(--card)); border-color: #2f9e44; }

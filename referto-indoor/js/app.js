@@ -407,9 +407,30 @@
       };
       // dati dell'inizio set da correggere (o appena annullato): servizio, campo, formazioni, cambio a metà set
       if (src) Object.assign(ui.lineup, { serving: src.serving, left: src.left, lineup: { A: src.lineup.A.slice(), B: src.lineup.B.slice() }, mid: String(src.midSwitch || 0) });
+      // formazione data dal capitano: entra da sola finché il refertista non ha toccato quella squadra;
+      // dopo, compare l'avviso con "Usa questa" (decide il refertista)
+      Object.assign(ui.lineup, { touched: { A: !!src, B: !!src }, capAt: { A: 0, B: 0 }, fromCap: { A: false, B: false } });
       ui.prefill = null;
     }
     const L = ui.lineup;
+    const capOf = tm => (fixIdx == null && ui.cap && ui.cap[tm] ? ui.cap[tm][d.index + 1] : null);
+    const useCap = tm => {
+      const c = capOf(tm); if (!c) return;
+      L.lineup[tm] = c.lineup.map(n => +n);
+      if (d.index === 0) [0, 1].forEach(i => { if (!L.libLocked[tm][i]) L.liberi[tm][i] = c.liberi && c.liberi[i] != null ? +c.liberi[i] : ''; });
+      L.capAt[tm] = c.at; L.fromCap[tm] = true; L.touched[tm] = false;
+    };
+    ['A', 'B'].forEach(tm => {
+      const c = capOf(tm);
+      if (c && L.capAt[tm] !== c.at && !L.touched[tm]) { useCap(tm); toast(`Formazione di ${teamName(m, tm)} data dal capitano`); }
+    });
+    const capNote = tm => {
+      const c = capOf(tm);
+      if (!c) return '';
+      if (L.fromCap[tm] && L.capAt[tm] === c.at) return '<p class="cap-note ok">✔ Formazione data dal capitano · puoi correggerla</p>';
+      return `<p class="cap-note">📋 Il capitano ha dato la formazione: ${c.lineup.map((n, i) => `${POS[i]} ${sh(+n)}`).join(' · ')}${d.index === 0 && c.liberi && c.liberi.length ? ` · L ${c.liberi.map(n => sh(+n)).join(', ')}` : ''}
+        <button type="button" class="btn small" data-usecap="${tm}">Usa questa</button></p>`;
+    };
     const left = L.left || 'A', right = other(left);
     const opt = (key, val, label, on, cls) => `<button type="button" class="opt ${cls || ''} ${on ? 'on' : ''}" data-k="${key}" data-v="${val}">${label}</button>`;
     const teamOpts = key => ['A', 'B'].map(tm => opt(key, tm, esc(teamName(m, tm)), L[key] === tm, `team-${tm}`)).join('');
@@ -451,6 +472,7 @@
     const dlist = tm => `<datalist id="dl-${tm}">${playable(m, tm).filter(n => !st.barredMatch[tm][n]).map(n => `<option value="${sh(n)}">${esc(pLabel(m, tm, n))}</option>`).join('')}</datalist>`;
     const court = (tm, side) => `<div class="lineup-court team-${tm}">
       <h3><span class="dot team-${tm}"></span> ${esc(teamName(m, tm))}${L.serving ? ` · ${srvTag(L.serving === tm)}` : ''}</h3>
+      ${capNote(tm)}
       <div class="net-label">rete</div><div class="court-grid">${GRID.map(p => pos(tm, p)).join('')}</div>${dlist(tm)}
       ${libRow(tm)}
       <div class="row rot-row"><span class="muted small">P1 = al servizio · rotazione:</span>
@@ -518,13 +540,13 @@
     };
     $app.querySelectorAll('[data-pos]').forEach(inp => inp.oninput = () => {
       const [tm, p] = inp.dataset.pos.split('.');
-      L.lineup[tm][+p] = num(inp.value);
+      L.lineup[tm][+p] = num(inp.value); L.touched[tm] = true; L.fromCap[tm] = false;
       update();
     });
     $app.querySelectorAll('[data-libno]').forEach(inp => inp.oninput = () => {
       const [tm, i] = inp.dataset.libno.split('.');
       if (L.libLocked[tm][+i]) return;
-      L.liberi[tm][+i] = num(inp.value);
+      L.liberi[tm][+i] = num(inp.value); L.touched[tm] = true;
       update();
     });
     $app.querySelectorAll('[data-wpos], [data-wlib]').forEach(b => b.onclick = e => {
@@ -539,9 +561,10 @@
     // rotazione della formazione: avanti = come al cambio palla (P2→P1, P3→P2 … P1→P6), indietro = al contrario
     $app.querySelectorAll('[data-rot]').forEach(b => b.onclick = () => {
       const l = L.lineup[b.dataset.rot], d = +b.dataset.dir;
-      L.lineup[b.dataset.rot] = l.map((_, i) => l[(i + d + 6) % 6]);
+      L.lineup[b.dataset.rot] = l.map((_, i) => l[(i + d + 6) % 6]); L.touched[b.dataset.rot] = true; L.fromCap[b.dataset.rot] = false;
       render();
     });
+    $app.querySelectorAll('[data-usecap]').forEach(b => b.onclick = () => { useCap(b.dataset.usecap); render(); });
     document.getElementById('editBtn').onclick = () => go('setup');
     const ub = document.getElementById('undoBtn');
     if (ub) ub.onclick = () => undoLast(m);
@@ -1154,6 +1177,11 @@
         if (ref.status === 'live') m.closedAt = null;
         save();
         go(viewFor(m), m.id);
+        // formazioni date dai capitani: si propongono nella schermata della formazione del set
+        if (window.RefCloud && window.RefCloud.watchLineups && !ui.capWatch) ui.capWatch = window.RefCloud.watchLineups(id, cap => {
+          ui.cap = cap;
+          if (ui.view === 'lineup' && cur() && cur().link && cur().link.id === id) render();
+        });
       }).catch(err => {
         console.warn(err);
         const local = Object.values(db.matches).find(x => x.link && x.link.id === id);
