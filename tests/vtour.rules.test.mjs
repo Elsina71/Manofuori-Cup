@@ -166,9 +166,11 @@ await t('il referto (account del campo) la legge', assertSucceeds(getDoc(doc(sc1
 await t('chi non ha fatto l\'accesso no', assertFails(getDoc(doc(anon, 'lineups', 'T1_g-L-1_A_1'))));
 await t('capitano ospiti: formazione del 1° set', assertSucceeds(setDoc(doc(capB, 'lineups', 'T1_g-L-1_B_1'), LU('capB', { team: 'hb', side: 'B', liberi: [] }))));
 await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'live', 'T1_g-L-1'), { status: 'live', sets: [{ a: 3, b: 2 }], cur: { set: 1, a: 3, b: 2 } }));
-await t('set in corso: si dà già la formazione del 2°', assertSucceeds(setDoc(doc(capA, 'lineups', 'T1_g-L-1_A_2'), LU('capA', { set: 2, liberi: [] }))));
+await t('set in corso: niente formazione del set successivo', assertFails(setDoc(doc(capA, 'lineups', 'T1_g-L-1_A_2'), LU('capA', { set: 2, liberi: [] }))));
+await t('set in corso: il capitano vede ancora la formazione inviata', assertSucceeds(getDoc(doc(capA, 'lineups', 'T1_g-L-1_A_1'))));
 await t('set in corso: non quella del set in corso', assertFails(setDoc(doc(capB, 'lineups', 'T1_g-L-1_B_1'), LU('capB', { team: 'hb', side: 'B', liberi: [] }))));
 await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'live', 'T1_g-L-1'), { sets: [{ a: 25, b: 20 }], cur: null }));
+await t('finito il 1° set: formazione del 2° (casa)', assertSucceeds(setDoc(doc(capA, 'lineups', 'T1_g-L-1_A_2'), LU('capA', { set: 2, liberi: [] }))));
 await t('finito il 1° set: formazione del 2° (ospiti)', assertSucceeds(setDoc(doc(capB, 'lineups', 'T1_g-L-1_B_2'), LU('capB', { team: 'hb', side: 'B', set: 2, liberi: [] }))));
 await t('con la firma del capitano', assertSucceeds(env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'live', 'T1_g-L-1'), { sets: [{ a: 25, b: 20 }, { a: 25, b: 27 }] })).then(() => setDoc(doc(capA, 'lineups', 'T1_g-L-1_A_3'), LU('capA', { set: 3, liberi: [], sign: 'data:image/jpeg;base64,AAAA' })))));
 await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'live', 'T1_g-L-1'), { sets: [{ a: 25, b: 20 }, { a: 25, b: 27 }, { a: 10, b: 9 }], cur: { set: 3, a: 10, b: 9 } }));

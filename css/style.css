@@ -1999,3 +1999,9 @@ body.lu-full.lv-full { background: #0e1a22 !important; }
 .ph-lb-img { overflow: hidden; }
 .ph-lb-img img { max-height: calc(100dvh - 140px); width: auto; height: auto; }
 .ph-lb-nav { background: rgba(0,0,0,.55); box-shadow: 0 0 0 2px rgba(255,255,255,.35); }
+/* formazione già inviata: sola lettura */
+.lus-sent { display: flex; gap: 10px; align-items: center; background: #ebfbee; border: 2px solid #2f9e44; border-radius: 12px; padding: 8px 12px; margin: 0 0 10px; font-weight: 800; font-size: 15px; color: #16231d; }
+.lus-sent i { color: #2f9e44; font-size: 26px; }
+.lus-sent small { display: block; font-weight: 500; font-size: 12.5px; color: #5f6f67; margin-top: 2px; }
+.lus-pad.ro { border-style: solid; display: grid; place-items: center; }
+.lus-pad.ro img { max-width: 100%; max-height: 100%; }

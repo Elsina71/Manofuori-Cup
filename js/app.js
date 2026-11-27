@@ -3498,9 +3498,13 @@
   // ---------- formazione del set data dal capitano (lineups) ----------
   // Quando il referto della gara è aperto e nessun set è in corso, il capitano dà la formazione del prossimo set
   // (al 1° set anche i liberi): Invia → controllo finale → Conferma. Poi non si cambia più (la corregge il referto).
-  // set di cui si può dare la formazione: il prossimo da iniziare (con un set in corso, quello dopo: da quando il set
-  // in corso è cominciato fino al fischio d'inizio del successivo); niente oltre l'ultimo set possibile o a gara finita
-  const luNext = (lv, m) => { if (!lv || !['ready', 'live'].includes(lv.status) || lv.winner || lv.outcome) return 0; const n = (lv.sets || []).length + 1; return n > (m && m.mode === 'bo5' ? 5 : 3) ? 0 : n; };
+  // set di cui si può dare la formazione: il prossimo da iniziare, solo quando nessun set è in corso (a fine set compare
+  // quello successivo); niente oltre l'ultimo set possibile o a gara finita
+  const luNext = (lv, m) => { if (!lv || !['ready', 'live'].includes(lv.status) || lv.winner || lv.outcome || lv.cur) return 0; const n = (lv.sets || []).length + 1; return n > (m && m.mode === 'bo5' ? 5 : 3) ? 0 : n; };
+  // set da mostrare al capitano: con un set in corso quello (si vede la formazione inviata fino alla fine del set),
+  // altrimenti il prossimo da dare
+  const luRunning = lv => !!(lv && lv.cur && lv.cur.set && lv.status === 'live' && !lv.winner && !lv.outcome);
+  const luShown = (lv, m) => (luRunning(lv) ? lv.cur.set : luNext(lv, m));
   const luShirt = x => (x === '00' ? 100 : x === '000' ? 1000 : Number(x));
   const luShow = n => (n === 100 ? '00' : n === 1000 ? '000' : String(n));
   // squadra di cui sono capitano in questa gara (A = casa, B = ospiti)
@@ -3511,15 +3515,18 @@
   const luId = (m, side, n) => `${m.id}_${side}_${n}`;
   // formazioni che il capitano può dare adesso: le segue il database (per sapere se sono già state inviate)
   function luWatchIds() {
-    return myTeams().flatMap(tm => teamMatches(tm.id)).map(m => { const c = luMine(m), n = luNext(vLive(m), m); return c && n && m.status !== 'done' ? luId(m, c.side, n) : null; }).filter(Boolean);
+    return myTeams().flatMap(tm => teamMatches(tm.id)).map(m => { const c = luMine(m), n = luShown(vLive(m), m); return c && n && m.status !== 'done' ? luId(m, c.side, n) : null; }).filter(Boolean);
   }
   const LU_POS = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
   function luBox(tour, m) {
-    const c = luMine(m), n = c && m.status !== 'done' ? luNext(vLive(m), m) : 0;
+    const lv = vLive(m), c = luMine(m), n = c && m.status !== 'done' ? luShown(lv, m) : 0;
     if (!n) return '';
-    const sent = (S().myLineups || {})[luId(m, c.side, n)];
-    if (sent) return `<div class="lu-box sent"><span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t('luSent', { n }))}</span>
-      <span class="muted small">${sent.lineup.map((no, i) => `${LU_POS[i]} ${esc(luShow(no))}`).join(' · ')}${(sent.liberi || []).length ? ` · L ${sent.liberi.map(x => esc(luShow(x))).join(', ')}` : ''}</span></div>`;
+    const sent = (S().myLineups || {})[luId(m, c.side, n)], running = luRunning(lv);
+    // inviata: si vede fino alla fine del set; durante il set nessun pulsante per il set successivo
+    if (sent) return `<div class="lu-box sent"><span class="badge st-done"><i class="ti ti-check" aria-hidden="true"></i> ${esc(t(running ? 'luSentRunning' : 'luSent', { n }))}</span>
+      <span class="muted small">${sent.lineup.map((no, i) => `${LU_POS[i]} ${esc(luShow(no))}`).join(' · ')}${(sent.liberi || []).length ? ` · L ${sent.liberi.map(x => esc(luShow(x))).join(', ')}` : ''}</span>
+      <button class="btn small" data-action="lu-open" data-id="${m.id}"><i class="ti ti-eye" aria-hidden="true"></i> ${esc(t('luSeeSent'))}</button></div>`;
+    if (running) return '';
     return `<div class="lu-box"><button class="btn small primary" data-action="lu-open" data-id="${m.id}"><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('luGive', { n }))}</button></div>`;
   }
 
@@ -3528,16 +3535,19 @@
   const luParse = v => { v = String(v || '').trim(); if (v === '00') return 100; if (v === '000') return 1000; return /^\d{1,2}$/.test(v) ? Number(v) : null; };
   const LU_XY = [[83, 58], [83, 6], [50, 4], [17, 6], [17, 58], [50, 64]];   // P1…P6 nel campo (sinistra %, alto %)
   function luState(mid) {
-    const m = vmById(mid), c = m && luMine(m), n = m && luNext(vLive(m), m);
+    const m = vmById(mid), c = m && luMine(m), lv = m && vLive(m), n = m && luShown(lv, m);
     if (!c || !n || m.status === 'done') return null;
-    const id = luId(m, c.side, n);
+    const id = luId(m, c.side, n), sent = (S().myLineups || {})[id];
+    if (luRunning(lv) && !sent) return null;   // set in corso senza formazione inviata: si aspetta la fine del set
     if (!ui.luForm || ui.luForm.id !== id) ui.luForm = { id, lineup: ['', '', '', '', '', ''], liberi: ['', ''], sel: 'p0', hand: false, step: 'edit', sign: '', err: '' };
-    return { m, c, n, F: ui.luForm, sent: (S().myLineups || {})[id] };
+    return { m, c, n, F: ui.luForm, sent, running: luRunning(lv) };
   }
   function viewLineupSheet(mid) {
     const st = luState(mid);
     if (!st) return `<div class="lus"><div class="lus-in"><p class="muted">${esc(t('luLate'))}</p><button class="btn" data-action="lu-close">${esc(t('luBackApp'))}</button></div></div>`;
-    const { m, c, n, F, sent } = st, tour = vtById(m.tid) || { name: '' };
+    const { m, c, n, sent, running } = st, tour = vtById(m.tid) || { name: '' };
+    // formazione già inviata: si mostra così com'è (sola lettura), con la firma
+    const F = sent ? { lineup: sent.lineup.map(Number), liberi: [0, 1].map(i => (sent.liberi || [])[i] != null ? Number(sent.liberi[i]) : ''), step: 'confirm', sel: null, hand: false } : st.F;
     const players = rosterOf(c.tm.id).filter(p => String(p.num || '') !== '').sort(byShirt);
     const hasList = players.length > 0;
     const nameOf = no => { const p = players.find(x => luShirt(x.num) === no); return p ? p.last : t('luHand'); };
@@ -3546,8 +3556,6 @@
       <header class="lus-hd"><div class="lus-brand"><img src="img/logo-fenicottero.png" alt=""><span class="lus-word">manofuori</span><span class="lus-cup">CUP</span></div>
       <div class="lus-team">${esc(c.tm.name)}</div><div class="lus-match">${esc(t('luVs'))} <b>${esc(opp)}</b> · ${esc(vWhen(m) || '')}${m.place ? ' · ' + esc(m.place.split(' – ')[0]) : ''}</div>
       <span class="lus-pill">${esc(t('luTitle', { n }))}</span></header>`;
-    if (sent) return `<div class="lus"><div class="lus-in">${head}<div class="lus-done"><i class="ti ti-circle-check" aria-hidden="true"></i><p>${esc(t('luDone', { n }))}</p>
-      <button class="lus-btn go" data-action="lu-close">${esc(t('luBackApp'))}</button></div></div></div>`;
     const confirm = F.step === 'confirm';
     const selKey = confirm ? '' : F.sel;
     const tok = i => {
@@ -3565,6 +3573,14 @@
     };
     const court = `<div class="lus-arena ${confirm ? 'small' : ''}"><div class="lus-court"><div class="lus-net"><span>${esc(t('luNet'))}</span></div><div class="lus-att"></div>${[3, 2, 1, 4, 5, 0].map(tok).join('')}</div>
       ${n === 1 ? `<div class="lus-librow"><span class="lt">${esc(t('luLiberi'))}${confirm ? '' : `<small>${esc(t('luOptional'))}</small>`}</span>${ltok(0)}${ltok(1)}</div>` : ''}</div>`;
+    if (sent) {
+      const sg = /^data:image\/(png|jpeg);base64,/.test(sent.sign || '') ? sent.sign : '';
+      const at = sent.at ? new Date(sent.at).toLocaleString(I18n.locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+      return `<div class="lus"><div class="lus-in">${head}
+        <div class="lus-sent"><i class="ti ti-circle-check" aria-hidden="true"></i><span>${esc(t('luSentOn', { d: at }))}<small>${esc(t(running ? 'luSentRunningHelp' : 'luSentWaitHelp'))}</small></span></div>${court}
+        ${sg ? `<div class="lus-sign"><div class="lus-slbl">${esc(t('luSign'))}</div><div class="lus-pad ro"><img src="${sg}" alt="${esc(t('luSign'))}"></div></div>` : ''}
+        <div class="lus-bar"><button class="lus-btn sec" data-action="lu-close">${esc(t('luBackApp'))}</button></div></div></div>`;
+    }
     if (confirm) return `<div class="lus"><div class="lus-in">${head}
       <div class="lus-warn"><i class="ti ti-alert-triangle" aria-hidden="true"></i><span>${esc(t('luCheck'))}</span></div>${court}
       <div class="lus-sign"><div class="lus-slbl">${esc(t('luSign'))} <button type="button" class="lus-link" data-action="lu-sign-clear">${esc(t('luSignClear'))}</button></div>
