@@ -339,6 +339,7 @@
       ${noticeAlerts()}
       ${verifyNotice()}
       ${noticeBox('home', S().notice, S().noticeUntil)}
+      ${luHomeAlert()}
       ${liveTop()}
       <div class="theme-hero" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       <h1 class="sr-only">${esc(t('navHome'))}</h1>
@@ -3528,6 +3529,19 @@
       <button class="btn small" data-action="lu-open" data-id="${m.id}"><i class="ti ti-eye" aria-hidden="true"></i> ${esc(t('luSeeSent'))}</button></div>`;
     if (running) return '';
     return `<div class="lu-box"><button class="btn small primary" data-action="lu-open" data-id="${m.id}"><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('luGive', { n }))}</button></div>`;
+  }
+
+  // Prima pagina: avviso in cima per i capitani quando c'è una formazione da dare (referto aperto, set non iniziato)
+  function luHomeAlert() {
+    const rows = myTeams().flatMap(tm => teamMatches(tm.id)).filter((m, i, a) => a.indexOf(m) === i).map(m => {
+      const c = luMine(m), n = c && m.status !== 'done' ? luNext(vLive(m), m) : 0;
+      return n && !(S().myLineups || {})[luId(m, c.side, n)] ? { m, c, n, tour: vtById(m.tid) } : null;
+    }).filter(x => x && x.tour);
+    if (!rows.length) return '';
+    return `<section class="lu-home" aria-label="${esc(t('luHomeTitle'))}"><h2><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('luHomeTitle'))}</h2>
+      ${rows.map(({ m, c, n, tour }) => `<div class="lu-home-row"><div><strong>${esc(vTeamName(tour, m.home))} – ${esc(vTeamName(tour, m.away))}</strong>
+        <span class="muted small">${esc(c.tm.name)} · ${esc(vWhen(m) || '')}</span></div>
+        <button class="btn primary" data-action="lu-open" data-id="${m.id}"><i class="ti ti-clipboard-list" aria-hidden="true"></i> ${esc(t('luGive', { n }))}</button></div>`).join('')}</section>`;
   }
 
   // Scheda a tutto schermo (dal telefono): campo con la rete, i 6 posti come cerchi, i liberi (1° set);

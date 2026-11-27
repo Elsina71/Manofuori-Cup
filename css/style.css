@@ -2005,3 +2005,10 @@ body.lu-full.lv-full { background: #0e1a22 !important; }
 .lus-sent small { display: block; font-weight: 500; font-size: 12.5px; color: #5f6f67; margin-top: 2px; }
 .lus-pad.ro { border-style: solid; display: grid; place-items: center; }
 .lus-pad.ro img { max-width: 100%; max-height: 100%; }
+
+/* prima pagina: formazione da dare (capitani) */
+.lu-home { margin: 4px 0 16px; padding: 14px 16px; border-radius: 16px; background: #fff4e0; color: #16231d; border: 2px solid #e8a33d; }
+.lu-home h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 1.15rem; color: #16231d; }
+.lu-home-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; padding: 8px 0; border-top: 1px solid rgba(0,0,0,.08); }
+.lu-home-row > div { display: grid; gap: 2px; min-width: 0; }
+.lu-home-row .muted { color: #5f6f67; }
