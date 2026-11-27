@@ -169,6 +169,62 @@ service cloud.firestore {
       allow delete: if isTourAdmin();
     }
 
+    // ---------- album delle foto (sezione Foto) ----------
+    // albums/{idTorneo}: album con il nome del torneo; resta anche se il torneo viene cancellato.
+    //   count/bytes: foto e spazio usato (si aggiornano insieme a ogni foto), limit: foto al massimo (200, l'admin lo cambia).
+    // photos/{idAlbum_xxx}: miniatura e dati della foto; photoFull/{stesso id}: la foto grande (si scarica solo aprendola).
+    // Pubblicano gli admin (generali e tornei) e i capitani delle squadre del torneo (registrati o con il codice).
+    // Tutti le vedono. Cancella l'admin oppure chi l'ha pubblicata.
+    function albumDoc(aid) { return /databases/$(database)/documents/albums/$(aid); }
+    function tourDoc(tid) { return /databases/$(database)/documents/vtours/$(tid); }
+    function teamOfTour(aid, team) {
+      return team is string && team != '' && exists(tourDoc(aid)) && team in get(tourDoc(aid)).data.get('teamNames', {}).keys() && capOf(team);
+    }
+    match /albums/{aid} {
+      allow read: if true;
+      allow create: if request.auth != null && exists(tourDoc(aid))
+        && (isTourAdmin() || request.resource.data.get('team', '') != '' && teamOfTour(aid, request.resource.data.team))
+        && request.resource.data.keys().hasOnly(['tid', 'name', 'level', 'count', 'bytes', 'limit', 'cover', 'created', 'updated', 'team'])
+        && request.resource.data.tid == aid && request.resource.data.name == get(tourDoc(aid)).data.name
+        && request.resource.data.count == 0 && request.resource.data.bytes == 0 && request.resource.data.limit == 200;
+      allow update, delete: if isTourAdmin();
+      // chi pubblica o cancella una propria foto aggiorna solo il contatore (di uno), lo spazio e la copertina
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['count', 'bytes', 'cover', 'updated'])
+        && (request.resource.data.count == resource.data.count + 1 || request.resource.data.count == resource.data.count - 1)
+        && request.resource.data.count >= 0 && request.resource.data.count <= resource.data.limit
+        && request.resource.data.bytes is int && request.resource.data.bytes >= 0
+        && request.resource.data.bytes - resource.data.bytes <= 450000 && resource.data.bytes - request.resource.data.bytes <= 450000
+        && (!('cover' in request.resource.data) || (request.resource.data.cover is string && request.resource.data.cover.size() <= 40000));
+    }
+    match /photos/{pid} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['aid', 'thumb', 'by', 'byName', 'team', 'at', 'w', 'h', 'size'])
+        && request.resource.data.by == request.auth.uid
+        && pid.matches(request.resource.data.aid + '_[0-9a-z]+')
+        && request.resource.data.thumb is string && request.resource.data.thumb.size() <= 40000
+        && request.resource.data.byName is string && request.resource.data.byName.size() <= 80
+        && request.resource.data.size is int
+        && existsAfter(/databases/$(database)/documents/photoFull/$(pid))
+        && request.resource.data.size == request.resource.data.thumb.size() + getAfter(/databases/$(database)/documents/photoFull/$(pid)).data.data.size()
+        && exists(albumDoc(request.resource.data.aid))
+        && getAfter(albumDoc(request.resource.data.aid)).data.count == get(albumDoc(request.resource.data.aid)).data.count + 1
+        && getAfter(albumDoc(request.resource.data.aid)).data.bytes == get(albumDoc(request.resource.data.aid)).data.bytes + request.resource.data.size
+        && (isTourAdmin() || teamOfTour(request.resource.data.aid, request.resource.data.team));
+      allow delete: if isTourAdmin() || (request.auth != null && resource.data.by == request.auth.uid);
+    }
+    match /photoFull/{pid} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['aid', 'data', 'by'])
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.data is string && request.resource.data.data.size() <= 400000
+        && existsAfter(/databases/$(database)/documents/photos/$(pid))
+        && getAfter(/databases/$(database)/documents/photos/$(pid)).data.by == request.auth.uid;
+      allow delete: if isTourAdmin() || (request.auth != null && resource.data.by == request.auth.uid);
+    }
+
     // ---------- utenti registrati, iscrizioni, messaggi ----------
     function isMember() {
       return request.auth != null && exists(/databases/$(database)/documents/members/$(request.auth.uid));

@@ -2,7 +2,7 @@
 // Uso (dalla cartella principale): npm i --no-save @firebase/rules-unit-testing@4 firebase@11, poi
 //   npx firebase-tools emulators:exec --only firestore --project demo-vtour "node tests/vtour.rules.test.mjs"
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, getDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, getDoc, deleteDoc, writeBatch, increment } from 'firebase/firestore';
 import fs from 'fs';
 const env = await initializeTestEnvironment({ projectId: 'demo-vtour', firestore: { rules: fs.readFileSync(process.argv[2] || 'firestore.rules', 'utf8'), host: '127.0.0.1', port: 8089 } });
 await env.withSecurityRulesDisabled(async c => {
@@ -176,6 +176,41 @@ await t('gara al meglio dei 3: niente 4° set', assertFails(setDoc(doc(capA, 'li
 await t('liberi solo al 1° set', assertFails(setDoc(doc(capB, 'lineups', 'T1_g-L-1_B_4'), LU('capB', { team: 'hb', side: 'B', set: 4, liberi: [5] }))));
 await env.withSecurityRulesDisabled(c => updateDoc(doc(c.firestore(), 'live', 'T1_g-L-1'), { sets: [{ a: 25, b: 20 }, { a: 25, b: 27 }, { a: 15, b: 9 }], winner: 'a', cur: null }));
 await t('gara finita: niente formazione', assertFails(setDoc(doc(capB, 'lineups', 'T1_g-L-1_B_3'), LU('capB', { team: 'hb', side: 'B', set: 3, liberi: [] }))));
+// album delle foto: pubblicano admin tornei e capitani delle squadre del torneo; tutti vedono; restano senza torneo
+await env.withSecurityRulesDisabled(async c => {
+  const db = c.firestore();
+  await setDoc(doc(db, 'vtours', 'TF'), { name: 'Torneo Foto', level: 'MASTER', teamNames: { ha: 'Casa', hb: 'Ospiti' } });
+  await setDoc(doc(db, 'teams', 'hz'), { name: 'Estranei', level: 'MASTER', kind: 'X', captainUid: 'capZ', status: 'ok' });
+});
+const capZ = env.authenticatedContext('capZ', { email: 'capz@x.it', email_verified: true }).firestore();
+const ALB = (extra) => Object.assign({ tid: 'TF', name: 'Torneo Foto', level: 'MASTER', count: 0, bytes: 0, limit: 200, cover: '', created: 1, updated: 1, team: '' }, extra || {});
+const photo = (db, uid, team, pid, extra) => { const b = writeBatch(db), th = 'data:image/jpeg;base64,AAAA', full = 'data:image/jpeg;base64,' + 'B'.repeat(200);
+  b.set(doc(db, 'photoFull', pid), { aid: 'TF', data: full, by: uid });
+  b.set(doc(db, 'photos', pid), Object.assign({ aid: 'TF', thumb: th, by: uid, byName: 'X', team, at: 1, w: 10, h: 10, size: th.length + full.length }, extra || {}));
+  b.update(doc(db, 'albums', 'TF'), { count: increment(1), bytes: increment(th.length + full.length), cover: th, updated: 2 });
+  return b.commit(); };
+await t('capitano di un\'altra squadra non crea l\'album', assertFails(setDoc(doc(capZ, 'albums', 'TF'), ALB({ team: 'hz' }))));
+await t('album con un nome diverso dal torneo no', assertFails(setDoc(doc(org, 'albums', 'TF'), ALB({ name: 'Altro' }))));
+await t('capitano di una squadra del torneo crea l\'album', assertSucceeds(setDoc(doc(capA, 'albums', 'TF'), ALB({ team: 'ha' }))));
+await t('il capitano pubblica una foto', assertSucceeds(photo(capA, 'capA', 'ha', 'TF_a1')));
+await t('l\'account del codice della squadra pubblica', assertSucceeds(photo(codeA, 'codeA', 'ha', 'TF_a2')));
+await t('l\'admin tornei pubblica', assertSucceeds(photo(org, 'org', '', 'TF_a3')));
+await t('capitano di una squadra fuori dal torneo no', assertFails(photo(capZ, 'capZ', 'hz', 'TF_a4')));
+await t('utente qualunque no', assertFails(photo(user, 'u1', '', 'TF_a5')));
+await t('senza aggiornare il contatore dell\'album no', assertFails((() => { const b = writeBatch(capA); b.set(doc(capA, 'photoFull', 'TF_a6'), { aid: 'TF', data: 'x', by: 'capA' }); b.set(doc(capA, 'photos', 'TF_a6'), { aid: 'TF', thumb: 't', by: 'capA', byName: 'X', team: 'ha', at: 1, w: 1, h: 1, size: 2 }); return b.commit(); })()));
+await t('dimensione dichiarata falsa no', assertFails(photo(capA, 'capA', 'ha', 'TF_a7', { size: 5 })));
+await t('i visitatori vedono album, miniature e foto', assertSucceeds(getDoc(doc(anon, 'albums', 'TF')).then(() => getDoc(doc(anon, 'photos', 'TF_a1'))).then(() => getDoc(doc(anon, 'photoFull', 'TF_a1')))));
+await t('il contatore dice 3 foto', (async () => { const a = (await getDoc(doc(anon, 'albums', 'TF'))).data(); if (a.count !== 3) throw new Error('count ' + a.count); })());
+await t('un altro capitano non cancella la foto', assertFails(deleteDoc(doc(capB, 'photos', 'TF_a1'))));
+await t('chi l\'ha pubblicata la cancella', assertSucceeds((() => { const b = writeBatch(capA); b.delete(doc(capA, 'photos', 'TF_a1')); b.delete(doc(capA, 'photoFull', 'TF_a1')); b.update(doc(capA, 'albums', 'TF'), { count: increment(-1), bytes: increment(-206), updated: 3 }); return b.commit(); })()));
+await t('il capitano non cambia il limite', assertFails(updateDoc(doc(capA, 'albums', 'TF'), { limit: 1000 })));
+await t('l\'admin tornei cambia il limite a 2', assertSucceeds(updateDoc(doc(org, 'albums', 'TF'), { limit: 2 })));
+await t('album pieno: niente altre foto', assertFails(photo(capA, 'capA', 'ha', 'TF_a8')));
+await env.withSecurityRulesDisabled(async c => { await updateDoc(doc(c.firestore(), 'albums', 'TF'), { limit: 200 }); await deleteDoc(doc(c.firestore(), 'vtours', 'TF')); });
+await t('torneo cancellato: l\'album resta visibile', assertSucceeds(getDoc(doc(anon, 'albums', 'TF')).then(d => { if (!d.exists()) throw new Error('sparito'); })));
+await t('torneo cancellato: il capitano non pubblica più', assertFails(photo(capA, 'capA', 'ha', 'TF_a9')));
+await t('torneo cancellato: l\'admin pubblica ancora', assertSucceeds(photo(org, 'org', '', 'TF_b1')));
+await t('l\'admin tornei cancella l\'album', assertSucceeds(deleteDoc(doc(org, 'albums', 'TF'))));
 console.log(`\n${ok} ok, ${ko} falliti`);
 await env.cleanup();
 process.exit(ko ? 1 : 0);

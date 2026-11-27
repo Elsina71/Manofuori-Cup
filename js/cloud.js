@@ -2,7 +2,8 @@
 import { initializeApp } from '../vendor/firebase/firebase-app.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, collection, onSnapshot, writeBatch, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, connectFirestoreEmulator, arrayUnion, updateDoc, runTransaction, deleteField
+  doc, collection, onSnapshot, writeBatch, getDoc, getDocs, setDoc, addDoc, deleteDoc, query, where, connectFirestoreEmulator, arrayUnion, updateDoc, runTransaction, deleteField,
+  documentId, orderBy, startAt, endAt, startAfter, limit, increment
 } from '../vendor/firebase/firebase-firestore.js';
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, connectAuthEmulator,
@@ -1430,6 +1431,68 @@ async function saveLineup(d) {
   Store.applyRemote('myLineups', Object.assign({}, Store.state.myLineups || {}, { [id]: data }));
   if (lineupUnsubs.has(id)) { lineupUnsubs.get(id)(); lineupUnsubs.delete(id); }
 }
+// ---------- album delle foto (sezione Foto) ----------
+// albums/{idTorneo}: nome, foto, spazio, copertina; photos/{idAlbum_xxx}: miniatura; photoFull/{id}: foto grande.
+let albumsUnsub = null;
+function watchAlbums(on) {
+  if (on && !albumsUnsub) {
+    albumsUnsub = onSnapshot(collection(db, 'albums'), snap => {
+      Store.applyRemote('albums', snap.docs.map(d => Object.assign({ id: d.id }, d.data())));
+      refresh();
+    }, onError);
+  }
+}
+const PHOTO_PAGE = 24;
+// foto di un album, dalla più recente (l'id contiene il tempo "al contrario"), a pagine di 24
+async function loadPhotos(aid, afterId) {
+  const q = query(collection(db, 'photos'), orderBy(documentId()), afterId ? startAfter(afterId) : startAt(aid + '_'), endAt(aid + '_'), limit(PHOTO_PAGE));
+  const snap = await getDocs(q);
+  return { list: snap.docs.map(d => Object.assign({ id: d.id }, d.data())), more: snap.size === PHOTO_PAGE };
+}
+async function loadPhotoFull(pid) {
+  const s = await getDoc(doc(db, 'photoFull', pid));
+  return s.exists() ? s.data().data : '';
+}
+// l'album nasce alla prima foto (con il nome del torneo; resta anche se il torneo viene cancellato)
+async function ensureAlbum(tour, team) {
+  const ref = doc(db, 'albums', tour.id);
+  const s = await getDoc(ref);
+  if (s.exists()) return s.data();
+  const a = { tid: tour.id, name: tour.name, level: tour.level || '', count: 0, bytes: 0, limit: 200, cover: '', created: Date.now(), updated: Date.now(), team: team || '' };
+  await setDoc(ref, a);
+  return a;
+}
+const newPhotoId = aid => `${aid}_${(4102444800000 - Date.now()).toString(36).padStart(9, '0')}${Math.random().toString(36).slice(2, 6)}`;
+async function addPhoto(aid, p) {
+  const pid = newPhotoId(aid), size = p.thumb.length + p.full.length;
+  const b = writeBatch(db);
+  b.set(doc(db, 'photoFull', pid), { aid, data: p.full, by: user.uid });
+  b.set(doc(db, 'photos', pid), { aid, thumb: p.thumb, by: user.uid, byName: p.byName || '', team: p.team || '', at: Date.now(), w: p.w, h: p.h, size });
+  b.update(doc(db, 'albums', aid), { count: increment(1), bytes: increment(size), cover: p.thumb, updated: Date.now() });
+  await b.commit();
+  return pid;
+}
+async function deletePhoto(ph) {
+  const b = writeBatch(db);
+  b.delete(doc(db, 'photos', ph.id));
+  b.delete(doc(db, 'photoFull', ph.id));
+  b.update(doc(db, 'albums', ph.aid), { count: increment(-1), bytes: increment(-(ph.size || 0)), updated: Date.now() });
+  await b.commit();
+}
+// solo admin: cambia il limite di foto, oppure cancella l'album con tutte le foto
+function setAlbumLimit(aid, n) { return updateDoc(doc(db, 'albums', aid), { limit: n, updated: Date.now() }); }
+async function deleteAlbum(aid) {
+  if (!canTour()) return;
+  for (;;) {
+    const snap = await getDocs(query(collection(db, 'photos'), orderBy(documentId()), startAt(aid + '_'), endAt(aid + '_'), limit(200)));
+    if (snap.empty) break;
+    const b = writeBatch(db);
+    snap.docs.forEach(d => { b.delete(d.ref); b.delete(doc(db, 'photoFull', d.id)); });
+    await b.commit();
+  }
+  await deleteDoc(doc(db, 'albums', aid));
+}
+
 // admin (generale o tornei): formazioni date dai capitani e referto della gara, per le immagini delle formazioni
 async function loadMatchLineups(mid) {
   if (!canTour()) throw Object.assign(new Error('permission-denied'), { code: 'permission-denied' });
@@ -1455,6 +1518,7 @@ function watchMyLineups(ids) {
 
 window.Cloud = {
   watchLive,
+  watchAlbums, loadPhotos, loadPhotoFull, ensureAlbum, addPhoto, deletePhoto, setAlbumLimit, deleteAlbum,
   watchEditorial,
   saveLineup,
   loadMatchLineups,

@@ -99,6 +99,8 @@
       // formazioni dei capitani: quelle che si possono dare adesso (per sapere se sono già state inviate)
       if (window.Cloud.watchMyLineups) window.Cloud.watchMyLineups(luWatchIds());
       if (window.Cloud.watchEditorial) window.Cloud.watchEditorial(!r[0] || r[0] === 'a');
+      if (window.Cloud.watchAlbums) window.Cloud.watchAlbums(r[0] === 'foto' || r[0] === 'vt');
+      if (r[0] !== 'foto') ui.lb = null;
       window.Cloud.watchReferti(r[0] === 'vt' && vtById(r[1]) && r[2] === 'referti' ? r[1] : null);
     }
     const adminOnly = r[0] === 'messages' || r[0] === 'users' || r[0] === 'athletes' || r[0] === 'payments';
@@ -114,6 +116,8 @@
     else if (r[0] === 'tema') { nav = 'settings'; html = viewTheme(); }
     else if (r[0] === 'livelli' && tourAdmin()) { nav = 'settings'; html = viewLevels(); }
     else if (r[0] === 'gare') { nav = 'gare'; html = viewMyMatches(); }
+    else if (r[0] === 'foto' && r[1]) { nav = 'foto'; html = viewAlbum(decodeURIComponent(r[1])); }
+    else if (r[0] === 'foto') { nav = 'foto'; html = viewPhotos(); }
     else if (r[0] === 'live' && r[1]) { nav = 'tournaments'; html = viewLiveMatch(decodeURIComponent(r[1])); }
     else if (r[0] === 'formazione' && r[1]) { nav = 'teams'; html = viewLineupSheet(decodeURIComponent(r[1])); }
     else if (r[0] === 'tornei' || r[0] === 'tournaments') { html = viewVTours(); }
@@ -2560,6 +2564,126 @@
       }).join('')}</div></section>`;
   }
 
+  // ====================================================================
+  // FOTO: un album per torneo (con il nome del torneo; resta anche se il torneo viene cancellato).
+  // Pubblicano gli admin (generali e tornei) e i capitani delle squadre del torneo; tutti le vedono.
+  // Nel database: miniatura leggera per la griglia, foto grande scaricata solo quando la si apre.
+  // ====================================================================
+  const FREE_DB_MB = 1024;   // spazio del piano gratuito di Firestore
+  const albumOf = aid => (S().albums || []).find(a => a.id === aid) || null;
+  // chi può pubblicare nell'album del torneo: admin (come "Organizzazione") o capitano di una squadra del torneo
+  function albumPoster(aid) {
+    const tour = vtById(aid);
+    if (!tour || !myUid()) return null;
+    if (tourAdmin()) return { byName: t('phOrg'), team: '' };
+    const tm = myTeams().find(x => isCaptain(x) && (tour.teamNames || {})[x.id] != null);
+    return tm ? { byName: tm.name, team: tm.id } : null;
+  }
+  // immagine ridotta nel browser (JPEG): lato lungo al massimo maxSide, sotto "target" caratteri (base64)
+  async function shrinkImage(file, maxSide, target, q0) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; });
+      const k0 = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+      let w = Math.round(img.naturalWidth * k0), h = Math.round(img.naturalHeight * k0), q = q0 || .8, out = '';
+      for (let i = 0; i < 12; i++) {
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h);
+        out = c.toDataURL('image/jpeg', q);
+        if (out.length <= target) return { data: out, w, h };
+        if (q > .55) q -= .07; else { w = Math.round(w * .85); h = Math.round(h * .85); }
+      }
+      return { data: out, w, h };
+    } finally { URL.revokeObjectURL(url); }
+  }
+  function viewPhotos() {
+    const albums = (S().albums || []).slice().sort((a, b) => (b.updated || 0) - (a.updated || 0));
+    const mine = (S().vtours || []).filter(x => x.status !== 'draft' && !albumOf(x.id) && albumPoster(x.id));
+    const used = albums.reduce((n, a) => n + (a.bytes || 0), 0) * 1.1 / 1048576;
+    const card = a => {
+      const tour = vtById(a.id), cover = safePhoto(a.cover);
+      return `<a class="ph-album" href="#/foto/${encodeURIComponent(a.id)}">
+        <span class="ph-cover">${cover ? `<img src="${cover}" alt="" loading="lazy">` : '<i class="ti ti-photo" aria-hidden="true"></i>'}</span>
+        <span class="ph-info"><strong>${esc(a.name)}</strong>
+          <small class="muted">${esc(t(a.count === 1 ? 'phCount1' : 'phCount', { n: a.count || 0 }))}${tour ? '' : ` · ${esc(t('phTourGone'))}`}</small></span></a>`;
+    };
+    return `<div class="page-head"><h1><i class="ti ti-photo" aria-hidden="true"></i> ${esc(t('navPhotos'))}</h1><p class="muted">${esc(t('phIntro'))}</p></div>
+      ${tourAdmin() ? `<div class="card ph-space"><div class="ph-space-row"><strong>${esc(t('phSpace'))}</strong><span>${used.toFixed(0)} MB / ${FREE_DB_MB} MB</span></div>
+        <div class="tprog" role="img" aria-label="${esc(t('phSpace'))}"><span style="width:${Math.min(100, used * 100 / FREE_DB_MB).toFixed(1)}%"></span></div>
+        <p class="muted small">${esc(t('phSpaceHelp', { n: Math.max(0, Math.floor((FREE_DB_MB - used) * 1048576 / 200000 / 1.1)) }))}</p></div>` : ''}
+      ${mine.length ? `<div class="card"><h2>${esc(t('phStart'))}</h2><div class="btn-row">${mine.map(x => `<a class="btn small" href="#/foto/${encodeURIComponent(x.id)}"><i class="ti ti-camera-plus" aria-hidden="true"></i> ${esc(x.name)}</a>`).join('')}</div></div>` : ''}
+      ${albums.filter(a => a.count || tourAdmin()).length ? `<div class="ph-albums">${albums.filter(a => a.count || tourAdmin()).map(card).join('')}</div>` : `<div class="empty"><i class="ti ti-photo" aria-hidden="true"></i> ${esc(t('phNone'))}</div>`}`;
+  }
+  function albumLoad(aid, more) {
+    const A = ui.album && ui.album.aid === aid ? ui.album : (ui.album = { aid, list: [], more: false, loading: false, loaded: false });
+    if (A.loading || (A.loaded && !more)) return;
+    A.loading = true;
+    window.Cloud.loadPhotos(aid, more && A.list.length ? A.list[A.list.length - 1].id : null)
+      .then(r => { A.list = A.list.concat(r.list.filter(p => !A.list.some(x => x.id === p.id))); A.more = r.more; })
+      .catch(e => { A.err = e.code || e.message; })
+      .finally(() => { A.loading = false; A.loaded = true; render(); });
+  }
+  function viewAlbum(aid) {
+    const a = albumOf(aid), tour = vtById(aid);
+    if (!a && !tour) return `<div class="page-head"><a class="back" href="#/foto">← ${esc(t('navPhotos'))}</a><h1>${esc(t('phNotFound'))}</h1></div>`;
+    if (window.Cloud && window.Cloud.loadPhotos) albumLoad(aid);
+    const A = ui.album && ui.album.aid === aid ? ui.album : { list: [] };
+    const poster = albumPoster(aid), count = a ? a.count || 0 : 0, lim = a ? a.limit || 200 : 200;
+    const up = ui.albumUp && ui.albumUp.aid === aid ? ui.albumUp : null;
+    const canDel = p => tourAdmin() || p.by === myUid();
+    return `<div class="page-head has-action"><a class="back" href="#/foto">← ${esc(t('navPhotos'))}</a>
+        <h1><i class="ti ti-photo" aria-hidden="true"></i> ${esc(a ? a.name : tour.name)}</h1>
+        <p class="meta"><span class="muted">${esc(t('phCountOf', { n: count, m: lim }))}</span>${tour ? ` · <a href="#/vt/${tour.id}">${esc(t('phGoTour'))}</a>` : ` · <span class="badge">${esc(t('phTourGone'))}</span>`}</p>
+        ${tourAdmin() && a ? `<span class="btn-row head-action"><button class="btn small" data-action="ph-limit" data-id="${esc(aid)}"><i class="ti ti-adjustments" aria-hidden="true"></i> ${esc(t('phLimit'))}</button>
+          <button class="btn small danger" data-action="ph-album-del" data-id="${esc(aid)}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('phAlbumDel'))}</button></span>` : ''}</div>
+      ${poster ? `<div class="card ph-up">${up ? `<p><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('phUploading', { d: up.done, n: up.total }))}</p>`
+        : count >= lim ? `<p class="note warn">${esc(t('phFull', { m: lim }))}</p>`
+        : `<label class="btn primary ph-pick"><i class="ti ti-camera-plus" aria-hidden="true"></i> ${esc(t('phAdd'))}<input type="file" accept="image/*" multiple data-album-upload="${esc(aid)}" hidden></label>
+          <p class="muted small">${esc(t('phAddHelp', { who: poster.byName, n: lim - count }))}</p>`}</div>` : ''}
+      ${A.list.length ? `<div class="ph-grid">${A.list.map((p, i) => `<button type="button" class="ph-th" data-action="ph-open" data-i="${i}" aria-label="${esc(t('phOpen'))}"><img src="${safePhoto(p.thumb)}" alt="" loading="lazy"></button>`).join('')}</div>`
+        : A.loaded || A.err ? `<div class="empty"><i class="ti ti-photo" aria-hidden="true"></i> ${esc(t(A.err ? 'errCloud' : 'phEmpty', { code: A.err || '' }))}</div>` : `<p class="muted"><i class="ti ti-loader-2" aria-hidden="true"></i> ${esc(t('loading'))}</p>`}
+      ${A.more ? `<div class="btn-row center"><button class="btn" data-action="ph-more" data-id="${esc(aid)}">${esc(t('phMore'))}</button></div>` : ''}
+      ${ui.lb != null && A.list[ui.lb] ? lightbox(A, a || { name: tour.name }, canDel(A.list[ui.lb])) : ''}`;
+  }
+  function lightbox(A, a, canDel) {
+    const p = A.list[ui.lb], full = (ui.phFull || {})[p.id];
+    if (!full && window.Cloud) {
+      ui.phFull = ui.phFull || {};
+      if (!ui.phFull['?' + p.id]) { ui.phFull['?' + p.id] = 1; window.Cloud.loadPhotoFull(p.id).then(d => { ui.phFull[p.id] = d || p.thumb; render(); }).catch(() => { ui.phFull[p.id] = p.thumb; render(); }); }
+    }
+    const src = safePhoto(full || p.thumb), when = p.at ? new Date(p.at).toLocaleDateString(I18n.locale(), { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    return `<div class="ph-lb" role="dialog" aria-modal="true" aria-label="${esc(a.name)}">
+      <div class="ph-lb-top"><span>${ui.lb + 1} / ${A.list.length}${A.more ? '+' : ''} · ${esc(p.byName || '')}${when ? ' · ' + esc(when) : ''}</span>
+        <button class="ph-lb-x" data-action="ph-close" aria-label="${esc(t('close'))}"><i class="ti ti-x" aria-hidden="true"></i></button></div>
+      <div class="ph-lb-img">${ui.lb > 0 ? `<button class="ph-lb-nav prev" data-action="ph-nav" data-d="-1" aria-label="${esc(t('phPrev'))}"><i class="ti ti-chevron-left" aria-hidden="true"></i></button>` : ''}
+        <img src="${src}" alt="">${ui.lb < A.list.length - 1 ? `<button class="ph-lb-nav next" data-action="ph-nav" data-d="1" aria-label="${esc(t('phNext'))}"><i class="ti ti-chevron-right" aria-hidden="true"></i></button>` : ''}</div>
+      <div class="ph-lb-bar">${full ? `<a class="btn small" href="${src}" download="${esc(latinName(a.name) + '_' + (ui.lb + 1))}.jpg"><i class="ti ti-download" aria-hidden="true"></i> ${esc(t('phDownload'))}</a>` : `<span class="muted small">${esc(t('loading'))}</span>`}
+        ${canDel ? `<button class="btn small danger" data-action="ph-del"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('phDel'))}</button>` : ''}</div></div>`;
+  }
+  async function albumUpload(aid, files) {
+    const tour = vtById(aid), poster = albumPoster(aid);
+    if (!tour || !poster || !files.length) return;
+    let a;
+    try { a = await window.Cloud.ensureAlbum(tour, poster.team); } catch (e) { return warn('regError', { code: e.code || e.message }); }
+    const free = (a.limit || 200) - (a.count || 0), list = [...files].slice(0, Math.max(0, free));
+    ui.albumUp = { aid, done: 0, total: list.length }; render();
+    let ok = 0, fail = 0;
+    for (const f of list) {
+      try {
+        const full = await shrinkImage(f, 1280, 250000, .8), thumb = await shrinkImage(f, 420, 18000, .7);
+        const pid = await window.Cloud.addPhoto(aid, { full: full.data, thumb: thumb.data, w: full.w, h: full.h, byName: poster.byName, team: poster.team });
+        const A = ui.album && ui.album.aid === aid ? ui.album : null;
+        if (A) A.list.unshift({ id: pid, aid, thumb: thumb.data, by: myUid(), byName: poster.byName, at: Date.now(), size: full.data.length + thumb.data.length });
+        (ui.phFull = ui.phFull || {})[pid] = full.data;
+        ok++;
+      } catch (e) { console.warn('foto', e); fail++; }
+      ui.albumUp.done++; render();
+    }
+    ui.albumUp = null;
+    ui.flash = { type: fail || files.length > list.length ? 'warn' : '', text: t('phDone', { n: ok }) + (fail ? ' ' + t('phFailed', { n: fail }) : '') + (files.length > list.length ? ' ' + t('phOver', { n: files.length - list.length }) : '') };
+    render();
+  }
+
   // ---------- pagina "Segui il live" (#/live/{gara}): tabellone grande e successione dei punti ----------
   // lv.pts = un testo per set: a/b punto di casa/ospiti, A/B time-out di casa/ospiti (dal referto elettronico)
   function viewLiveMatch(mid) {
@@ -2723,6 +2847,7 @@
         <h1>${esc(tour.name)}</h1>
         <p class="meta"><span class="badge cat">${esc(tour.level)}</span> <span class="badge ${tour.status === 'live' ? 'st-main' : ''}">${esc(t('vtSt_' + (tour.status || 'draft')))}</span>
           <span class="muted">${esc(t(tour.rr === 'a' ? 'vtRr_a' : 'vtRr_ar'))}${tour.playoff ? ' + ' + esc(t('vtPlayoff')) : ''}</span></p>
+        <a class="btn small" href="#/foto/${encodeURIComponent(tour.id)}"><i class="ti ti-photo" aria-hidden="true"></i> ${esc(t('phAlbumOf'))}${albumOf(tour.id) && albumOf(tour.id).count ? ` (${albumOf(tour.id).count})` : ''}</a>
         ${tourAdmin() ? `<button type="button" class="btn small danger head-action" data-action="vt-delete" data-id="${tour.id}"><i class="ti ti-trash" aria-hidden="true"></i> ${esc(t('vtDelete'))}</button>` : ''}
       </div>
       ${tourAdmin() && ui.vtDel === tour.id ? vtDeletePanel(tour) : ''}
@@ -4677,6 +4802,27 @@
       window.Cloud.confirmReferee(m.id, text).then(() => { ui.flash = { text: t('refConfirmDone') }; render(); }).catch(e => { el.disabled = false; vErr(e); });
     },
     'tm-nums-edit': el => { ui.tmNums = el.dataset.id || null; render(); },
+    'ph-open': el => { ui.lb = +el.dataset.i; render(); },
+    'ph-close': () => { ui.lb = null; render(); },
+    'ph-nav': el => { const A = ui.album; if (!A) return; ui.lb = Math.max(0, Math.min(A.list.length - 1, ui.lb + +el.dataset.d)); if (ui.lb >= A.list.length - 3 && A.more) albumLoad(A.aid, true); render(); },
+    'ph-more': el => albumLoad(el.dataset.id, true),
+    'ph-del': () => {
+      const A = ui.album, p = A && A.list[ui.lb];
+      if (!p || !(tourAdmin() || p.by === myUid()) || !confirmed('phDelConfirm')) return;
+      window.Cloud.deletePhoto(Object.assign({ aid: A.aid }, p)).then(() => { A.list.splice(ui.lb, 1); ui.lb = A.list.length ? Math.min(ui.lb, A.list.length - 1) : null; ui.flash = { text: t('phDeleted') }; render(); })
+        .catch(e => warn('regError', { code: e.code || e.message }));
+    },
+    'ph-limit': el => {
+      const a = albumOf(el.dataset.id); if (!a || !tourAdmin()) return;
+      const n = parseInt(prompt(t('phLimitAsk'), String(a.limit || 200)), 10);
+      if (!(n > 0) || n > 2000) return;
+      window.Cloud.setAlbumLimit(a.id, n).then(() => { ui.flash = { text: t('saved') }; render(); }).catch(e => warn('regError', { code: e.code || e.message }));
+    },
+    'ph-album-del': el => {
+      const a = albumOf(el.dataset.id); if (!a || !tourAdmin() || !confirmed('phAlbumDelConfirm', { n: a.count || 0 })) return;
+      ui.flash = { text: t('loading') }; render();
+      window.Cloud.deleteAlbum(a.id).then(() => { ui.album = null; ui.flash = { text: t('phAlbumDeleted') }; location.hash = '#/foto'; }).catch(e => warn('regError', { code: e.code || e.message }));
+    },
     'lv-open': el => { location.hash = '#/live/' + encodeURIComponent(el.dataset.id); },
     'lv-close': () => { if (history.length > 1) history.back(); else location.hash = '#/'; },
     'lu-open': el => {
@@ -4828,10 +4974,10 @@
 
   // Azioni consentite a tutti; le altre solo agli amministratori.
   // scheda della formazione del capitano: le azioni controllano da sole chi è il capitano (luMine)
-  const LU_ACTIONS = new Set(['lu-open', 'lu-close', 'lu-sel', 'lu-pick', 'lu-hand', 'lu-handok', 'lu-clear', 'lu-next', 'lu-back', 'lu-sign-clear', 'lu-confirm']);
-  const PUBLIC_ACTIONS = new Set(['lv-open', 'lv-close', 'set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
+  const LU_ACTIONS = new Set(['ph-del', 'lu-open', 'lu-close', 'lu-sel', 'lu-pick', 'lu-hand', 'lu-handok', 'lu-clear', 'lu-next', 'lu-back', 'lu-sign-clear', 'lu-confirm']);
+  const PUBLIC_ACTIONS = new Set(['ph-open', 'ph-close', 'ph-nav', 'ph-more', 'lv-open', 'lv-close', 'set-theme', 'set-design', 'logout', 'reset-password', 'close-dialog', 'vt-group', 'verify-check', 'verify-resend']);
   // admin tornei: solo le azioni dei tornei (categorie, giocatori, iscrizioni, tabelloni, referti, refertisti)
-  const TOUR_ACTIONS = new Set(['vm-lineups', 'vm-approve', 'vm-reopen', 'ref-remove', 'ref-resetpw', 'tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
+  const TOUR_ACTIONS = new Set(['ph-limit', 'ph-album-del', 'vm-lineups', 'vm-approve', 'vm-reopen', 'ref-remove', 'ref-resetpw', 'tm-codes-pdf', 'rim-cancel', 'rim-go', 'tm-code', 'tm-codes-all', 'tm-code-copy', 'tm-codes-copy', 'vt-del-cancel', 'pan-import', 'trash-restore', 'trash-purge', 'notice-edit', 'notice-cancel', 'notice-clear', 'scorer-remove', 'tm-addrow', 'tm-delrow', 'tm-edit', 'tm-delete', 'tm-status', 'vt-draw', 'vt-cal', 'vt-cal-reset', 'vt-delete', 'vt-seed', 'vm-edit', 'vm-clear', 'vm-escore', 'vm-fromref', 'vt-close', 'vt-reopen', 'pdf-view', 'pdf-zip']);
   const TOUR_FORMS = new Set(['ref-add', 'vt-del', 'scorer-add', 'notice-save', 'team-save', 'levels-save', 'vt-create', 'vt-edit', 'vt-groups', 'vt-po', 'vt-round', 'vm-day', 'vm-save', 'vt-golden', 'vt-minplayed']);
   // cassa: registra incassi, scarica ricevute e prospetto
   const CASH_ACTIONS = new Set(['ca-month', 'ca-addline', 'ca-xlsx', 'rc-pdf']);
@@ -4887,6 +5033,16 @@
       if (!data || data.kind !== 'manofuori-rosters' || typeof data.teams !== 'object') throw new Error('format');
       ui.rosterImport = { name: file.name, data, replace: false }; render();
     }).catch(() => warn('rimBadFile'));
+  });
+  // album: foto scelte dal telefono o dal computer
+  document.addEventListener('change', e => {
+    const el = e.target;
+    if (el.matches && el.matches('[data-album-upload]') && el.files && el.files.length) { const files = [...el.files]; el.value = ''; albumUpload(el.dataset.albumUpload, files); }
+  });
+  document.addEventListener('keydown', e => {
+    if (ui.lb == null) return;
+    if (e.key === 'Escape') { ui.lb = null; render(); }
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { const b = $app.querySelector(`.ph-lb-nav.${e.key === 'ArrowRight' ? 'next' : 'prev'}`); if (b) b.click(); }
   });
   // scheda della formazione: Invio (o "Fatto" della tastiera) nel numero di maglia = OK
   document.addEventListener('keydown', e => {
